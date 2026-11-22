@@ -1,7 +1,7 @@
 // The agent loop, run against in-memory storage and a stand-in for the Anthropic API.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { Engine, defineTool, memoryTool, systemPrompt, fillSecrets } from "../../src/core/index.ts";
+import { AnthropicModel, Engine, defineTool, memoryTool, systemPrompt, fillSecrets } from "../../src/core/index.ts";
 import type { ApprovalMode, Conversation, RunEvent, RunSpec, ToolResult } from "../../src/core/index.ts";
 import { startMockApi, say, call } from "../mock-api.ts";
 import type { Reply } from "../mock-api.ts";
@@ -31,9 +31,7 @@ const readTool = defineTool({ name: "read_note", description: "Reads.", properti
 const engine = new Engine({
   conversations,
   resolveRun: (): RunSpec => ({
-    apiKey: "test-key",
-    model: "claude-opus-5-5",
-    effort: "high",
+    model: new AnthropicModel({ apiKey: "test-key", model: "claude-opus-5-5", effort: "high" }),
     system: "You are a test agent.",
     tools: [writeTool, readTool, memoryTool(notes)],
     hostedTools: [{ type: "web_search_20260209", name: "web_search" }],

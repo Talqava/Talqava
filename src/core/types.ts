@@ -1,6 +1,7 @@
 // Shapes shared by every edition. The core depends only on these interfaces,
 // never on where data is actually kept (files today, a database later).
 import type Anthropic from "@anthropic-ai/sdk";
+import type { Model } from "./models/types.ts";
 
 export type MaybePromise<T> = T | Promise<T>;
 export type Message = Anthropic.Beta.BetaMessageParam;
@@ -21,7 +22,8 @@ export interface Conversation {
   messages: Message[];
   /** Tools the user chose "always allow" for in this conversation. */
   allowed: string[];
-  usage: { input: number; output: number };
+  /** Tokens used, and the estimated cost in US dollars when the model's prices are known. */
+  usage: { input: number; output: number; cost?: number };
 }
 
 export interface SearchHit {
@@ -102,6 +104,8 @@ export interface Tool {
   name: string;
   /** What is sent to Claude to describe the tool. */
   definition: Anthropic.Beta.BetaToolUnion;
+  /** A plain JSON-schema description, for models other than Claude. Tools without one are Claude-only. */
+  portable?: { description: string; parameters: Record<string, unknown> };
   /** Returns a problem with the input, or null if it is fine. */
   validate(input: unknown): string | null;
   /** Does this call change something, so that "ask" mode should confirm it first? */
@@ -116,16 +120,23 @@ export interface Tool {
  * user and a bot.
  */
 export interface RunSpec {
-  apiKey?: string;
-  model: string;
-  effort: Effort;
+  model: Model;
   system: string;
   /** Tools that run in this process. */
   tools: Tool[];
-  /** Tools Anthropic runs (web search and the like), passed through as-is. */
+  /** Tools Anthropic runs (web search and the like), passed through as-is. Claude only. */
   hostedTools: Anthropic.Beta.BetaToolUnion[];
   mcpServers: McpServer[];
   approvalMode: ApprovalMode;
+  budget?: Budget;
+}
+
+/** Limits on one run (one quest). The run stops before going over either. */
+export interface Budget {
+  /** Model calls allowed. */
+  steps?: number;
+  /** US dollars allowed, estimated from the model's prices. */
+  spend?: number;
 }
 
 export interface Approval {

@@ -4,13 +4,12 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { Engine, JobBook, BRAND, setting } from "../core/index.ts";
+import { Engine, JobBook, BRAND, checkModel, describeError, setting } from "../core/index.ts";
 import type { Decision, Job, RunEvent } from "../core/index.ts";
 import {
   ROOT,
   DATA,
   WORKSPACE,
-  MODELS,
   EFFORTS,
   initStore,
   getConfig,
@@ -21,8 +20,9 @@ import {
   skills,
   jobStore,
 } from "./store.ts";
-import type { Config } from "./store.ts";
+import type { Config, ProviderConfig } from "./store.ts";
 import { localRunSpec } from "./tools.ts";
+import { resolveModel, splitRef } from "./models.ts";
 
 const HOST = process.env.HOST || "127.0.0.1";
 const PORT = Number(process.env.PORT || 8787);
@@ -42,7 +42,6 @@ export const jobs = new JobBook(jobStore);
 export const engine = new Engine({
   conversations,
   resolveRun: localRunSpec(jobs),
-  maxTurns: Number(setting("MAX_TURNS") || 80),
 });
 
 async function runJob(job: Job) {
@@ -126,7 +125,12 @@ function updateSettings(body: any) {
   const cfg = getConfig();
   const patch: Partial<Config> = {};
   if (typeof body.agentName === "string" && body.agentName.trim()) patch.agentName = body.agentName.trim().slice(0, 40);
-  if (MODELS.some((m) => m.id === body.model)) patch.model = body.model;
+  if (typeof body.model === "string") {
+    const { providerId, model } = splitRef(body.model.trim());
+    if (!cfg.providers.some((p) => p.id === providerId)) throw new HttpError(400, `No model provider called "${providerId}".`);
+    if (!/^[\w.:@/+-]{1,120}$/.test(model)) throw new HttpError(400, "Type the model's name, e.g. llama3.1 or claude-opus-5-5.");
+    patch.model = `${providerId}/${model}`;
+  }
   if (EFFORTS.includes(body.effort)) patch.effort = body.effort;
   if (["ask", "auto"].includes(body.approvalMode)) patch.approvalMode = body.approvalMode;
   if (typeof body.apiKey === "string") patch.apiKey = body.apiKey.trim();
@@ -143,6 +147,49 @@ function updateSettings(body: any) {
       secrets[name] = { value: String(value), host: host.toLowerCase() };
     }
     patch.secrets = secrets;
+  }
+
+  if (body.budget) {
+    const steps = Number(body.budget.steps);
+    const spend = body.budget.spend === null || body.budget.spend === "" ? undefined : Number(body.budget.spend);
+    if (!Number.isInteger(steps) || steps < 1 || steps > 500) throw new HttpError(400, "The step budget is a whole number from 1 to 500.");
+    if (spend !== undefined && (!Number.isFinite(spend) || spend < 0 || spend > 100)) throw new HttpError(400, "The spend budget is from $0 to $100.");
+    patch.budget = { steps, ...(spend !== undefined ? { spend } : {}) };
+  }
+
+  if (body.provider) {
+    const { id, name, baseUrl, apiKey, prices, remove } = body.provider;
+    if (!/^[a-z0-9-]{1,30}$/.test(id || "")) throw new HttpError(400, "Provider ids use lowercase letters, digits and dashes.");
+    const existing = cfg.providers.find((p) => p.id === id);
+    if (existing?.kind === "anthropic") throw new HttpError(400, "The Anthropic provider cannot be changed here; set its key above.");
+    let providers = cfg.providers.filter((p) => p.id !== id);
+    if (remove) {
+      if (splitRef(cfg.model).providerId === id) throw new HttpError(400, "Choose another model before removing the provider it uses.");
+    } else {
+      let url: URL;
+      try {
+        url = new URL(String(baseUrl || ""));
+      } catch {
+        throw new HttpError(400, "A provider needs an address, e.g. http://localhost:11434/v1.");
+      }
+      if (!["http:", "https:"].includes(url.protocol)) throw new HttpError(400, "A provider's address starts with http:// or https://.");
+      const provider: ProviderConfig = {
+        id,
+        kind: "openai",
+        name: String(name || id).trim().slice(0, 60),
+        baseUrl: url.href.replace(/\/+$/, ""),
+        // A blank key keeps the one already saved.
+        apiKey: typeof apiKey === "string" && apiKey.trim() ? apiKey.trim() : existing?.apiKey,
+      };
+      if (prices && prices.input !== "" && prices.output !== "") {
+        const input = Number(prices.input);
+        const output = Number(prices.output);
+        if (![input, output].every((n) => Number.isFinite(n) && n >= 0 && n < 1000)) throw new HttpError(400, "Prices are dollars per million tokens.");
+        provider.prices = { input, output };
+      }
+      providers = [...providers, provider];
+    }
+    patch.providers = providers;
   }
 
   if (body.mcpServer) {
@@ -178,6 +225,20 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
 
   if (route === "GET state") return send(res, 200, publicConfig());
   if (route === "PUT settings") return send(res, 200, updateSettings(body));
+  if (route === "POST model-check") {
+    const cfg = getConfig();
+    let model;
+    try {
+      model = resolveModel(cfg, typeof body.model === "string" && body.model ? body.model : cfg.model);
+    } catch (err) {
+      throw new HttpError(400, (err as Error).message);
+    }
+    const result = await checkModel(model, AbortSignal.timeout(180_000)).catch((err) => {
+      throw new HttpError(502, describeError(err));
+    });
+    saveConfig({ modelChecks: { ...getConfig().modelChecks, [model.ref]: result } });
+    return send(res, 200, result);
+  }
 
   if (parts[0] === "conversations") {
     const [, id, action, actionId] = parts;

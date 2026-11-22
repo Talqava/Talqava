@@ -1,8 +1,11 @@
-// The agent loop: ask Claude, run the tools it calls, feed the results back, repeat.
-// It knows nothing about where data lives or which tools exist; the edition
-// that creates it supplies both.
+// The agent loop: ask the model, run the tools it calls, feed the results back, repeat.
+// It knows nothing about where data lives, which tools exist or which model
+// it talks to; the edition that creates it supplies all three.
 import crypto from "node:crypto";
-import Anthropic from "@anthropic-ai/sdk";
+import { describeAnthropicError, isServiceError } from "./models/anthropic.ts";
+import { costOf } from "./models/pricing.ts";
+import { ModelError } from "./models/types.ts";
+import type { ModelReply } from "./models/types.ts";
 import type {
   Approval,
   Conversation,
@@ -17,10 +20,6 @@ import type {
   ToolResult,
 } from "./types.ts";
 
-const MAX_TOKENS = 64_000;
-// Models that can hand a declined request to another model on the server.
-const FALLBACK_MODELS = new Set(["claude-opus-5-5", "claude-opus-5", "claude-fable-5-2", "claude-fable-5-1", "claude-sonnet-5-5"]);
-
 type Listener = (event: RunEvent) => void;
 type ToolCall = { id: string; name: string; input: unknown };
 
@@ -34,56 +33,18 @@ interface Run {
 
 export interface EngineOptions {
   conversations: ConversationStore;
-  /** Builds the settings, prompt and tools for a run of this conversation. */
+  /** Builds the model, prompt, tools and budget for a run of this conversation. */
   resolveRun(conversation: Conversation): MaybePromise<RunSpec>;
-  /** Model calls allowed in one run. */
+  /** Model calls allowed in one run when the run has no step budget. */
   maxTurns?: number;
 }
 
 export function describeError(err: unknown): string {
-  if (err instanceof Anthropic.AuthenticationError) return "The Anthropic API key was rejected. Check it under Settings.";
-  if (err instanceof Anthropic.PermissionDeniedError) return `The API key is not allowed to do this: ${err.message}`;
-  if (err instanceof Anthropic.RateLimitError) return "Anthropic's rate limit was reached. Wait a minute and try again.";
-  if (err instanceof Anthropic.BadRequestError) return `Anthropic rejected the request: ${err.message}`;
-  if (err instanceof Anthropic.APIConnectionError) return "Could not reach Anthropic. Check the internet connection.";
-  if (err instanceof Anthropic.APIError) return `Anthropic returned an error (${err.status ?? "no status"}): ${err.message}`;
-  return err instanceof Error ? err.message : String(err);
+  if (err instanceof ModelError) return err.message;
+  return describeAnthropicError(err) ?? (err instanceof Error ? err.message : String(err));
 }
 
-function requestParams(spec: RunSpec, conversation: Conversation) {
-  const betas = ["compact-2026-01-12"];
-  const params: Record<string, unknown> = {
-    model: spec.model,
-    max_tokens: MAX_TOKENS,
-    system: spec.system,
-    tools: [
-      ...spec.tools.map((tool) => tool.definition),
-      ...spec.hostedTools,
-      ...spec.mcpServers.map((server) => ({ type: "mcp_toolset", mcp_server_name: server.name })),
-    ],
-    messages: conversation.messages,
-    thinking: { type: "adaptive", display: "summarized" },
-    output_config: { effort: spec.effort },
-    cache_control: { type: "ephemeral" },
-    // Long conversations are summarised on the server instead of overflowing.
-    context_management: { edits: [{ type: "compact_20260112" }] },
-    betas,
-  };
-  if (FALLBACK_MODELS.has(spec.model)) {
-    betas.push("server-side-fallback-2026-07-01");
-    params.fallbacks = "default";
-  }
-  if (spec.mcpServers.length) {
-    betas.push("mcp-client-2025-11-20");
-    params.mcp_servers = spec.mcpServers.map((server) => ({
-      type: "url",
-      name: server.name,
-      url: server.url,
-      ...(server.token ? { authorization_token: server.token } : {}),
-    }));
-  }
-  return params as unknown as Parameters<Anthropic["beta"]["messages"]["stream"]>[0];
-}
+const dollars = (n: number) => `$${n < 0.1 ? n.toFixed(3) : n.toFixed(2)}`;
 
 export class Engine {
   #runs = new Map<string, Run>();
@@ -200,51 +161,74 @@ export class Engine {
   // ---------- the loop ----------
   async #loop(conversation: Conversation, run: Run) {
     const spec = await this.#resolveRun(conversation);
-    const client = new Anthropic(spec.apiKey ? { apiKey: spec.apiKey } : {});
     const emit = (event: RunEvent) => this.#emit(conversation.id, event);
+    const steps = spec.budget?.steps ?? this.#maxTurns;
+    const spendLimit = spec.budget?.spend;
+    const prices = spec.model.prices;
+    if (spendLimit !== undefined && !prices) {
+      emit({ type: "notice", text: `The cost of ${spec.model.label} is not known, so only the step budget (${steps}) applies to this run.` });
+    }
+    let spent = 0;
     let badInputRetries = 0;
 
-    for (let turn = 0; turn < this.#maxTurns; turn++) {
+    for (let step = 0; ; step++) {
       if (run.abort.signal.aborted) return;
+      if (step >= steps) {
+        emit({ type: "notice", text: `Stopped at its budget: ${steps} steps. Say "continue" to keep going.` });
+        return;
+      }
+      if (spendLimit !== undefined && prices && spent >= spendLimit) {
+        emit({ type: "notice", text: `Stopped at its budget: about ${dollars(spent)} spent of ${dollars(spendLimit)}. Say "continue" to keep going.` });
+        return;
+      }
 
-      const stream = client.beta.messages.stream(requestParams(spec, conversation), { signal: run.abort.signal });
-      stream.on("streamEvent", (event) => {
-        if (event.type === "content_block_start" && /tool_use$/.test(event.content_block.type)) {
-          emit({ type: "delta", kind: "tool", text: (event.content_block as { name: string }).name });
-        } else if (event.type === "content_block_delta") {
-          if (event.delta.type === "text_delta") emit({ type: "delta", kind: "text", text: event.delta.text });
-          if (event.delta.type === "thinking_delta") emit({ type: "delta", kind: "thinking", text: event.delta.thinking });
-        }
-      });
-
-      let message: Anthropic.Beta.BetaMessage;
+      let reply: ModelReply;
       try {
-        message = await stream.finalMessage();
+        reply = await spec.model.call(
+          {
+            system: spec.system,
+            messages: conversation.messages,
+            tools: spec.tools,
+            hostedTools: spec.hostedTools,
+            mcpServers: spec.mcpServers,
+            signal: run.abort.signal,
+          },
+          {
+            onText: (text) => emit({ type: "delta", kind: "text", text }),
+            onThinking: (text) => emit({ type: "delta", kind: "thinking", text }),
+            onToolStart: (name) => emit({ type: "delta", kind: "tool", text: name }),
+          },
+        );
         badInputRetries = 0;
       } catch (err) {
         if (run.abort.signal.aborted) return;
         // A tool input that could not be parsed, or a dropped connection: ask again.
-        if (err instanceof Anthropic.APIError || badInputRetries++ >= 2) throw err;
+        if (isServiceError(err) || badInputRetries++ >= 2) throw err;
         emit({ type: "reset" });
         continue;
       }
 
-      conversation.usage.input += message.usage?.input_tokens ?? 0;
-      conversation.usage.output += message.usage?.output_tokens ?? 0;
-      conversation.messages.push({ role: "assistant", content: message.content });
+      conversation.usage.input += reply.usage.input + (reply.usage.cacheRead ?? 0) + (reply.usage.cacheWrite ?? 0);
+      conversation.usage.output += reply.usage.output;
+      if (prices) {
+        const cost = costOf(prices, reply.usage);
+        spent += cost;
+        conversation.usage.cost = (conversation.usage.cost ?? 0) + cost;
+      }
+      conversation.messages.push({ role: "assistant", content: reply.content });
       await this.#conversations.save(conversation);
-      emit({ type: "assistant", content: message.content });
+      emit({ type: "assistant", content: reply.content });
 
-      if (message.stop_reason === "refusal") {
+      if (reply.stopReason === "refusal") {
         emit({ type: "notice", text: "The model declined to continue with this request." });
         return;
       }
       // A long server-side step (web search and the like) paused; asking again resumes it.
-      if (message.stop_reason === "pause_turn") continue;
+      if (reply.stopReason === "pause_turn") continue;
 
-      const calls = message.content.filter((block) => block.type === "tool_use") as ToolCall[];
+      const calls = reply.content.filter((block) => block.type === "tool_use") as ToolCall[];
       if (!calls.length) {
-        if (message.stop_reason === "max_tokens") {
+        if (reply.stopReason === "max_tokens") {
           emit({ type: "notice", text: "The reply hit the length limit and was cut off. Ask it to continue." });
         }
         return;
@@ -254,7 +238,7 @@ export class Engine {
       for (const call of calls) {
         // An input cut off at the length limit can look valid, so never run it.
         const result: ToolResult =
-          message.stop_reason === "max_tokens"
+          reply.stopReason === "max_tokens"
             ? {
                 type: "tool_result",
                 tool_use_id: call.id,
@@ -268,7 +252,6 @@ export class Engine {
       conversation.messages.push({ role: "user", content: results });
       await this.#conversations.save(conversation);
     }
-    emit({ type: "notice", text: `Stopped after ${this.#maxTurns} steps. Say "continue" to keep going.` });
   }
 
   /**

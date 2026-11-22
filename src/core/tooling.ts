@@ -14,6 +14,7 @@ interface Property {
   type: "string" | "boolean" | "object" | "number" | "array";
   description?: string;
   enum?: string[];
+  items?: Record<string, unknown>;
 }
 
 interface ToolSpec<Input> {
@@ -51,6 +52,7 @@ export function defineTool<Input = any>(spec: ToolSpec<Input>): Tool {
       eager_input_streaming: true,
       input_schema: { type: "object", properties: spec.properties, required },
     },
+    portable: { description: spec.description, parameters: { type: "object", properties: spec.properties, required } },
     validate: (input) => checkInput(input, spec.properties, required),
     needsApproval: (input) => spec.needsApproval?.(input) ?? false,
     run: spec.run,

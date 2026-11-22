@@ -13,10 +13,12 @@ import {
   skillTool,
   systemPrompt,
   BRAND,
+  pageTool,
   setting,
 } from "../core/index.ts";
 import type { Conversation, JobBook, RunSpec, Tool } from "../core/index.ts";
-import { WORKSPACE, apiKey, conversations, getConfig, memory, skills } from "./store.ts";
+import { WORKSPACE, conversations, getConfig, memory, skills } from "./store.ts";
+import { resolveModel } from "./models.ts";
 import { browserAvailable, browserTool } from "./browser.ts";
 
 const BASH_TIMEOUT_MS = Number(setting("BASH_TIMEOUT_MS") || 120_000);
@@ -96,6 +98,24 @@ const isObject = (input: unknown): input is Record<string, unknown> =>
 export const editorTool: Tool = {
   name: "str_replace_based_edit_tool",
   definition: { type: "text_editor_20250728", name: "str_replace_based_edit_tool" },
+  portable: {
+    description:
+      "Views, creates and edits files in the workspace. view: show a file with line numbers, or list a folder. create: write file_text to path. str_replace: replace old_str (which must appear exactly once) with new_str. insert: insert insert_text after line insert_line (0 for the top).",
+    parameters: {
+      type: "object",
+      properties: {
+        command: { type: "string", enum: ["view", "create", "str_replace", "insert"] },
+        path: { type: "string", description: "Path relative to the workspace." },
+        file_text: { type: "string" },
+        old_str: { type: "string" },
+        new_str: { type: "string" },
+        insert_line: { type: "number" },
+        insert_text: { type: "string" },
+        view_range: { type: "array", items: { type: "number" }, description: "[first line, last line]; -1 for the end." },
+      },
+      required: ["command", "path"],
+    },
+  },
   validate: (input) =>
     isObject(input) && typeof input.command === "string" && typeof input.path === "string" ? null : "missing command or path",
   needsApproval: (input: EditorInput) => input.command !== "view",
@@ -153,6 +173,10 @@ function runBash(input: BashInput, signal: AbortSignal): Promise<string> {
 export const bashTool: Tool = {
   name: "bash",
   definition: { type: "bash_20250124", name: "bash" },
+  portable: {
+    description: "Runs a bash command in the workspace folder and returns its output. Each command starts in a fresh shell.",
+    parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+  },
   validate: (input) => (isObject(input) && (input.restart === true || typeof input.command === "string") ? null : "missing command"),
   needsApproval: (input: BashInput) => input.restart !== true,
   run: (input: BashInput, { signal }) => runBash(input, signal),
@@ -190,18 +214,24 @@ export function localPrompt(): string {
 export function localRunSpec(jobs: JobBook) {
   return async (_conversation: Conversation): Promise<RunSpec> => {
     const cfg = getConfig();
+    const model = resolveModel(cfg);
+    const tools = await localTools(jobs);
+    const claude = model.kind === "anthropic";
     return {
-      apiKey: apiKey(cfg) || undefined,
-      model: cfg.model,
-      effort: cfg.effort,
+      model,
       system: localPrompt(),
-      tools: await localTools(jobs),
-      hostedTools: [
-        { type: "web_search_20260209", name: "web_search" },
-        { type: "web_fetch_20260209", name: "web_fetch" },
-      ],
-      mcpServers: cfg.mcpServers,
+      // Other models read the web with our own page reader; Claude uses Anthropic's.
+      tools: claude ? tools : [...tools, pageTool()],
+      hostedTools: claude
+        ? [
+            { type: "web_search_20260209", name: "web_search" },
+            { type: "web_fetch_20260209", name: "web_fetch" },
+          ]
+        : [],
+      // Connectors are reached through Anthropic's connector service, so they are Claude-only for now.
+      mcpServers: claude ? cfg.mcpServers : [],
       approvalMode: cfg.approvalMode,
+      budget: cfg.budget,
     };
   };
 }

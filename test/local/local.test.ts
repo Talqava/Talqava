@@ -86,3 +86,33 @@ test("memory, skills and jobs are kept in files", async () => {
   assert.equal(JSON.parse(fs.readFileSync(path.join(store.DATA, "jobs.json"), "utf8"))[0].id, job.id);
   assert.equal(fs.statSync(path.join(store.DATA, "config.json")).mode & 0o777, 0o600);
 });
+
+test("a local model gets the page reader instead of Claude's hosted tools, and old settings move to provider refs", async () => {
+  const fs = await import("node:fs");
+  const file = path.join(store.DATA, "config.json");
+  const old = JSON.parse(fs.readFileSync(file, "utf8"));
+  fs.writeFileSync(file, JSON.stringify({ ...old, model: "claude-sonnet-5-5", providers: undefined }));
+  assert.equal(store.getConfig().model, "anthropic/claude-sonnet-5-5");
+  assert.deepEqual(store.getConfig().providers.map((p) => p.id), ["anthropic", "local"]);
+
+  const claude = await tools.localRunSpec(app.jobs)({} as Conversation);
+  assert.equal(claude.model.ref, "anthropic/claude-sonnet-5-5");
+  assert.deepEqual(claude.hostedTools.map((t) => (t as { name: string }).name), ["web_search", "web_fetch"]);
+  assert.ok(!claude.tools.some((t) => t.name === "read_page"));
+
+  store.saveConfig({ model: "local/llama3.1", mcpServers: [{ name: "x", url: "https://example.com/mcp" }] });
+  const spec = await tools.localRunSpec(app.jobs)({} as Conversation);
+  assert.equal(spec.model.kind, "openai");
+  assert.equal(spec.model.label, "llama3.1 on Local model runner");
+  assert.deepEqual(spec.model.prices, { input: 0, output: 0 });
+  assert.deepEqual(spec.hostedTools, []);
+  assert.deepEqual(spec.mcpServers, []);
+  assert.deepEqual(spec.budget, { steps: 40, spend: 1 });
+  assert.ok(spec.tools.some((t) => t.name === "read_page"));
+  // Every tool can be described to a model other than Claude.
+  for (const tool of spec.tools) assert.ok(tool.portable, `${tool.name} has no portable schema`);
+
+  const shown = store.publicConfig();
+  assert.ok(!JSON.stringify(shown).includes("test-key"));
+  store.saveConfig({ model: "anthropic/claude-opus-5-5", mcpServers: [] });
+});

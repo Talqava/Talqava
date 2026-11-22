@@ -81,12 +81,15 @@ async function boot() {
     return;
   }
   document.title = state.config.agentName;
-  if (!state.config.hasApiKey) state.view = "settings";
+  if (needsKey(state.config)) state.view = "settings";
   await refreshList();
   render();
   clearInterval(boot.timer);
   boot.timer = setInterval(refreshList, 5000);
 }
+
+// A Claude model with no key cannot run; a local model needs none.
+const needsKey = (c) => c.model.startsWith("anthropic/") && !c.hasApiKey;
 
 async function refreshList() {
   try {
@@ -311,7 +314,8 @@ function renderConversation(conv, live) {
 
 function showUsage(usage) {
   const total = (usage?.input || 0) + (usage?.output || 0);
-  ui.meta.textContent = total ? `${total.toLocaleString()} tokens` : "";
+  const cost = usage?.cost ? ` · about $${usage.cost < 0.1 ? usage.cost.toFixed(3) : usage.cost.toFixed(2)}` : "";
+  ui.meta.textContent = total ? `${total.toLocaleString()} tokens${cost}` : "";
 }
 
 function setRunning(running) {
@@ -587,7 +591,11 @@ function settingsView() {
     }, col);
   const select = (options, value) => h("select", {}, options.map(([id, label]) => h("option", { value: id, selected: id === value }, label)));
 
-  if (!c.hasApiKey) col.append(h("div", { class: "banner" }, "To get started, paste an Anthropic API key below. You can create one at console.anthropic.com → API keys."));
+  if (needsKey(c)) {
+    col.append(
+      h("div", { class: "banner" }, "To get started, paste an Anthropic API key below (console.anthropic.com → API keys), or choose a free local model under Agent."),
+    );
+  }
 
   const key = h("input", { type: "password", placeholder: c.hasApiKey ? (c.apiKeyFromEnv ? "Set in the .env file" : "Saved. Paste a new key to replace it.") : "sk-ant-…", autocomplete: "off" });
   col.append(
@@ -596,7 +604,15 @@ function settingsView() {
   );
 
   const name = h("input", { value: c.agentName });
-  const model = select(c.models.map((m) => [m.id, m.label]), c.model);
+  const slash = c.model.indexOf("/");
+  const provider = select(c.providers.map((p) => [p.id, p.name]), c.model.slice(0, slash));
+  const modelName = h("input", { value: c.model.slice(slash + 1), placeholder: "Model name, e.g. llama3.1 or claude-opus-5-5", autocomplete: "off" });
+  const claudeModels = h("datalist", { id: "claude-models" }, c.models.map((m) => h("option", { value: m.id }, m.label)));
+  // Claude's names are suggested only when Anthropic is the provider.
+  const syncList = () => modelName.setAttribute("list", provider.value === "anthropic" ? "claude-models" : "");
+  provider.addEventListener("change", syncList);
+  syncList();
+  const ref = () => `${provider.value}/${modelName.value.trim()}`;
   const effort = select(c.efforts.map((e) => [e, e]), c.effort);
   const mode = select(
     [
@@ -605,17 +621,98 @@ function settingsView() {
     ],
     c.approvalMode,
   );
+  const steps = h("input", { type: "number", min: 1, max: 500, step: 1, value: c.budget?.steps ?? 40 });
+  const spend = h("input", { type: "number", min: 0, max: 100, step: 0.01, value: c.budget?.spend ?? "", placeholder: "No limit" });
+
+  const checkBox = h("div", {});
+  const showCheck = (result) => {
+    if (!result) return checkBox.replaceChildren(h("p", { class: "note" }, "Not checked yet. The check takes under a minute and costs a few cents at most on a paid model."));
+    const mark = (ok, label) => h("span", { class: ok ? "state ok" : "state bad" }, `${ok ? "✓" : "✗"} ${label}  `);
+    checkBox.replaceChildren(
+      h(
+        "div",
+        { class: "card" },
+        h("div", {}, h("strong", {}, result.label), h("span", { class: "note" }, ` · checked ${when(result.checkedAt)}`)),
+        h("div", {}, mark(result.instructions, "follows instructions"), mark(result.tools, "uses tools"), mark(result.multiStep, "chains steps")),
+        h("div", { class: "note" }, `Good for: ${result.recommended.join(", ")}`),
+        result.notes.map((note) => h("div", { class: "note" }, note)),
+      ),
+    );
+  };
+  showCheck(c.modelChecks?.[c.model]);
+  const checkButton = h("button", { type: "button" }, "Check this model");
+  checkButton.addEventListener("click", () =>
+    attempt(async () => {
+      checkButton.disabled = true;
+      checkButton.textContent = "Checking…";
+      try {
+        showCheck(await api("POST", "model-check", { model: ref() }));
+        state.config = await api("GET", "state");
+      } finally {
+        checkButton.disabled = false;
+        checkButton.textContent = "Check this model";
+      }
+    }, col),
+  );
+
   col.append(
     h("h3", {}, "Agent"),
     h(
       "form",
-      { class: "form", onsubmit: (e) => (e.preventDefault(), save({ agentName: name.value, model: model.value, effort: effort.value, approvalMode: mode.value })) },
+      {
+        class: "form",
+        onsubmit: (e) => (
+          e.preventDefault(),
+          save({ agentName: name.value, model: ref(), effort: effort.value, approvalMode: mode.value, budget: { steps: Number(steps.value), spend: spend.value === "" ? null : Number(spend.value) } })
+        ),
+      },
       h("label", {}, "Name", name),
-      h("label", {}, "Model", model),
-      h("label", {}, "Effort (higher thinks longer and costs more)", effort),
+      h("label", {}, "Model comes from", provider),
+      h("label", {}, "Model", modelName, claudeModels),
+      h("p", { class: "note" }, "For a free local model, start a local model runner (Ollama, LM Studio, llama.cpp and others) and type the name of a model you have downloaded. Web search and connectors are Claude-only for now; other models read pages with the built-in page reader."),
+      h("div", { class: "row" }, checkButton),
+      checkBox,
+      h("label", {}, "Effort, for Claude (higher thinks longer and costs more)", effort),
       h("label", {}, "Approvals", mode),
       h("p", { class: "note" }, "With “ask”, a scheduled job that needs approval waits until you open its chat and answer. “Run everything” is only sensible when the agent runs in Docker or on a machine with nothing you'd mind losing."),
+      h("label", {}, "Budget per run: steps (model calls)", steps),
+      h("label", {}, "Budget per run: estimated spend in US dollars", spend),
+      h("p", { class: "note" }, "A run stops before going over either limit, and you can say “continue”. Spend is estimated from list prices; your provider's bill is the real figure."),
       h("div", {}, h("button", { class: "primary" }, "Save")),
+    ),
+  );
+
+  const pId = h("input", { placeholder: "Short id, e.g. lmstudio" });
+  const pName = h("input", { placeholder: "Name, e.g. LM Studio" });
+  const pUrl = h("input", { placeholder: "Address ending in /v1, e.g. http://localhost:1234/v1" });
+  const pKey = h("input", { type: "password", placeholder: "API key (blank for local runners)", autocomplete: "off" });
+  const pIn = h("input", { type: "number", min: 0, step: 0.01, placeholder: "$ per million input tokens (0 if free)" });
+  const pOut = h("input", { type: "number", min: 0, step: 0.01, placeholder: "$ per million output tokens (0 if free)" });
+  const others = c.providers.filter((p) => p.kind !== "anthropic");
+  col.append(
+    h("h3", {}, "Model providers"),
+    h("p", { class: "note" }, "Anything that offers the common chat completions format: local runners, or hosted services with your own key. Prices are optional; without them only the step budget applies."),
+    ...others.map((p) =>
+      h(
+        "div",
+        { class: "card" },
+        h(
+          "div",
+          { class: "row" },
+          h("div", { class: "grow" }, h("strong", {}, p.name), ` (${p.id}) ${p.baseUrl}`, h("div", { class: "note" }, `${p.hasKey ? "Key saved" : "No key"} · ${p.prices ? `$${p.prices.input} in / $${p.prices.output} out per million tokens` : "prices unknown"}`)),
+          h("button", { class: "plain danger", onclick: () => save({ provider: { id: p.id, remove: true } }) }, "Remove"),
+        ),
+      ),
+    ),
+    h(
+      "form",
+      { class: "form", onsubmit: (e) => (e.preventDefault(), save({ provider: { id: pId.value.trim(), name: pName.value.trim(), baseUrl: pUrl.value.trim(), apiKey: pKey.value, prices: { input: pIn.value, output: pOut.value } } })) },
+      pId,
+      pName,
+      pUrl,
+      pKey,
+      h("div", { class: "row" }, pIn, pOut),
+      h("div", {}, h("button", {}, "Add provider")),
     ),
   );
 
@@ -625,7 +722,7 @@ function settingsView() {
   col.append(
     h("h3", {}, "API keys for other services"),
     h("p", { class: "note" }, "The agent uses these by name in API calls and never sees the values. Each key is only ever sent to its own host."),
-    c.secrets.map((s) => h("div", { class: "card" }, h("div", { class: "row" }, h("div", { class: "grow" }, h("strong", {}, s.name), ` → ${s.host}`), h("button", { class: "plain danger", onclick: () => save({ secret: { name: s.name, remove: true } }) }, "Remove")))),
+    ...c.secrets.map((s) => h("div", { class: "card" }, h("div", { class: "row" }, h("div", { class: "grow" }, h("strong", {}, s.name), ` → ${s.host}`), h("button", { class: "plain danger", onclick: () => save({ secret: { name: s.name, remove: true } }) }, "Remove")))),
     h("form", { class: "form", onsubmit: (e) => (e.preventDefault(), save({ secret: { name: sName.value.trim(), value: sValue.value, host: sHost.value.trim() } })) }, sName, sValue, sHost, h("div", {}, h("button", {}, "Add key"))),
   );
 
@@ -635,7 +732,7 @@ function settingsView() {
   col.append(
     h("h3", {}, "Connectors (MCP servers)"),
     h("p", { class: "note" }, "Remote MCP servers give the agent ready-made tools for other services."),
-    c.mcpServers.map((s) => h("div", { class: "card" }, h("div", { class: "row" }, h("div", { class: "grow" }, h("strong", {}, s.name), ` ${s.url}`), h("button", { class: "plain danger", onclick: () => save({ mcpServer: { name: s.name, remove: true } }) }, "Remove")))),
+    ...c.mcpServers.map((s) => h("div", { class: "card" }, h("div", { class: "row" }, h("div", { class: "grow" }, h("strong", {}, s.name), ` ${s.url}`), h("button", { class: "plain danger", onclick: () => save({ mcpServer: { name: s.name, remove: true } }) }, "Remove")))),
     h("form", { class: "form", onsubmit: (e) => (e.preventDefault(), save({ mcpServer: { name: mName.value.trim(), url: mUrl.value.trim(), token: mToken.value } })) }, mName, mUrl, mToken, h("div", {}, h("button", {}, "Add connector"))),
   );
 }

@@ -108,7 +108,7 @@ details > summary::-webkit-details-marker { display: none; }
 summary .name { font-weight: 600; flex: none; }
 summary .what { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font: 13px ui-monospace, Menlo, Consolas, monospace; }
 summary .state { flex: none; font-size: 12px; color: var(--muted); }
-summary .state.ok { color: var(--ok); } summary .state.bad { color: var(--bad); }
+summary .state.ok, .card .state.ok { color: var(--ok); } summary .state.bad, .card .state.bad { color: var(--bad); }
 details .body { padding: 0 12px 10px; }
 details .body pre { margin: 6px 0; max-height: 320px; overflow: auto; white-space: pre-wrap; }
 details.think summary { color: var(--muted); font-size: 13px; }

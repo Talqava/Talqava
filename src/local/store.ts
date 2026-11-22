@@ -19,6 +19,9 @@ import type {
   Secret,
   Skill,
   SkillStore,
+  Budget,
+  CheckResult,
+  Prices,
 } from "../core/index.ts";
 import { BRAND, setting } from "../core/index.ts";
 
@@ -27,6 +30,7 @@ export const DATA = path.resolve(setting("DATA_DIR") || path.join(ROOT, "data"))
 export const WORKSPACE = path.resolve(setting("WORKSPACE") || path.join(DATA, "workspace"));
 const CONV_DIR = path.join(DATA, "conversations");
 
+/** Claude models offered in the model picker; any other model name can be typed. */
 export const MODELS = [
   { id: "claude-opus-5-5", label: "Claude Opus 5.5 (recommended)" },
   { id: "claude-fable-5-2", label: "Claude Fable 5.2 (most capable, costs more)" },
@@ -58,13 +62,37 @@ function writeJson(file: string, value: unknown, mode = 0o600) {
 export const newId = () => crypto.randomBytes(8).toString("hex");
 
 // ---------- settings ----------
+/** A place models come from: Anthropic, a local model runner, or another service. */
+export interface ProviderConfig {
+  id: string;
+  kind: "anthropic" | "openai";
+  name: string;
+  /** For "openai" providers: the address that ends in /v1. */
+  baseUrl?: string;
+  /** For "openai" providers. Anthropic's key is Config.apiKey. */
+  apiKey?: string;
+  /** Prices per million tokens, when known. Local runners are free. */
+  prices?: Prices;
+}
+
+export const DEFAULT_PROVIDERS: ProviderConfig[] = [
+  { id: "anthropic", kind: "anthropic", name: "Anthropic (Claude)" },
+  { id: "local", kind: "openai", name: "Local model runner", baseUrl: "http://localhost:11434/v1", prices: { input: 0, output: 0 } },
+];
+
 export interface Config {
   agentName: string;
+  /** "<provider id>/<model name>", e.g. "anthropic/claude-opus-5-5" or "local/llama3.1". */
   model: string;
   effort: Effort;
   /** "ask": confirm risky actions. "auto": run everything. */
   approvalMode: ApprovalMode;
   apiKey: string;
+  providers: ProviderConfig[];
+  /** Limits on each run: model calls, and estimated US dollars. */
+  budget: Budget;
+  /** The last model check of each model, by ref. */
+  modelChecks: Record<string, CheckResult>;
   mcpServers: McpServer[];
   secrets: Record<string, Secret>;
   sessionSecret: string;
@@ -73,10 +101,13 @@ export interface Config {
 const CONFIG_FILE = () => path.join(DATA, "config.json");
 const DEFAULTS: Config = {
   agentName: BRAND.agentName,
-  model: "claude-opus-5-5",
+  model: "anthropic/claude-opus-5-5",
   effort: "high",
   approvalMode: "ask",
   apiKey: "",
+  providers: DEFAULT_PROVIDERS,
+  budget: { steps: 40, spend: 1 },
+  modelChecks: {},
   mcpServers: [],
   secrets: {},
   sessionSecret: "",
@@ -84,6 +115,9 @@ const DEFAULTS: Config = {
 
 export function getConfig(): Config {
   const cfg = { ...DEFAULTS, ...readJson<Partial<Config>>(CONFIG_FILE(), {}) };
+  // Settings from before providers existed name a Claude model on its own.
+  if (!cfg.model.includes("/")) cfg.model = `anthropic/${cfg.model}`;
+  if (!cfg.providers.some((p) => p.kind === "anthropic")) cfg.providers = [DEFAULT_PROVIDERS[0], ...cfg.providers];
   if (!cfg.sessionSecret) {
     cfg.sessionSecret = crypto.randomBytes(32).toString("hex");
     writeJson(CONFIG_FILE(), cfg);
@@ -108,6 +142,16 @@ export function publicConfig() {
     effort: cfg.effort,
     approvalMode: cfg.approvalMode,
     hasApiKey: Boolean(apiKey(cfg)),
+    providers: cfg.providers.map((p) => ({
+      id: p.id,
+      kind: p.kind,
+      name: p.name,
+      baseUrl: p.baseUrl,
+      prices: p.prices,
+      hasKey: p.kind === "anthropic" ? Boolean(apiKey(cfg)) : Boolean(p.apiKey),
+    })),
+    budget: cfg.budget,
+    modelChecks: cfg.modelChecks,
     apiKeyFromEnv: !cfg.apiKey && Boolean(process.env.ANTHROPIC_API_KEY),
     mcpServers: cfg.mcpServers.map((s) => ({ name: s.name, url: s.url, hasToken: Boolean(s.token) })),
     secrets: Object.entries(cfg.secrets).map(([name, s]) => ({ name, host: s.host })),

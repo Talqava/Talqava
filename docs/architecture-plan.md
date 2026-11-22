@@ -1,6 +1,6 @@
 # Talqava Agents: architecture plan
 
-**Status:** plan for review. Stage 0 is built; nothing else here is.
+**Status:** plan for review. Stages 0 and 1 are built; nothing else here is.
 
 Talqava Agents is an open-source desktop app that gives technical professionals a crew of AI agents with character. Everything runs on the user's own machine, on free local models or the user's own API keys. This document describes how it is built. It replaces the earlier plan for a hosted, multi-user platform, which was dropped.
 
