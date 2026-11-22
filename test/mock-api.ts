@@ -13,13 +13,15 @@ export interface Recorded {
   body: any;
 }
 
-export function startMockApi(script: Reply[]): Promise<{ server: http.Server; requests: Recorded[]; url: string }> {
+/** Replays a script in order, or asks a function for each reply (for runs that overlap). */
+export function startMockApi(script: Reply[] | ((body: any) => Reply | Promise<Reply>)): Promise<{ server: http.Server; requests: Recorded[]; url: string }> {
   const requests: Recorded[] = [];
   const server = http.createServer(async (req, res) => {
     let raw = "";
     for await (const chunk of req) raw += chunk;
     requests.push({ url: req.url ?? "", headers: req.headers, body: JSON.parse(raw) });
-    const reply = script.shift() ?? { content: [{ type: "text", text: "(script ended)" }], stop_reason: "end_turn" };
+    const body = requests.at(-1)!.body;
+    const reply = (typeof script === "function" ? await script(body) : script.shift()) ?? { content: [{ type: "text", text: "(script ended)" }], stop_reason: "end_turn" };
     res.writeHead(200, { "content-type": "text/event-stream" });
     const send = (event: { type: string; [key: string]: unknown }) => res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
     send({

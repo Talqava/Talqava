@@ -17,3 +17,5 @@ export { CLAUDE_PRICES, FREE, costOf } from "./models/pricing.ts";
 export { checkModel } from "./models/check.ts";
 export type { CheckResult } from "./models/check.ts";
 export { pageTool, htmlToText, isPrivateAddress } from "./tools/page.ts";
+export { POWERS, HATS, parseBot, limitProjectBot, botPrompt } from "./crew.ts";
+export type { Bot, BotSource, Power, Hat } from "./crew.ts";

@@ -44,7 +44,7 @@ export function initStore() {
   for (const dir of [DATA, WORKSPACE, CONV_DIR]) fs.mkdirSync(dir, { recursive: true });
 }
 
-function readJson<T>(file: string, fallback: T): T {
+export function readJson<T>(file: string, fallback: T): T {
   try {
     return JSON.parse(fs.readFileSync(file, "utf8"));
   } catch (err) {
@@ -53,7 +53,7 @@ function readJson<T>(file: string, fallback: T): T {
   }
 }
 
-function writeJson(file: string, value: unknown, mode = 0o600) {
+export function writeJson(file: string, value: unknown, mode = 0o600) {
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(value, null, 2), { mode });
   fs.renameSync(tmp, file);
@@ -93,6 +93,8 @@ export interface Config {
   budget: Budget;
   /** The last model check of each model, by ref. */
   modelChecks: Record<string, CheckResult>;
+  /** Repositories bots may work on, by their top folder. */
+  projects: string[];
   mcpServers: McpServer[];
   secrets: Record<string, Secret>;
   sessionSecret: string;
@@ -108,6 +110,7 @@ const DEFAULTS: Config = {
   providers: DEFAULT_PROVIDERS,
   budget: { steps: 40, spend: 1 },
   modelChecks: {},
+  projects: [],
   mcpServers: [],
   secrets: {},
   sessionSecret: "",
@@ -152,12 +155,14 @@ export function publicConfig() {
     })),
     budget: cfg.budget,
     modelChecks: cfg.modelChecks,
+    projects: cfg.projects,
     apiKeyFromEnv: !cfg.apiKey && Boolean(process.env.ANTHROPIC_API_KEY),
     mcpServers: cfg.mcpServers.map((s) => ({ name: s.name, url: s.url, hasToken: Boolean(s.token) })),
     secrets: Object.entries(cfg.secrets).map(([name, s]) => ({ name, host: s.host })),
     models: MODELS,
     efforts: EFFORTS,
     workspace: WORKSPACE,
+    dataDir: DATA,
   };
 }
 

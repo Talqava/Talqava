@@ -17,7 +17,7 @@ export interface Conversation {
   title: string;
   createdAt: string;
   updatedAt: string;
-  source: "chat" | "schedule";
+  source: "chat" | "schedule" | "quest";
   jobId?: string;
   messages: Message[];
   /** Tools the user chose "always allow" for in this conversation. */
@@ -129,6 +129,11 @@ export interface RunSpec {
   mcpServers: McpServer[];
   approvalMode: ApprovalMode;
   budget?: Budget;
+  /**
+   * Tools that bring in outside content (web pages, API replies). Once one has
+   * run in a conversation, every change asks first, whatever the approval mode.
+   */
+  cautionAfter?: string[];
 }
 
 /** Limits on one run (one quest). The run stops before going over either. */
@@ -144,6 +149,8 @@ export interface Approval {
   toolUseId: string;
   name: string;
   input: unknown;
+  /** Why this asks even though approvals would normally let it run. */
+  reason?: string;
 }
 
 export type Delta = { type: "delta"; kind: "text" | "thinking" | "tool"; text: string };
@@ -153,7 +160,9 @@ export type RunEvent =
   | { type: "user"; text: string; title: string }
   | { type: "reset" }
   | { type: "assistant"; content: ContentBlock[] }
+  | { type: "tool_start"; id: string; name: string }
   | { type: "tool_result"; result: ToolResult }
+  | { type: "resumed"; text: string }
   | { type: "approval"; approval: Approval }
   | { type: "approval_done"; id: string; decision: Decision }
   | { type: "status"; running: boolean; usage?: Conversation["usage"] }

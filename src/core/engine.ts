@@ -37,11 +37,34 @@ export interface EngineOptions {
   resolveRun(conversation: Conversation): MaybePromise<RunSpec>;
   /** Model calls allowed in one run when the run has no step budget. */
   maxTurns?: number;
+  /** Hears every event except streamed text, e.g. to keep a journal of each step. */
+  onEvent?(conversationId: string, event: RunEvent): void;
 }
 
 export function describeError(err: unknown): string {
   if (err instanceof ModelError) return err.message;
   return describeAnthropicError(err) ?? (err instanceof Error ? err.message : String(err));
+}
+
+/**
+ * Has this conversation already brought in outside content, before the call
+ * now asking? Only calls that ran earlier count: those in earlier messages,
+ * Anthropic's own web steps in the current reply, and calls ahead of this one in it.
+ */
+function readOutsideContent(conversation: Conversation, spec: RunSpec, callId: string): boolean {
+  const names = spec.cautionAfter;
+  if (!names?.length) return false;
+  const reads = (block: { type: string; name?: string }) => (block.type === "tool_use" || block.type === "server_tool_use") && names.includes(block.name ?? "");
+  const messages = conversation.messages;
+  const current = messages.at(-1);
+  const earlier = current?.role === "assistant" ? messages.slice(0, -1) : messages;
+  if (earlier.some((m) => m.role === "assistant" && Array.isArray(m.content) && m.content.some((b) => reads(b as { type: string; name?: string })))) return true;
+  if (current?.role !== "assistant" || !Array.isArray(current.content)) return false;
+  for (const block of current.content as { type: string; id?: string; name?: string }[]) {
+    if (block.type === "tool_use" && block.id === callId) return false;
+    if (reads(block)) return true;
+  }
+  return false;
 }
 
 const dollars = (n: number) => `$${n < 0.1 ? n.toFixed(3) : n.toFixed(2)}`;
@@ -51,11 +74,13 @@ export class Engine {
   #conversations: ConversationStore;
   #resolveRun: EngineOptions["resolveRun"];
   #maxTurns: number;
+  #onEvent: EngineOptions["onEvent"];
 
   constructor(options: EngineOptions) {
     this.#conversations = options.conversations;
     this.#resolveRun = options.resolveRun;
     this.#maxTurns = options.maxTurns ?? 80;
+    this.#onEvent = options.onEvent;
   }
 
   // ---------- live state of each conversation ----------
@@ -73,6 +98,13 @@ export class Engine {
     // Keep the in-flight streamed text so a page opened mid-answer can catch up.
     if (event.type === "delta") run.partial.push(event);
     if (event.type === "assistant" || event.type === "reset") run.partial = [];
+    if (event.type !== "delta") {
+      try {
+        this.#onEvent?.(id, event);
+      } catch (err) {
+        console.error(`Event handler failed in conversation ${id}:`, err);
+      }
+    }
     for (const listener of run.listeners) listener(event);
   }
 
@@ -109,9 +141,16 @@ export class Engine {
   // ---------- approvals ----------
   /** Asks the user (through the page) whether a tool call may run. */
   #askApproval(conversation: Conversation, run: Run, spec: RunSpec, call: ToolCall): Promise<Decision> {
-    if (spec.approvalMode === "auto" || conversation.allowed.includes(call.name)) return Promise.resolve("allow");
+    const cautious = readOutsideContent(conversation, spec, call.id);
+    if (!cautious && (spec.approvalMode === "auto" || conversation.allowed.includes(call.name))) return Promise.resolve("allow");
     if (run.abort.signal.aborted) return Promise.resolve("deny");
-    const info: Approval = { id: crypto.randomBytes(8).toString("hex"), toolUseId: call.id, name: call.name, input: call.input };
+    const info: Approval = {
+      id: crypto.randomBytes(8).toString("hex"),
+      toolUseId: call.id,
+      name: call.name,
+      input: call.input,
+      ...(cautious ? { reason: "This run has read outside content (web pages or API replies), so every change asks first." } : {}),
+    };
     return new Promise((resolve) => {
       const finish = (decision: Decision) => {
         run.approvals.delete(info.id);
@@ -151,6 +190,8 @@ export class Engine {
         );
       }
     }
+    // Written to the journal before running, so a restart knows this call may have partly happened.
+    this.#emit(conversation.id, { type: "tool_start", id: call.id, name: call.name });
     try {
       return result(await tool.run(call.input, { signal: run.abort.signal, conversation }));
     } catch (err) {
@@ -280,21 +321,71 @@ export class Engine {
     this.#emit(id, { type: "user", text, title: conv.title });
     this.#emit(id, { type: "status", running: true });
 
-    const done = this.#loop(conv, run)
+    return { conversation: conv, done: this.#finish(id, conv, run, this.#loop(conv, run)) };
+  }
+
+  /**
+   * Picks up a run that was cut off, for example by the app closing. Tool calls
+   * that never started are run now (asking first as usual); calls that had
+   * started are reported to the model as interrupted, because they may have
+   * partly happened and must not be repeated blindly.
+   */
+  async resumeRun(id: string, started: Set<string>): Promise<{ conversation: Conversation; done: Promise<void> } | null> {
+    const run = this.#run(id);
+    if (run.running) throw new Error("The agent is already working in this conversation.");
+    const conversation = await this.#conversations.get(id);
+    if (!conversation) throw new Error("Conversation not found.");
+    const last = conversation.messages.at(-1);
+    if (!last) return null;
+    const dangling = last.role === "assistant" && Array.isArray(last.content) ? (last.content.filter((b) => b.type === "tool_use") as ToolCall[]) : [];
+    // A finished answer: nothing to resume.
+    if (last.role === "assistant" && !dangling.length) return null;
+
+    run.running = true;
+    run.abort = new AbortController();
+    this.#emit(id, { type: "resumed", text: "Picked up where it stopped when the app closed." });
+    this.#emit(id, { type: "status", running: true });
+
+    const work = async () => {
+      if (dangling.length) {
+        const spec = await this.#resolveRun(conversation);
+        const results: ToolResult[] = [];
+        for (const call of dangling) {
+          const result: ToolResult = started.has(call.id)
+            ? {
+                type: "tool_result",
+                tool_use_id: call.id,
+                is_error: true,
+                content:
+                  "The app closed while this was running, so it may have partly happened. Check what state things are in before doing it again.",
+              }
+            : await this.#runTool(conversation, run, spec, call);
+          results.push(result);
+          this.#emit(id, { type: "tool_result", result });
+        }
+        conversation.messages.push({ role: "user", content: results });
+        await this.#conversations.save(conversation);
+      }
+      await this.#loop(conversation, run);
+    };
+    return { conversation, done: this.#finish(id, conversation, run, work()) };
+  }
+
+  #finish(id: string, conversation: Conversation, run: Run, work: Promise<void>): Promise<void> {
+    return work
       .catch((err) => {
         console.error(`Run failed in conversation ${id}:`, err);
         this.#emit(id, { type: "error", text: describeError(err) });
       })
       .then(async () => {
-        await this.#conversations.save(conv);
+        await this.#conversations.save(conversation);
       })
       .catch((err) => console.error(`Could not save conversation ${id}:`, err))
       .finally(() => {
         run.running = false;
         run.partial = [];
-        this.#emit(id, { type: "status", running: false, usage: conv.usage });
+        this.#emit(id, { type: "status", running: false, usage: conversation.usage });
       });
-    return { conversation: conv, done };
   }
 
   /** A scheduled job runs in its own new conversation, with no one watching. */

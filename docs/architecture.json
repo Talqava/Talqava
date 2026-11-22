@@ -6,7 +6,8 @@
     "language": "TypeScript, run directly by Node (no build step)",
     "requires": "Node.js 22.18+",
     "dependencies": [
-      "@anthropic-ai/sdk"
+      "@anthropic-ai/sdk",
+      "yaml"
     ],
     "optional": [
       "playwright (adds the browser tool)"
@@ -165,9 +166,9 @@
   "components": [
     {
       "file": "src/core/engine.ts",
-      "lines": 306,
+      "lines": 397,
       "role": "Agent loop (core)",
-      "does": "Sends the conversation to the chosen model, streams the reply, runs each tool the model calls (asking for approval when needed), feeds results back, and repeats until the model is done or the run reaches its budget of steps or estimated spend. Saves after every step. It is handed its storage, tools and model, so it works the same on files or a database, and on Claude or a local model.",
+      "does": "Sends the conversation to the chosen model, streams the reply, runs each tool the model calls (asking for approval when needed), feeds results back, and repeats until the model is done or the run reaches its budget of steps or estimated spend. Saves after every step. It is handed its storage, tools and model, so it works the same on files or a database, and on Claude or a local model. Reports every step for the journal, resumes a cut-off run without repeating a step that had started, and makes every change ask first once a run has read outside content.",
       "uses": [
         "src/core/models/",
         "src/core/types.ts"
@@ -175,7 +176,7 @@
     },
     {
       "file": "src/core/types.ts",
-      "lines": 167,
+      "lines": 176,
       "role": "Shared shapes (core)",
       "does": "Defines what a conversation, tool, job and run look like, and the storage interfaces each edition must provide.",
       "uses": []
@@ -275,8 +276,18 @@
       ]
     },
     {
+      "file": "src/core/crew.ts",
+      "lines": 113,
+      "role": "Bot files (core)",
+      "does": "Reads and checks a bot's YAML file: name, type, character, instructions, powers, model, approvals and budget. Bots from a repository are capped at the user's own settings.",
+      "uses": [
+        "yaml",
+        "src/core/types.ts"
+      ]
+    },
+    {
       "file": "src/local/server.ts",
-      "lines": 353,
+      "lines": 453,
       "role": "Web server (local)",
       "does": "Serves the chat page and a small JSON API. Handles sign-in, refuses cross-site requests, streams live events to the page, and wires the core to local storage and tools.",
       "uses": [
@@ -287,7 +298,7 @@
     },
     {
       "file": "src/local/store.ts",
-      "lines": 306,
+      "lines": 311,
       "role": "Store (local)",
       "does": "Keeps settings, chats, memory, skills and jobs as JSON files, behind the core's storage interfaces.",
       "uses": [
@@ -296,7 +307,7 @@
     },
     {
       "file": "src/local/tools.ts",
-      "lines": 237,
+      "lines": 285,
       "role": "Local tools",
       "does": "The shell and the file editor, confined to the workspace, plus the list of tools and the prompt for a local run.",
       "uses": [
@@ -312,6 +323,34 @@
       "uses": [
         "src/core/models/",
         "src/local/store.ts"
+      ]
+    },
+    {
+      "file": "src/local/crew.ts",
+      "lines": 52,
+      "role": "The crew (local)",
+      "does": "Finds the bots: the starters in crew/, a project's .crew/ folder, and the user's own in the data folder, later ones replacing earlier ones by name.",
+      "uses": [
+        "src/core/crew.ts"
+      ]
+    },
+    {
+      "file": "src/local/quests.ts",
+      "lines": 239,
+      "role": "Quest runner and journal (local)",
+      "does": "Starts quests, keeps several going at once, writes every step to a journal on disk, resumes quests that were under way when the app closed, and accepts or undoes a quest's changes.",
+      "uses": [
+        "src/core/engine.ts",
+        "src/local/git.ts"
+      ]
+    },
+    {
+      "file": "src/local/git.ts",
+      "lines": 98,
+      "role": "Branch per quest (local)",
+      "does": "Gives each quest that may change code its own branch and working copy, shows what it changed, keeps the changes as one commit, or removes every trace.",
+      "uses": [
+        "git"
       ]
     },
     {
@@ -334,7 +373,7 @@
     },
     {
       "file": "public/app.js",
-      "lines": 740,
+      "lines": 1037,
       "role": "Chat page",
       "does": "The whole page, without a framework: chats, approval prompts, Memory, Skills, Schedules and Settings.",
       "uses": [
@@ -542,6 +581,51 @@
       "method": "POST",
       "path": "/api/jobs/:id/run",
       "does": "Run a job now."
+    },
+    {
+      "method": "GET",
+      "path": "/api/crew?project=",
+      "does": "The crew: starter, project and personal bots, and any bot files that could not be read."
+    },
+    {
+      "method": "GET",
+      "path": "/api/quests",
+      "does": "Every quest, with its bot, status, steps, cost and branch."
+    },
+    {
+      "method": "POST",
+      "path": "/api/quests",
+      "does": "Send a bot on a quest, optionally on a repository."
+    },
+    {
+      "method": "GET",
+      "path": "/api/quests/:id",
+      "does": "One quest with its journal."
+    },
+    {
+      "method": "POST",
+      "path": "/api/quests/:id/stop",
+      "does": "Stop a quest."
+    },
+    {
+      "method": "GET",
+      "path": "/api/quests/:id/changes",
+      "does": "What a code quest changed, as a file list and a diff."
+    },
+    {
+      "method": "POST",
+      "path": "/api/quests/:id/accept",
+      "does": "Keep a code quest's changes as one commit on its branch."
+    },
+    {
+      "method": "POST",
+      "path": "/api/quests/:id/undo",
+      "does": "Remove a code quest's branch and working copy."
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/quests/:id",
+      "does": "Remove a finished quest from the log, undoing changes not yet dealt with."
     }
   ],
   "events": [
@@ -581,6 +665,22 @@
     {
       "path": "data/workspace/",
       "holds": "The agent's working folder: the only place its file tool can reach."
+    },
+    {
+      "path": "data/quests/",
+      "holds": "One file per quest: its bot as it was at the start, status, steps, branch and outcome."
+    },
+    {
+      "path": "data/journals/",
+      "holds": "Every step of every quest, one line each, written as it happens. Used to resume after a restart."
+    },
+    {
+      "path": "data/worktrees/",
+      "holds": "Each code quest's own working copy of the repository, removed when its changes are kept or undone."
+    },
+    {
+      "path": "data/crew/",
+      "holds": "The user's own bot files, which replace starter bots of the same name."
     }
   ],
   "model": {
@@ -633,6 +733,22 @@
     {
       "name": "Limits",
       "what": "80 model calls per run, 2 minutes per shell command, tool output clipped at 30,000 characters."
+    },
+    {
+      "name": "Powers per bot",
+      "what": "A bot only gets the tools its file grants; a scout cannot touch files."
+    },
+    {
+      "name": "Branch per quest",
+      "what": "Code changes happen on the quest's own branch and working copy; the user's files and branches are untouched until they keep the changes."
+    },
+    {
+      "name": "Caution after the web",
+      "what": "Once a quest has read a web page or an API reply, every change asks first, whatever the bot's settings."
+    },
+    {
+      "name": "Bots from a repository",
+      "what": "Never get 'run everything' unless the user chose it, and their budget is capped at the user's."
     }
   ],
   "deployment": [
@@ -649,7 +765,7 @@
   ],
   "tests": {
     "command": "npm run check",
-    "count": 33,
+    "count": 45,
     "covers": [
       "agent loop against a stand-in API and in-memory storage",
       "approvals: deny, always allow, stop",
@@ -661,7 +777,12 @@
       "step and spend budgets",
       "model check",
       "page reader: text, redirects, private addresses",
-      "provider settings"
+      "provider settings",
+      "bot files and limits on repository bots",
+      "three quests at once",
+      "a branch per quest: preview, keep, undo",
+      "a real restart mid-quest",
+      "caution after reading outside content"
     ]
   }
 }

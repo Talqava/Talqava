@@ -147,3 +147,44 @@ details.think .body { color: var(--muted); white-space: pre-wrap; font-size: 13.
   .compose { padding: 10px 16px 14px; }
   .msg.user { margin-left: 8%; }
 }
+
+/* ---------- the crew ---------- */
+.gremlin { display: inline-flex; flex: none; }
+.gremlin svg { display: block; }
+@media (prefers-reduced-motion: no-preference) {
+  .gremlin.working svg { animation: bob 1.4s ease-in-out infinite; }
+  .gremlin.waiting svg { animation: tilt 2.4s ease-in-out infinite; }
+}
+@keyframes bob { 50% { transform: translateY(-3px); } }
+@keyframes tilt { 25% { transform: rotate(-6deg); } 75% { transform: rotate(6deg); } }
+.quest-form { display: grid; gap: 10px; }
+.quest-form label { display: grid; gap: 4px; }
+.crew { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.bot, .quest {
+  display: flex; gap: 10px; align-items: flex-start; text-align: left;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; width: 100%;
+}
+.bot.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.bot .grow, .quest .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.bot .grow > strong { display: inline; }
+.bot .state { font-size: 13px; }
+.state.ok { color: var(--ok); } .state.bad { color: var(--bad); }
+.powers { font-size: 12px; color: var(--muted); }
+.small { font-size: 12px; margin: 0; }
+.quests { display: grid; gap: 8px; }
+.quest { align-items: center; }
+.quest.waiting { border-color: var(--bad); }
+.quest .end { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+.badge { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 8px; border: 1px solid currentColor; white-space: nowrap; }
+.badge.ok { color: var(--ok); } .badge.bad, .badge.wait { color: var(--bad); }
+.badge.work { color: var(--accent); } .badge.muted { color: var(--muted); }
+.questbar { padding-top: 12px; }
+.questbar .row { gap: 10px; }
+.changes h3 { margin: 12px 0 6px; }
+.files { margin: 0 0 8px; padding-left: 18px; }
+.add { color: var(--ok); } .del { color: var(--bad); }
+pre.diff { max-height: 420px; overflow: auto; background: var(--code); border-radius: 8px; padding: 10px; font-size: 13px; }
+pre.diff .file { font-weight: 600; } pre.diff .hunk { color: var(--muted); }
+.head .gremlin { margin-right: 8px; }
+.muted { color: var(--muted); }
+.questbar .card .row { justify-content: flex-start; }

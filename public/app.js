@@ -2,7 +2,7 @@
 import { renderMarkdown } from "/markdown.js";
 
 const app = document.getElementById("app");
-const state = { config: null, convs: [], view: "chat", convId: null, conv: null, running: false, source: null };
+const state = { config: null, convs: [], view: "crew", convId: null, conv: null, running: false, source: null, quest: null, crewProject: "" };
 const ui = {}; // live nodes of the open conversation
 
 // ---------- helpers ----------
@@ -117,6 +117,7 @@ function go(view, convId = null) {
 function renderSide() {
   if (!ui.side) return;
   const tabs = [
+    ["crew", "Crew"],
     ["chat", "Chats"],
     ["memory", "Memory"],
     ["skills", "Skills"],
@@ -129,7 +130,7 @@ function renderSide() {
     h(
       "nav",
       { class: "nav" },
-      tabs.map(([view, label]) => h("button", { class: state.view === view ? "on" : "", onclick: () => go(view) }, label)),
+      tabs.map(([view, label]) => h("button", { class: state.view === view || (view === "crew" && state.view === "quest") ? "on" : "", onclick: () => go(view) }, label)),
     ),
     h(
       "div",
@@ -159,7 +160,8 @@ function header(title, ...extra) {
 function renderMain() {
   state.source?.close();
   state.source = null;
-  const views = { chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView };
+  clearInterval(renderMain.poll);
+  const views = { crew: crewView, quest: questView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView };
   views[state.view]();
 }
 
@@ -176,7 +178,7 @@ function chatView() {
   ui.meta = h("span", { class: "meta" });
   ui.log = h("div", { class: "col" });
   ui.scroll = h("div", { class: "scroll" }, ui.log);
-  ui.input = h("textarea", { rows: 1, placeholder: `Message ${state.config.agentName}…` });
+  ui.input = h("textarea", { rows: 1, placeholder: `Message ${speaker()}…` });
   ui.send = h("button", { class: "primary" }, "Send");
   ui.cards = new Map();
   ui.stream = null;
@@ -285,6 +287,7 @@ function onEvent(event) {
       if (!event.running) clearStream();
       refreshList();
       break;
+    case "resumed":
     case "notice":
       ui.log.append(h("div", { class: "banner" }, event.text));
       break;
@@ -442,15 +445,301 @@ function addApproval(approval) {
     h(
       "div",
       { class: "approval", id: `approval-${approval.id}` },
-      h("strong", {}, `${state.config.agentName} wants to use: ${NAMES[approval.name] || approval.name}`),
+      h("strong", {}, `${speaker()} wants to use: ${NAMES[approval.name] || approval.name}`),
+      approval.reason ? h("div", { class: "note" }, approval.reason) : null,
       h("pre", {}, detail),
       h(
         "div",
         { class: "row" },
         h("button", { class: "primary", onclick: () => decide("allow") }, "Allow once"),
-        h("button", { onclick: () => decide("always") }, `Always allow ${NAMES[approval.name] || approval.name} in this chat`),
+        approval.reason ? null : h("button", { onclick: () => decide("always") }, `Always allow ${NAMES[approval.name] || approval.name} in this chat`),
         h("button", { class: "danger", onclick: () => decide("deny") }, "Don't allow"),
       ),
+    ),
+  );
+}
+
+
+// ---------- the crew ----------
+/** Who is talking in the open conversation: the quest's bot, or the agent. */
+const speaker = () => (state.view === "quest" && state.quest ? state.quest.bot.name : state.config.agentName);
+
+// Each type wears its own hat; the shapes follow the design mockups.
+const HAT_ART = {
+  explorer: '<path d="M9 15q15-13 30 0Z" fill="#8a5a2b"/><rect x="4" y="13.5" width="40" height="4" rx="2" fill="#6e4520"/>',
+  hardhat: '<path d="M9.5 16a14.5 12 0 0 1 29 0Z" fill="#ffd23f"/><rect x="6" y="14.5" width="36" height="4" rx="2" fill="#e0b000"/>',
+  visor: '<path d="M9.5 16q14.5-9 29 0l4 5.5q-18.5-7-37 0Z" fill="#1fae72"/>',
+  nightcap: '<path d="M9 16q4-12 18-11t15 6q-3 0-4 2q-14-3-29 3Z" fill="#6a5be0"/>',
+  beret: '<path d="M9 15q3-10 16-9.5t14 9q-15 4-30 .5Z" fill="#e0457b"/>',
+  flame: "",
+  none: "",
+};
+const FLAME = '<path d="M24 0q6 5 3 10q4-1 4-5q5 6 0 11h-14q-5-5 0-11q0 4 3 5q-2-5 4-10Z" fill="#ffd23f"/>';
+
+/** A crew member's face: a small gremlin in the bot's colour, wearing its type's hat. */
+function gremlin(character, size = 40, mood = "") {
+  const colour = /^#[0-9a-f]{6}$/i.test(character?.colour || "") ? character.colour : "#5cc8ff";
+  const hat = HAT_ART[character?.hat] !== undefined ? character.hat : "none";
+  const eyeY = hat === "visor" ? 27 : 25;
+  const svg =
+    `<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 48 48">` +
+    (hat === "flame" ? FLAME : "") +
+    `<path d="M11 25Q-2 21 1 7q11 3 15 13Z" fill="${colour}"/><path d="M37 25Q50 21 47 7q-11 3-15 13Z" fill="${colour}"/>` +
+    `<path d="M24 8c10 0 17 8.5 17 19 0 9.5-7 16.5-17 16.5S7 36.5 7 27C7 16.5 14 8 24 8Z" fill="${colour}"/>` +
+    HAT_ART[hat] +
+    `<circle cx="17.5" cy="${eyeY}" r="5" fill="#fff"/><circle cx="30.5" cy="${eyeY}" r="5" fill="#fff"/>` +
+    `<circle cx="18.5" cy="${eyeY + 1}" r="2.4" fill="#15131f"/><circle cx="29.5" cy="${eyeY + 1}" r="2.4" fill="#15131f"/>` +
+    `<path d="M17.5 ${eyeY + 7}q6.5 5 13 0" fill="none" stroke="#15131f" stroke-width="1.8" stroke-linecap="round"/>` +
+    `<path d="M20.8 ${eyeY + 8.9}l1.4 2.8 1.5-2.2Z" fill="#fff"/></svg>`;
+  const node = h("span", { class: `gremlin ${mood}` });
+  node.innerHTML = svg;
+  return node;
+}
+
+const STATUS = {
+  running: ["Working", "work"],
+  waiting: ["Waiting on you", "wait"],
+  done: ["Done", "ok"],
+  stopped: ["Stopped", "muted"],
+  budget: ["Stopped at its budget", "muted"],
+  failed: ["Failed", "bad"],
+};
+const OUTCOME = { accepted: "Changes kept", undone: "Changes undone", "no-changes": "No changes" };
+const POWER_NAMES = { web: "web", files: "files", shell: "shell", memory: "memory", skills: "skills", search: "past chats", api: "APIs", schedule: "schedules", browser: "browser", connectors: "connectors" };
+
+const money = (n) => `$${n < 0.1 ? n.toFixed(3) : n.toFixed(2)}`;
+function questLine(q) {
+  const steps = q.steps ? `step ${q.steps}${q.budget?.steps ? ` of up to ${q.budget.steps}` : ""}` : "starting";
+  const cost = q.cost >= 0.001 ? ` · ${money(q.cost)}${q.budget?.spend ? ` of ${money(q.budget.spend)}` : ""}` : "";
+  return `${steps}${cost}`;
+}
+
+function badge(status) {
+  const [label, tone] = STATUS[status] || [status, "muted"];
+  return h("span", { class: `badge ${tone}` }, label);
+}
+
+async function crewView() {
+  const col = page("Crew", "Send a bot on a quest. Several can work at once; every step is saved, so a quest carries on after the app restarts.");
+  const project = state.config.projects.includes(state.crewProject) ? state.crewProject : "";
+  let crew;
+  let questsList;
+  try {
+    [crew, questsList] = await Promise.all([api("GET", `crew${project ? `?project=${encodeURIComponent(project)}` : ""}`), api("GET", "quests")]);
+  } catch (err) {
+    col.append(h("div", { class: "banner error" }, err.message));
+    return;
+  }
+  if (state.view !== "crew") return;
+
+  // ----- send a quest -----
+  let chosen = crew.bots.some((b) => b.id === crewView.chosen) ? crewView.chosen : crew.bots[0]?.id;
+  const text = h("textarea", { rows: 2, placeholder: "What should the bot do? e.g. Compare three queue libraries for Node" });
+  const projectSelect = h(
+    "select",
+    { onchange: () => ((state.crewProject = projectSelect.value), crewView()) },
+    h("option", { value: "" }, "No repository (works in the workspace folder)"),
+    state.config.projects.map((p) => h("option", { value: p, selected: p === project }, p)),
+  );
+  const sendButton = h("button", { class: "primary" }, "Send on quest");
+  const who = h("span", { class: "note" });
+  const showChosen = () => {
+    const bot = crew.bots.find((b) => b.id === chosen);
+    who.textContent = bot ? `${bot.name} the ${bot.type} will go.` : "";
+    for (const card of col.querySelectorAll(".bot")) card.classList.toggle("on", card.dataset.id === chosen);
+  };
+  const send = () =>
+    attempt(async () => {
+      if (!text.value.trim()) return text.focus();
+      sendButton.disabled = true;
+      try {
+        const quest = await api("POST", "quests", { bot: chosen, text: text.value, project: project || undefined });
+        go("quest", quest.id);
+      } finally {
+        sendButton.disabled = false;
+      }
+    }, col);
+  text.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send();
+  });
+  sendButton.addEventListener("click", send);
+
+  const active = questsList.filter((q) => q.status === "running" || q.status === "waiting");
+  const busy = new Map(active.map((q) => [q.bot.id, q]));
+
+  const botCard = (bot) => {
+    const quest = busy.get(bot.id);
+    const status = quest ? (quest.status === "waiting" ? "Waiting on you" : `Working · ${questLine(quest)}`) : "Idle";
+    return h(
+      "button",
+      { class: "bot", "data-id": bot.id, onclick: () => ((chosen = crewView.chosen = bot.id), showChosen()), title: bot.instructions },
+      gremlin(bot.character, 44, quest ? (quest.status === "waiting" ? "waiting" : "working") : ""),
+      h(
+        "span",
+        { class: "grow" },
+        h("span", {}, h("strong", {}, bot.name), h("span", { class: "muted" }, ` · ${bot.type}`)),
+        h("span", { class: `state ${quest?.status === "waiting" ? "bad" : quest ? "ok" : ""}` }, status),
+        h("span", { class: "powers" }, bot.powers.map((p) => POWER_NAMES[p] || p).join(" · ") || "talk only"),
+        h("span", { class: "note small" }, `${bot.model || "Default model"}${bot.source === "project" ? " · from .crew/" : bot.source === "personal" ? " · your bot" : ""}`),
+      ),
+    );
+  };
+
+  col.append(
+    h("div", { class: "card quest-form" }, h("label", {}, "Quest", text), h("label", {}, "Repository", projectSelect), h("div", { class: "row" }, sendButton, who)),
+    h("h3", {}, `The crew · ${crew.bots.length}`),
+    h("div", { class: "crew" }, ...crew.bots.map(botCard)),
+    ...(crew.problems.length
+      ? [h("div", { class: "banner error" }, h("strong", {}, "Some bot files could not be read:"), ...crew.problems.map((p) => h("div", {}, p.problem)))]
+      : []),
+    h("p", { class: "note" }, `Bots are YAML files. Add your own in ${state.config.dataDir}/crew/, or share them with a project in its .crew/ folder.`),
+  );
+  showChosen();
+
+  const questCard = (q) =>
+    h(
+      "button",
+      { class: `quest ${q.status}`, onclick: () => go("quest", q.id) },
+      gremlin(q.bot.character, 32, q.status === "running" ? "working" : q.status === "waiting" ? "waiting" : ""),
+      h(
+        "span",
+        { class: "grow" },
+        h("strong", {}, q.title),
+        h(
+          "span",
+          { class: "note" },
+          `${q.bot.name} · ${q.status === "running" || q.status === "waiting" ? questLine(q) : when(q.updatedAt)}${q.branch ? ` · ${q.branch}` : ""}`,
+        ),
+        q.resumedAt ? h("span", { class: "note" }, `Picked up again after a restart, ${when(q.resumedAt)}`) : null,
+      ),
+      h(
+        "span",
+        { class: "end" },
+        badge(q.status),
+        q.outcome ? h("span", { class: "note small" }, OUTCOME[q.outcome]) : q.branch && !STATUS[q.status][1].match(/work|wait/) ? h("span", { class: "badge wait" }, "Changes to review") : null,
+      ),
+    );
+
+  const log = questsList.filter((q) => !(q.status === "running" || q.status === "waiting"));
+  col.append(
+    h("h3", {}, `On the job${active.length ? ` · ${active.length}` : ""}`),
+    active.length ? h("div", { class: "quests" }, ...active.map(questCard)) : h("p", { class: "note" }, "Nobody is on a quest right now."),
+    h("h3", {}, "Quest log"),
+    log.length ? h("div", { class: "quests" }, ...log.slice(0, 30).map(questCard)) : h("p", { class: "note" }, "Finished quests appear here."),
+  );
+
+  // Keep the crew's status fresh while this page is open.
+  clearInterval(renderMain.poll);
+  const signature = JSON.stringify(questsList.map((q) => [q.id, q.status, q.steps, q.outcome]));
+  renderMain.poll = setInterval(async () => {
+    if (state.view !== "crew" || document.activeElement === text || text.value) return;
+    try {
+      const fresh = await api("GET", "quests");
+      if (JSON.stringify(fresh.map((q) => [q.id, q.status, q.steps, q.outcome])) !== signature) crewView();
+    } catch {}
+  }, 2000);
+}
+
+// ---------- one quest ----------
+async function questView() {
+  try {
+    state.quest = await api("GET", `quests/${state.convId}`);
+  } catch (err) {
+    state.quest = null;
+    go("crew");
+    return;
+  }
+  chatView();
+  const q = state.quest;
+  ui.title.textContent = q.title;
+  ui.title.before(gremlin(q.bot.character, 30));
+  ui.remove.onclick = null;
+  ui.remove.replaceWith(
+    (ui.remove = h(
+      "button",
+      {
+        class: "plain danger",
+        title: "Delete this quest",
+        onclick: () =>
+          confirm(q.branch && !q.outcome ? "Delete this quest and undo its changes?" : "Delete this quest from the log?") &&
+          attempt(async () => {
+            await api("DELETE", `quests/${q.id}`);
+            go("crew");
+          }),
+      },
+      "Delete",
+    )),
+  );
+  ui.bar = h("div", { class: "questbar col" });
+  ui.scroll.prepend(ui.bar);
+  renderQuestBar();
+  // Refresh the bar when the run starts or stops.
+  clearInterval(renderMain.poll);
+  renderMain.poll = setInterval(async () => {
+    if (state.view !== "quest" || state.quest?.id !== q.id) return;
+    try {
+      const fresh = await api("GET", `quests/${q.id}`);
+      if (fresh.status !== state.quest.status || fresh.outcome !== state.quest.outcome || fresh.steps !== state.quest.steps) {
+        state.quest = fresh;
+        renderQuestBar();
+      }
+    } catch {}
+  }, 1500);
+}
+
+async function renderQuestBar() {
+  const q = state.quest;
+  if (!ui.bar || !q) return;
+  const where = q.branch ? `Working on its own branch, ${q.branch}, in a copy of ${q.project}. Your own files are not touched.` : q.project ? `Repository: ${q.project}` : "Works in the workspace folder.";
+  ui.bar.replaceChildren(
+    h(
+      "div",
+      { class: "card" },
+      h("div", { class: "row" }, h("strong", {}, `${q.bot.name} · ${q.bot.type}`), badge(q.status), h("span", { class: "note" }, questLine(q))),
+      h("div", { class: "note" }, where),
+      q.note && q.status === "failed" ? h("div", { class: "banner error" }, q.note) : null,
+      q.resumedAt ? h("div", { class: "note" }, `Picked up again after the app restarted, ${when(q.resumedAt)}.`) : null,
+      h("div", { class: "changes" }),
+    ),
+  );
+  const box = ui.bar.querySelector(".changes");
+  if (!q.branch) return;
+  if (q.outcome === "accepted") return box.append(h("p", { class: "note" }, `Kept as a commit on ${q.branch}. To bring it into your branch: git merge ${q.branch}`));
+  if (q.outcome) return box.append(h("p", { class: "note" }, OUTCOME[q.outcome] + "."));
+  if (q.status === "running" || q.status === "waiting") return box.append(h("p", { class: "note" }, "You can review the changes when the quest stops."));
+
+  const changes = await attempt(() => api("GET", `quests/${q.id}/changes`), box);
+  if (!changes) return;
+  if (!changes.files.length) {
+    box.append(
+      h("p", { class: "note" }, "The quest changed no files."),
+      h("button", { onclick: () => attempt(async () => (await api("POST", `quests/${q.id}/undo`), questView()), box) }, "Close the branch"),
+    );
+    return;
+  }
+  const diff = h("pre", { class: "diff" });
+  for (const line of changes.diff.split("\n")) {
+    const tone = line.startsWith("+++") || line.startsWith("---") ? "file" : line.startsWith("+") ? "add" : line.startsWith("-") ? "del" : line.startsWith("@@") ? "hunk" : "";
+    diff.append(h("span", { class: tone }, `${line}\n`));
+  }
+  box.append(
+    h("h3", {}, "Changes"),
+    h("ul", { class: "files" }, ...changes.files.map((f) => h("li", {}, h("code", {}, f.path), h("span", { class: "add" }, ` +${f.added}`), h("span", { class: "del" }, ` −${f.removed}`)))),
+    h("details", {}, h("summary", {}, "Show the full diff"), diff, changes.truncated ? h("p", { class: "note" }, "The diff is too long to show in full.") : null),
+    h(
+      "div",
+      { class: "row" },
+      h(
+        "button",
+        { class: "primary", onclick: () => attempt(async () => (await api("POST", `quests/${q.id}/accept`), questView()), box) },
+        "Keep the changes",
+      ),
+      h(
+        "button",
+        { class: "danger", onclick: () => confirm("Throw away everything this quest changed?") && attempt(async () => (await api("POST", `quests/${q.id}/undo`), questView()), box) },
+        "Undo the quest",
+      ),
+      h("span", { class: "note" }, "Keeping makes one commit on the quest's branch; your current branch stays as it is."),
     ),
   );
 }
@@ -724,6 +1013,14 @@ function settingsView() {
     h("p", { class: "note" }, "The agent uses these by name in API calls and never sees the values. Each key is only ever sent to its own host."),
     ...c.secrets.map((s) => h("div", { class: "card" }, h("div", { class: "row" }, h("div", { class: "grow" }, h("strong", {}, s.name), ` → ${s.host}`), h("button", { class: "plain danger", onclick: () => save({ secret: { name: s.name, remove: true } }) }, "Remove")))),
     h("form", { class: "form", onsubmit: (e) => (e.preventDefault(), save({ secret: { name: sName.value.trim(), value: sValue.value, host: sHost.value.trim() } })) }, sName, sValue, sHost, h("div", {}, h("button", {}, "Add key"))),
+  );
+
+  const repoPath = h("input", { placeholder: "Folder of a git repository, e.g. /home/you/code/my-app" });
+  col.append(
+    h("h3", {}, "Repositories"),
+    h("p", { class: "note" }, "Bots can work on these. A quest that changes code gets its own branch and working copy, so your files and branches are untouched until you keep its changes. Bots in a repository's .crew/ folder join the crew when it is chosen."),
+    ...c.projects.map((p) => h("div", { class: "card" }, h("div", { class: "row" }, h("div", { class: "grow" }, h("code", {}, p)), h("button", { class: "plain danger", onclick: () => save({ project: { path: p, remove: true } }) }, "Remove")))),
+    h("form", { class: "form", onsubmit: (e) => (e.preventDefault(), save({ project: { path: repoPath.value.trim() } })) }, repoPath, h("div", {}, h("button", {}, "Add repository"))),
   );
 
   const mName = h("input", { placeholder: "Name, e.g. notion" });

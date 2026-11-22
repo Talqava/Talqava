@@ -23,6 +23,10 @@ import {
 import type { Config, ProviderConfig } from "./store.ts";
 import { localRunSpec } from "./tools.ts";
 import { resolveModel, splitRef } from "./models.ts";
+import { loadCrew } from "./crew.ts";
+import { journal, questStore, quests } from "./quests.ts";
+import type { Quest } from "./quests.ts";
+import { currentBranch, repoRoot } from "./git.ts";
 
 const HOST = process.env.HOST || "127.0.0.1";
 const PORT = Number(process.env.PORT || 8787);
@@ -42,7 +46,9 @@ export const jobs = new JobBook(jobStore);
 export const engine = new Engine({
   conversations,
   resolveRun: localRunSpec(jobs),
+  onEvent: (id, event) => quests.onEvent(id, event),
 });
+quests.attach(engine);
 
 async function runJob(job: Job) {
   const { conversation } = await engine.runJob(job);
@@ -121,7 +127,7 @@ function conversationOr404(id: string) {
   return conversation;
 }
 
-function updateSettings(body: any) {
+async function updateSettings(body: any) {
   const cfg = getConfig();
   const patch: Partial<Config> = {};
   if (typeof body.agentName === "string" && body.agentName.trim()) patch.agentName = body.agentName.trim().slice(0, 40);
@@ -192,6 +198,17 @@ function updateSettings(body: any) {
     patch.providers = providers;
   }
 
+  if (body.project) {
+    const { path: folder, remove } = body.project;
+    if (typeof folder !== "string" || !folder.trim()) throw new HttpError(400, "Give the repository's folder.");
+    if (remove) patch.projects = cfg.projects.filter((p) => p !== folder);
+    else {
+      const top = await repoRoot(folder.trim());
+      if (!top) throw new HttpError(400, `${folder} is not a git repository on this computer.`);
+      patch.projects = [...new Set([...cfg.projects, top])];
+    }
+  }
+
   if (body.mcpServer) {
     const { name, url, token, remove } = body.mcpServer;
     if (!/^[A-Za-z0-9_-]{1,40}$/.test(name || "")) throw new HttpError(400, "Connector names use letters, digits, dashes and underscores.");
@@ -204,6 +221,34 @@ function updateSettings(body: any) {
   }
   saveConfig(patch);
   return publicConfig();
+}
+
+// ---------- quests ----------
+/** A repository the user added under Settings, or null. */
+function projectOrNull(folder: string | null): string | null {
+  return folder && getConfig().projects.includes(folder) ? folder : null;
+}
+
+function questSummary(quest: Quest) {
+  const conversation = conversations.get(quest.id);
+  const { bot } = quest;
+  return {
+    id: quest.id,
+    title: quest.title,
+    bot: { id: bot.id, name: bot.name, type: bot.type, character: bot.character, source: bot.source },
+    status: quest.status,
+    steps: quest.steps,
+    budget: { ...getConfig().budget, ...bot.budget },
+    cost: conversation?.usage.cost ?? 0,
+    project: quest.project ?? null,
+    branch: quest.copy?.branch ?? null,
+    outcome: quest.outcome ?? null,
+    note: quest.note ?? null,
+    resumedAt: quest.resumedAt ?? null,
+    createdAt: quest.createdAt,
+    updatedAt: quest.updatedAt,
+    live: engine.liveState(quest.id).approvals.length ? "waiting" : engine.isRunning(quest.id) ? "running" : null,
+  };
 }
 
 // ---------- routes ----------
@@ -224,7 +269,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   if (!signedIn(req)) throw new HttpError(401, "Sign in first.");
 
   if (route === "GET state") return send(res, 200, publicConfig());
-  if (route === "PUT settings") return send(res, 200, updateSettings(body));
+  if (route === "PUT settings") return send(res, 200, await updateSettings(body));
   if (route === "POST model-check") {
     const cfg = getConfig();
     let model;
@@ -244,7 +289,9 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     const [, id, action, actionId] = parts;
     if (!id) {
       if (req.method === "GET") {
-        return send(res, 200, conversations.list().map((c) => ({ ...c, running: engine.isRunning(c.id), needsApproval: engine.awaitingApproval(c.id) })));
+        // Quests are listed on the crew page, not with the chats.
+        const chats = conversations.list().filter((c) => c.source !== "quest");
+        return send(res, 200, chats.map((c) => ({ ...c, running: engine.isRunning(c.id), needsApproval: engine.awaitingApproval(c.id) })));
       }
       if (req.method === "POST") return send(res, 200, conversations.create());
     }
@@ -259,11 +306,13 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       const text = String(body.text || "").trim();
       if (!text) throw new HttpError(400, "Type a message first.");
       if (engine.isRunning(id)) throw new HttpError(409, "The agent is still working. Stop it first.");
+      if (questStore.get(id)?.outcome) throw new HttpError(409, "This quest is closed. Send a new quest instead.");
       await engine.startRun(id, text);
       return send(res, 200, { ok: true });
     }
     if (action === "stop" && req.method === "POST") {
-      engine.stop(id);
+      if (questStore.get(id)) quests.stop(id);
+      else engine.stop(id);
       return send(res, 200, { ok: true });
     }
     if (action === "approvals" && req.method === "POST") {
@@ -283,6 +332,53 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
         unsubscribe();
       });
       return;
+    }
+  }
+
+  if (parts[0] === "crew" && req.method === "GET") {
+    const project = projectOrNull(url.searchParams.get("project"));
+    return send(res, 200, { ...loadCrew(project ?? undefined), project, branch: project ? await currentBranch(project) : null });
+  }
+
+  if (parts[0] === "quests") {
+    const [, id, action] = parts;
+    if (!id && req.method === "GET") return send(res, 200, questStore.list().map(questSummary));
+    if (!id && req.method === "POST") {
+      const text = String(body.text || "").trim();
+      if (!text) throw new HttpError(400, "Say what the quest is.");
+      const project = body.project ? projectOrNull(String(body.project)) : null;
+      if (body.project && !project) throw new HttpError(400, "Add that repository under Settings first.");
+      const bot = loadCrew(project ?? undefined).bots.find((b) => b.id === body.bot);
+      if (!bot) throw new HttpError(400, "Choose a bot from the crew.");
+      try {
+        return send(res, 200, questSummary(await quests.start({ bot, text, project: project ?? undefined })));
+      } catch (err) {
+        throw new HttpError(400, (err as Error).message);
+      }
+    }
+    const quest = id ? questStore.get(id) : null;
+    if (!quest) throw new HttpError(404, "Quest not found.");
+    const attemptQuest = async <T>(fn: () => Promise<T>) => {
+      try {
+        return await fn();
+      } catch (err) {
+        throw new HttpError(409, (err as Error).message);
+      }
+    };
+    if (!action && req.method === "GET") return send(res, 200, { ...questSummary(quest), journal: journal.read(id) });
+    if (action === "stop" && req.method === "POST") {
+      quests.stop(id);
+      return send(res, 200, { ok: true });
+    }
+    if (action === "changes" && req.method === "GET") return send(res, 200, await attemptQuest(() => quests.changes(id)));
+    if (action === "accept" && req.method === "POST") return send(res, 200, await attemptQuest(() => quests.accept(id)));
+    if (action === "undo" && req.method === "POST") return send(res, 200, await attemptQuest(async () => (await quests.undo(id), { ok: true })));
+    if (!action && req.method === "DELETE") {
+      if (engine.isRunning(id)) throw new HttpError(409, "Stop the quest first.");
+      if (quest.copy && !quest.outcome) await attemptQuest(() => quests.undo(id));
+      conversations.remove(id);
+      questStore.remove(id);
+      return send(res, 200, { ok: true });
     }
   }
 
@@ -348,5 +444,10 @@ export function start() {
     console.log(`Data: ${DATA}\nWorkspace: ${WORKSPACE}`);
   });
   jobs.start(runJob);
+  // Quests that were under way when the app last closed carry on.
+  quests
+    .resumeAll()
+    .then((ids) => ids.length && console.log(`Resumed ${ids.length} quest${ids.length === 1 ? "" : "s"} that ${ids.length === 1 ? "was" : "were"} under way.`))
+    .catch((err) => console.error("Could not resume quests:", err));
   return server;
 }
