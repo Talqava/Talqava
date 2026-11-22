@@ -15,7 +15,7 @@ It runs on Claude through the Anthropic API. You need an API key from [console.a
 
 A map of how it is built is in [docs/architecture.html](docs/architecture.html) (open it in a browser), with the same content as data in [docs/architecture.json](docs/architecture.json).
 
-The plan for turning Talqava Agents into a hosted, multi-user product is in [docs/platform-architecture.md](docs/platform-architecture.md). It is a proposal; none of it is built yet.
+The plan for turning this into a desktop app with a crew of bots, any model, and safe work on real code is in [docs/architecture-plan.md](docs/architecture-plan.md). It is a plan; only its first stage is built.
 
 ## Run it on your computer
 
@@ -101,7 +101,6 @@ Restart, and the agent gains a `browser` tool. Without it, it still searches and
 | --- | --- |
 | `src/core` | The shared core: the agent loop, scheduling, the system prompt, and the tools every edition has. It reaches storage only through interfaces, so it does not care whether data lives in files or a database. |
 | `src/local` | This edition: JSON file storage, the shell and file tools, and the web server. |
-| `src/cloud` | Empty for now. The hosted edition is built here, on the same core. |
 | `public` | The chat page. |
 | `test` | Tests for the core (against in-memory storage) and for the local edition. |
 
