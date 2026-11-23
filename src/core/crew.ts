@@ -8,8 +8,19 @@ import type { ApprovalMode, Budget } from "./types.ts";
 export const POWERS = ["web", "files", "shell", "memory", "skills", "search", "api", "schedule", "browser", "connectors"] as const;
 export type Power = (typeof POWERS)[number];
 
-export const HATS = ["explorer", "beret", "hardhat", "nightcap", "visor", "flame", "none"] as const;
-export type Hat = (typeof HATS)[number];
+/** The legend printed on each starter type's key. A bot's own legend replaces it. */
+export const LEGENDS: Record<string, string> = { scout: "?", scribe: "Aa", maker: "</>", keeper: "zz", counter: "#", spark: "!" };
+
+/** The legend a bot gets when its file names none: its type's, else its name's first letter. */
+export function defaultLegend(type: string, name: string): string {
+  return LEGENDS[type] ?? ([...name.trim()][0] ?? "?").toUpperCase();
+}
+
+/** One to three visible characters, no spaces. */
+export function isLegend(text: string): boolean {
+  const chars = [...text];
+  return chars.length >= 1 && chars.length <= 3 && /^[^\s\p{C}]+$/u.test(text);
+}
 
 export type BotSource = "starter" | "project" | "personal";
 
@@ -19,7 +30,8 @@ export interface Bot {
   name: string;
   /** scout, scribe, maker, keeper, counter, spark, or a type of one's own. */
   type: string;
-  character: { hat: Hat; colour: string };
+  /** How the bot looks: a keycap with this legend printed on it, in this colour. */
+  character: { legend: string; colour: string };
   instructions: string;
   /** "provider/model", or undefined to use the default model in Settings. */
   model?: string;
@@ -51,8 +63,9 @@ export function parseBot(id: string, text: string, source: BotSource): Bot {
   if (!instructions) throw problem("needs instructions: what this bot does and how.");
 
   const character = isRecord(data.character) ? data.character : {};
-  const hat = (character.hat ?? "none") as Hat;
-  if (!HATS.includes(hat)) throw problem(`hat must be one of ${HATS.join(", ")}.`);
+  // Bot files from before the keycaps may still name a hat; it is ignored.
+  const legend = character.legend === undefined || character.legend === null ? defaultLegend(type, name) : String(character.legend);
+  if (!isLegend(legend)) throw problem("legend is one to three characters printed on the key, such as ? or </>.");
   const colour = typeof character.colour === "string" ? character.colour : "#5cc8ff";
   if (!/^#[0-9a-f]{6}$/i.test(colour)) throw problem("colour must look like #5cc8ff.");
 
@@ -85,7 +98,7 @@ export function parseBot(id: string, text: string, source: BotSource): Bot {
     budget = { ...(steps !== undefined ? { steps: steps as number } : {}), ...(spend !== undefined ? { spend: spend as number } : {}) };
   }
 
-  return { id, name, type, character: { hat, colour }, instructions, model, powers: [...new Set(powers as Power[])], approvals, budget, source };
+  return { id, name, type, character: { legend, colour }, instructions, model, powers: [...new Set(powers as Power[])], approvals, budget, source };
 }
 
 /**

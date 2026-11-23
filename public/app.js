@@ -315,7 +315,7 @@ function openPalette(box) {
       h(
         "li",
         { class: i === ui.paletteAt ? "on" : "", role: "option", onmousedown: (e) => (e.preventDefault(), item.run()) },
-        item.bot ? gremlin(item.bot.character, 22) : null,
+        item.bot ? keycap(item.bot.character, 22, "", item.bot.type) : null,
         h("span", {}, item.label),
         item.what ? h("span", { class: "what" }, item.what) : null,
       ),
@@ -560,37 +560,66 @@ function addApproval(approval) {
 }
 
 // ---------- characters ----------
-// Each type wears its own hat; the shapes follow the design mockups.
-const HAT_ART = {
-  explorer: '<path d="M9 15q15-13 30 0Z" fill="#8a5a2b"/><rect x="4" y="13.5" width="40" height="4" rx="2" fill="#6e4520"/>',
-  hardhat: '<path d="M9.5 16a14.5 12 0 0 1 29 0Z" fill="#ffd23f"/><rect x="6" y="14.5" width="36" height="4" rx="2" fill="#e0b000"/>',
-  visor: '<path d="M9.5 16q14.5-9 29 0l4 5.5q-18.5-7-37 0Z" fill="#1fae72"/>',
-  nightcap: '<path d="M9 16q4-12 18-11t15 6q-3 0-4 2q-14-3-29 3Z" fill="#6a5be0"/>',
-  beret: '<path d="M9 15q3-10 16-9.5t14 9q-15 4-30 .5Z" fill="#e0457b"/>',
-  flame: "",
-  none: "",
-};
-const HATS = { explorer: "Explorer's hat", beret: "Beret", hardhat: "Hard hat", nightcap: "Nightcap", visor: "Visor", flame: "Flame", none: "No hat" };
-const FLAME = '<path d="M24 0q6 5 3 10q4-1 4-5q5 6 0 11h-14q-5-5 0-11q0 4 3 5q-2-5 4-10Z" fill="#ffd23f"/>';
+// Each bot is a keycap that hopped off the keyboard: the legend printed on it is
+// its job, the colour is the bot. The shapes follow the Keycaps design boards.
+const LEGENDS = { scout: "?", scribe: "Aa", maker: "</>", keeper: "zz", counter: "#", spark: "!" };
 const COLOURS = ["#5cc8ff", "#ffd23f", "#ff9f45", "#4be3a0", "#b69cff", "#ff7ac3", "#ff6b6b", "#7ee0e6"];
+const INK = "#15131f";
 const safeColour = (c) => (/^#[0-9a-f]{6}$/i.test(c || "") ? c : "#5cc8ff");
+const escapeXml = (text) => String(text).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+const legendOf = (character, type) => [...String(character?.legend || LEGENDS[type] || "?")].slice(0, 3).join("");
 
-/** A crew member's face: a small gremlin in the bot's colour, wearing its type's hat. */
-function gremlin(character, size = 40, mood = "") {
+function shade(hex, amount) {
+  const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const out = rgb.map((c) => Math.round(amount < 0 ? c * (1 + amount) : c + (255 - c) * amount));
+  return `#${out.map((c) => Math.max(0, Math.min(255, c)).toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** The face: dot eyes and a mouth, set by the bot's mood. */
+function keyFace(mood) {
+  if (mood === "working") {
+    return `<path d="M16.9 24.5h4.2M26.9 24.5h4.2" stroke="${INK}" stroke-width="1.6" stroke-linecap="round"/><path d="M21.8 29.7h4.4" stroke="${INK}" stroke-width="1.2" stroke-linecap="round"/>`;
+  }
+  if (mood === "waiting") {
+    return `<circle cx="19" cy="24.5" r="2.4" fill="${INK}"/><circle cx="29" cy="24.5" r="2.4" fill="${INK}"/><circle cx="19.7" cy="23.6" r="0.8" fill="#fff"/><circle cx="29.7" cy="23.6" r="0.8" fill="#fff"/><ellipse cx="24" cy="30.3" rx="1.2" ry="1.5" fill="${INK}"/>`;
+  }
+  return `<ellipse cx="19" cy="24.5" rx="1.7" ry="2.1" fill="${INK}"/><ellipse cx="29" cy="24.5" rx="1.7" ry="2.1" fill="${INK}"/><circle cx="19.6" cy="23.8" r="0.6" fill="#fff"/><circle cx="29.6" cy="23.8" r="0.6" fill="#fff"/><path d="M21.9 29.7q2.1 2.7 4.2 0" fill="none" stroke="${INK}" stroke-width="1.15" stroke-linecap="round"/>`;
+}
+
+/**
+ * A crew member as a keycap. From 24 px up it has a face and legs; below that
+ * only the cap and a bigger legend, so it still reads in lists and chips.
+ */
+function keycap(character, size = 40, mood = "", type = "") {
   const colour = safeColour(character?.colour);
-  const hat = HAT_ART[character?.hat] !== undefined ? character.hat : "none";
-  const eyeY = hat === "visor" ? 27 : 25;
-  const svg =
-    `<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 48 48">` +
-    (hat === "flame" ? FLAME : "") +
-    `<path d="M11 25Q-2 21 1 7q11 3 15 13Z" fill="${colour}"/><path d="M37 25Q50 21 47 7q-11 3-15 13Z" fill="${colour}"/>` +
-    `<path d="M24 8c10 0 17 8.5 17 19 0 9.5-7 16.5-17 16.5S7 36.5 7 27C7 16.5 14 8 24 8Z" fill="${colour}"/>` +
-    HAT_ART[hat] +
-    `<circle cx="17.5" cy="${eyeY}" r="5" fill="#fff"/><circle cx="30.5" cy="${eyeY}" r="5" fill="#fff"/>` +
-    `<circle cx="18.5" cy="${eyeY + 1}" r="2.4" fill="#15131f"/><circle cx="29.5" cy="${eyeY + 1}" r="2.4" fill="#15131f"/>` +
-    `<path d="M17.5 ${eyeY + 7}q6.5 5 13 0" fill="none" stroke="#15131f" stroke-width="1.8" stroke-linecap="round"/>` +
-    `<path d="M20.8 ${eyeY + 8.9}l1.4 2.8 1.5-2.2Z" fill="#fff"/></svg>`;
-  const node = h("span", { class: `gremlin ${mood}` });
+  const legend = legendOf(character, type);
+  const text = escapeXml(legend);
+  let svg;
+  if (size < 24) {
+    const fs = [...legend].length === 1 ? 15 : [...legend].length === 2 ? 11 : 8.5;
+    svg =
+      `<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 24 24">` +
+      `<rect x="1" y="2" width="22" height="21" rx="5" fill="${shade(colour, -0.35)}"/><rect x="3" y="2.5" width="18" height="16" rx="4" fill="${colour}"/>` +
+      `<text x="12" y="${(10.5 + fs * 0.36).toFixed(1)}" text-anchor="middle" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="${fs}" font-weight="700" fill="${INK}">${text}</text></svg>`;
+  } else {
+    const pressed = mood === "working";
+    const legs = pressed
+      ? '<rect x="14" y="41" width="6" height="5" rx="2.5" fill="#3a3556"/><rect x="28" y="41" width="6" height="5" rx="2.5" fill="#3a3556"/>'
+      : '<rect x="15" y="39" width="5" height="7" rx="2.5" fill="#3a3556"/><rect x="28" y="39" width="5" height="7" rx="2.5" fill="#3a3556"/>';
+    const lit = mood === "waiting" ? '<rect x="3" y="6" width="42" height="37" rx="10" fill="none" stroke="#ff9f45" stroke-width="2" stroke-dasharray="4 3"/>' : "";
+    svg =
+      `<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 48 48">${legs}${lit}` +
+      `<g transform="translate(0 ${pressed ? 2.5 : 0})">` +
+      `<rect x="5" y="8" width="38" height="33" rx="8" fill="${shade(colour, -0.35)}"/>` +
+      `<rect x="8.5" y="8.5" width="31" height="26" rx="6" fill="${colour}"/>` +
+      `<rect x="8.5" y="8.5" width="31" height="6" rx="3" fill="${shade(colour, 0.3)}" fill-opacity="0.6"/>` +
+      // The legend is the job, so it is printed larger when the key is drawn small.
+      (size < 64
+        ? `<text x="11" y="19.4" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="9.6" font-weight="800" fill="${INK}" fill-opacity="0.85">${text}</text>`
+        : `<text x="12" y="18.2" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="7.2" font-weight="700" fill="${INK}" fill-opacity="0.75">${text}</text>`) +
+      `${keyFace(mood)}</g></svg>`;
+  }
+  const node = h("span", { class: `keychar ${mood}` });
   node.innerHTML = svg;
   return node;
 }
@@ -670,7 +699,7 @@ function renderCrewColumn() {
           },
           ondblclick: () => go("bot", bot.id),
         },
-        gremlin(bot.character, 40, mood(q)),
+        keycap(bot.character, 40, mood(q), bot.type),
         h("span", { class: "who" }, h("b", {}, bot.name), " · ", h("span", { class: "type" }, cap(bot.type)), h("span", { class: `status ${q?.status === "waiting" ? "wait" : ""}` }, status)),
         modelChip(bot.modelInfo),
         h("span", { class: "plain edit", role: "button", onclick: (e) => (e.stopPropagation(), go("bot", bot.id)) }, "Edit"),
@@ -707,7 +736,7 @@ function renderBoard() {
       : h(
           "div",
           { class: "empty-board" },
-          selected ? gremlin(selected.character, 72) : null,
+          selected ? keycap(selected.character, 72, "", selected.type) : null,
           h("h2", {}, "Nobody is on a quest"),
           h("p", {}, selected ? `Type a quest in the box at the top and ${selected.name} will go. Start it with @name to send someone else.` : "Type a quest in the box at the top."),
           h("button", { class: "primary", onclick: () => ui.palette?.focus() }, selected ? `Send ${selected.name} on a quest` : "Send a quest"),
@@ -814,7 +843,7 @@ async function refreshQuest(first = false) {
   const where = q.branch ? ["on branch ", h("code", {}, q.branch), " · your own branch is untouched"] : q.project ? [`in ${basename(q.project)}`] : ["in the workspace folder"];
   fill(ui.qhead, 
     h("button", { onclick: () => go("home") }, "Back to crew"),
-    gremlin(q.bot.character, 40, mood(q)),
+    keycap(q.bot.character, 40, mood(q), q.bot.type),
     h("div", { class: "titles" }, h("h1", {}, q.title), h("div", { class: "sub" }, `${q.bot.name} the ${cap(q.bot.type)} · `, ...where)),
     ui.meta,
     h("span", { class: `pill solid ${tone === "warn" || tone === "bad" ? "warn" : ""}` }, label),
@@ -1019,7 +1048,7 @@ function botView() {
       id: "",
       name: "",
       type: "scout",
-      character: { hat: "explorer", colour: COLOURS[Math.floor(Math.random() * COLOURS.length)] },
+      character: { legend: "?", colour: COLOURS[Math.floor(Math.random() * COLOURS.length)] },
       instructions: "",
       model: undefined,
       powers: ["web", "memory"],
@@ -1059,18 +1088,30 @@ function botView() {
 
   // ----- portrait -----
   const portrait = h("aside", { class: "portrait" });
+  draft.character.legend = legendOf(draft.character, draft.type);
+  const legendInput = h("input", {
+    id: "legend",
+    value: draft.character.legend,
+    maxlength: 6,
+    autocomplete: "off",
+    style: "text-align: center; font-family: var(--mono); font-size: 18px; max-width: 120px",
+    oninput: (e) => {
+      const chars = [...e.target.value.replace(/\s/g, "")].slice(0, 3).join("");
+      if (chars) {
+        draft.character.legend = chars;
+        portrait.querySelector(".keychar")?.replaceWith(keycap(draft.character, 150, "", draft.type));
+      }
+    },
+  });
   const drawPortrait = () => {
     portrait.setAttribute("style", botStyle(draft));
     fill(portrait, 
-      gremlin(draft.character, 150),
+      keycap(draft.character, 150, "", draft.type),
       h("h2", {}, draft.name || "New bot"),
       h("div", { class: "type" }, cap(draft.type || "bot")),
-      h("p", { class: "label", style: "margin-top: 22px" }, "Hat"),
-      h(
-        "select",
-        { onchange: (e) => ((draft.character.hat = e.target.value), drawPortrait()) },
-        Object.entries(HATS).map(([key, label]) => h("option", { value: key, selected: key === draft.character.hat }, label)),
-      ),
+      h("label", { class: "label", for: "legend", style: "display: block; margin-top: 22px" }, "Key legend"),
+      legendInput,
+      h("p", { class: "note small" }, "One to three characters printed on the key, such as ? or </>."),
       h("p", { class: "label", style: "margin-top: 16px" }, "Colour"),
       h(
         "div",
@@ -1089,7 +1130,14 @@ function botView() {
   const TYPE_WORDS = { scout: "finds things out", scribe: "writes", maker: "builds code", keeper: "remembers and checks", counter: "works with numbers", spark: "comes up with ideas" };
   const type = h(
     "select",
-    { onchange: (e) => ((draft.type = e.target.value), drawPortrait()) },
+    {
+      onchange: (e) => {
+        if (draft.character.legend === LEGENDS[draft.type]) draft.character.legend = LEGENDS[e.target.value] ?? draft.character.legend;
+        draft.type = e.target.value;
+        legendInput.value = draft.character.legend;
+        drawPortrait();
+      },
+    },
     [...new Set([...types, draft.type])].map((t) => h("option", { value: t, selected: t === draft.type }, `${cap(t)}${TYPE_WORDS[t] ? ` · ${TYPE_WORDS[t]}` : ""}`)),
   );
   const instructions = h("textarea", { rows: 7, placeholder: "What this bot does and how. Plain sentences work best." }, draft.instructions);

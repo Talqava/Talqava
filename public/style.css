@@ -129,15 +129,16 @@ code, pre, .mono { font-family: var(--mono); }
 .side .navlink { width: 100%; }
 .side-foot .navlink { width: auto; }
 
-/* ---------- characters ---------- */
-.gremlin { display: inline-flex; flex: none; }
-.gremlin svg { display: block; }
+/* ---------- characters: keycaps ---------- */
+.keychar { display: inline-flex; flex: none; }
+.keychar svg { display: block; overflow: visible; }
 @media (prefers-reduced-motion: no-preference) {
-  .gremlin.working svg { animation: bob 1.4s ease-in-out infinite; }
-  .gremlin.waiting svg { animation: tilt 2.4s ease-in-out infinite; }
+  /* A working key types: a short press, then back up. */
+  .keychar.working svg { animation: press 1.1s ease-in-out infinite; }
+  .keychar.waiting svg { animation: nudge 2.4s ease-in-out infinite; }
 }
-@keyframes bob { 50% { transform: translateY(-3px); } }
-@keyframes tilt { 25% { transform: rotate(-6deg); } 75% { transform: rotate(6deg); } }
+@keyframes press { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(2px); } }
+@keyframes nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
 
 /* ---------- on the job ---------- */
 .board-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; }
