@@ -61,7 +61,9 @@ Inside Docker the agent's shell can only touch the container and the `data/` fol
 
 ## The crew
 
-The **Crew** page is home base. Six starter bots ship with the app, each a small gremlin with its own job:
+The window is laid out for a desktop screen. **Home base** shows the crew on the left, quests under way in the middle (with their approvals right on the card), and the quest log on the right. The box at the top sends a quest: type the task and the selected bot goes, start with `@name` to send someone else, or type a command such as "settings" (Ctrl K or ⌘K to jump there). A quest opens on its own page with its steps, its changes, its conversation and its budget. **Hatch a bot**, or **Edit** one, to change its name, look, instructions, model, powers and limits; your version is saved as a file in your data folder.
+
+Six starter bots ship with the app, each a small gremlin with its own job:
 
 | Bot | Type | Good at | Powers |
 | --- | --- | --- | --- |
@@ -72,7 +74,7 @@ The **Crew** page is home base. Six starter bots ship with the app, each a small
 | Tally | Counter | Numbers and data | files, shell, APIs, memory |
 | Ember | Spark | Ideas and options | web, memory |
 
-Choose a bot, say what the quest is, and send it. Several quests run at once. A bot only gets the tools its powers grant: Pip cannot touch files.
+Several quests run at once. A bot only gets the tools its powers grant: Pip cannot touch files.
 
 **Bots are files.** Each is a short YAML file (see [crew/](crew/)) with a name, a type, instructions, powers, a model, approvals and a budget. To change one or add your own, put a file in your data folder's `crew/` folder; a file with the same name replaces the starter. To share bots with a project, put them in the repository's `.crew/` folder. Bots from a repository never get more than your own settings allow: they always ask before changes unless you chose "run everything", and their budget is capped at yours.
 

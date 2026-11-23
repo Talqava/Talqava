@@ -373,9 +373,9 @@
     },
     {
       "file": "public/app.js",
-      "lines": 1037,
+      "lines": 1620,
       "role": "Chat page",
-      "does": "The whole page, without a framework: chats, approval prompts, Memory, Skills, Schedules and Settings.",
+      "does": "The desktop window: a top bar with the repository, a command box and today's spending; home base with the crew, quests under way and the quest log; a page per quest with its steps, changes, conversation and budget; the bot editor; chats, memory, skills, schedules and settings.",
       "uses": [
         "public/markdown.js"
       ]
@@ -626,6 +626,16 @@
       "method": "DELETE",
       "path": "/api/quests/:id",
       "does": "Remove a finished quest from the log, undoing changes not yet dealt with."
+    },
+    {
+      "method": "PUT",
+      "path": "/api/crew/:id",
+      "does": "Save the user's own version of a bot (or a new one, with id \"new\") as a file in the data folder."
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/crew/:id",
+      "does": "Remove the user's own version of a bot; a starter of the same name comes back."
     }
   ],
   "events": [
@@ -765,7 +775,7 @@
   ],
   "tests": {
     "command": "npm run check",
-    "count": 45,
+    "count": 46,
     "covers": [
       "agent loop against a stand-in API and in-memory storage",
       "approvals: deny, always allow, stop",

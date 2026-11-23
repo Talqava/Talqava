@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { Engine, JobBook, BRAND, checkModel, describeError, setting } from "../core/index.ts";
-import type { Decision, Job, RunEvent } from "../core/index.ts";
+import type { Bot, Conversation, Decision, Job, RunEvent } from "../core/index.ts";
 import {
   ROOT,
   DATA,
@@ -21,9 +21,9 @@ import {
   jobStore,
 } from "./store.ts";
 import type { Config, ProviderConfig } from "./store.ts";
-import { localRunSpec } from "./tools.ts";
+import { CAUTION_TOOLS, localRunSpec } from "./tools.ts";
 import { resolveModel, splitRef } from "./models.ts";
-import { loadCrew } from "./crew.ts";
+import { botId, loadCrew, removeBot, saveBot } from "./crew.ts";
 import { journal, questStore, quests } from "./quests.ts";
 import type { Quest } from "./quests.ts";
 import { currentBranch, repoRoot } from "./git.ts";
@@ -229,13 +229,55 @@ function projectOrNull(folder: string | null): string | null {
   return folder && getConfig().projects.includes(folder) ? folder : null;
 }
 
+/** The model a bot will use, in words, or why it cannot run. */
+function botModel(bot: Bot) {
+  const cfg = getConfig();
+  try {
+    const model = resolveModel(cfg, bot.model ?? cfg.model);
+    return { ref: model.ref, label: model.label, kind: model.kind, free: model.prices?.input === 0 && model.prices?.output === 0 };
+  } catch (err) {
+    return { ref: bot.model ?? cfg.model, label: (err as Error).message, kind: null, free: false };
+  }
+}
+
+/** What a quest is doing now: its last tool call and the tail of what came back. */
+function lastActivity(conversation: Conversation | null) {
+  if (!conversation) return null;
+  const messages = conversation.messages;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.role !== "assistant" || !Array.isArray(message.content)) continue;
+    const use = [...message.content].reverse().find((b) => b.type === "tool_use" || b.type === "server_tool_use") as
+      | { id: string; name: string; input: unknown }
+      | undefined;
+    if (!use) continue;
+    const reply = messages[i + 1];
+    const result = Array.isArray(reply?.content) ? (reply.content as { type: string; tool_use_id?: string; content?: unknown }[]).find((b) => b.tool_use_id === use.id) : undefined;
+    const text = typeof result?.content === "string" ? result.content : Array.isArray(result?.content) ? (result.content as { text?: string }[]).map((p) => p.text ?? "").join("\n") : "";
+    return { name: use.name, input: use.input, output: text.split("\n").slice(-6).join("\n").slice(-500) };
+  }
+  return null;
+}
+
+const readOutside = (conversation: Conversation | null) =>
+  Boolean(
+    conversation?.messages.some(
+      (m) => m.role === "assistant" && Array.isArray(m.content) && m.content.some((b) => (b.type === "tool_use" || b.type === "server_tool_use") && CAUTION_TOOLS.includes((b as { name: string }).name)),
+    ),
+  );
+
 function questSummary(quest: Quest) {
   const conversation = conversations.get(quest.id);
   const { bot } = quest;
+  const live = engine.liveState(quest.id);
   return {
     id: quest.id,
     title: quest.title,
-    bot: { id: bot.id, name: bot.name, type: bot.type, character: bot.character, source: bot.source },
+    bot: { id: bot.id, name: bot.name, type: bot.type, character: bot.character, source: bot.source, powers: bot.powers },
+    model: botModel(bot),
+    activity: lastActivity(conversation),
+    readOutside: readOutside(conversation),
+    approvals: live.approvals,
     status: quest.status,
     steps: quest.steps,
     budget: { ...getConfig().budget, ...bot.budget },
@@ -247,7 +289,7 @@ function questSummary(quest: Quest) {
     resumedAt: quest.resumedAt ?? null,
     createdAt: quest.createdAt,
     updatedAt: quest.updatedAt,
-    live: engine.liveState(quest.id).approvals.length ? "waiting" : engine.isRunning(quest.id) ? "running" : null,
+    live: live.approvals.length ? "waiting" : engine.isRunning(quest.id) ? "running" : null,
   };
 }
 
@@ -337,7 +379,29 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
 
   if (parts[0] === "crew" && req.method === "GET") {
     const project = projectOrNull(url.searchParams.get("project"));
-    return send(res, 200, { ...loadCrew(project ?? undefined), project, branch: project ? await currentBranch(project) : null });
+    const crew = loadCrew(project ?? undefined);
+    const bots = crew.bots.map((bot) => ({ ...bot, modelInfo: botModel(bot) }));
+    return send(res, 200, { bots, problems: crew.problems, project, branch: project ? await currentBranch(project) : null });
+  }
+  if (parts[0] === "crew" && req.method === "PUT") {
+    // A new bot gets a file name from its name; an existing one keeps its own.
+    const id = parts[1] && parts[1] !== "new" ? parts[1] : botId(String(body.name || ""));
+    if ((!parts[1] || parts[1] === "new") && loadCrew().bots.some((b) => b.id === id)) {
+      throw new HttpError(409, `There is already a bot called ${id}. Choose another name, or edit that bot instead.`);
+    }
+    try {
+      return send(res, 200, saveBot(id, body));
+    } catch (err) {
+      throw new HttpError(400, (err as Error).message);
+    }
+  }
+  if (parts[0] === "crew" && req.method === "DELETE") {
+    try {
+      removeBot(String(parts[1] || ""));
+    } catch (err) {
+      throw new HttpError(400, (err as Error).message);
+    }
+    return send(res, 200, { ok: true });
   }
 
   if (parts[0] === "quests") {

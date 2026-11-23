@@ -207,3 +207,25 @@ test("a quest survives the app being killed mid-step, and picks up where it stop
     child.kill("SIGKILL");
   }
 });
+
+test("the bot editor saves the user's own bot file, which replaces a starter until removed", async () => {
+  const crewFiles = await import("../../src/local/crew.ts");
+  assert.equal(crewFiles.botId("Pip the Second!"), "pip-the-second");
+  const pip = crewFiles.loadCrew().bots.find((b) => b.id === "pip")!;
+  assert.equal(pip.source, "starter");
+
+  const saved = crewFiles.saveBot("pip", { ...pip, instructions: "Only research cheeses.", approvals: "ask", budget: { steps: 10, spend: 0.2 } });
+  assert.equal(saved.source, "personal");
+  const now = crewFiles.loadCrew().bots.find((b) => b.id === "pip")!;
+  assert.equal(now.instructions, "Only research cheeses.");
+  assert.deepEqual(now.budget, { steps: 10, spend: 0.2 });
+  assert.equal(now.model, undefined);
+
+  // A bad bot is refused and nothing is written.
+  assert.throws(() => crewFiles.saveBot("pip", { ...pip, powers: ["teleport"] }), /unknown power/);
+  assert.equal(crewFiles.loadCrew().bots.find((b) => b.id === "pip")!.instructions, "Only research cheeses.");
+
+  crewFiles.removeBot("pip");
+  assert.equal(crewFiles.loadCrew().bots.find((b) => b.id === "pip")!.source, "starter");
+  assert.throws(() => crewFiles.removeBot("pip"), /Only your own bots/);
+});
