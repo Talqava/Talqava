@@ -17,7 +17,8 @@ test("the six starter bots are valid bot files", () => {
   assert.equal(pip.name, "Pip");
   assert.equal(pip.approvals, "ask");
   assert.equal(pip.model, undefined);
-  assert.deepEqual(pip.character, { legend: "?", colour: "#5cc8ff" });
+  assert.deepEqual(pip.character, { legend: "?", texture: "dots" });
+  assert.deepEqual(bots.map((b) => b.character.texture).sort(), ["dots", "grid", "hatch", "lines", "solid", "zigzag"]);
   assert.deepEqual(bots.map((b) => b.character.legend).sort(), ["!", "#", "</>", "?", "Aa", "zz"]);
   // A scout cannot touch files.
   assert.ok(!pip.powers.includes("files") && !pip.powers.includes("shell"));
@@ -33,7 +34,10 @@ test("a bad bot file is refused with a plain reason", () => {
   // A file with no legend gets its type's; an old file that names a hat still loads.
   assert.equal(parseBot("bo", good, "personal").character.legend, "?");
   assert.equal(parseBot("bo", good.replace("type: scout", "type: gardener"), "personal").character.legend, "B");
-  assert.deepEqual(parseBot("bo", `${good}character: { hat: hardhat, colour: "#ff9f45" }\n`, "personal").character, { legend: "?", colour: "#ff9f45" });
+  // Older files that name a hat or a colour still load; both are ignored.
+  assert.deepEqual(parseBot("bo", `${good}character: { hat: hardhat, colour: "#ff9f45" }\n`, "personal").character, { legend: "?", texture: "dots" });
+  assert.equal(parseBot("bo", good.replace("type: scout", "type: gardener"), "personal").character.texture, "plain");
+  assert.throws(() => parseBot("bo", `${good}character: { texture: plaid }\n`, "personal"), /texture must be one of/);
   assert.equal(parseBot("bo", `${good}character: { legend: "¶" }\n`, "personal").character.legend, "¶");
   assert.throws(() => parseBot("bo", `${good}approvals: whenever\n`, "personal"), /approvals should be/);
   assert.throws(() => parseBot("bo", `${good}model: llama3\n`, "personal"), /provider\/model/);

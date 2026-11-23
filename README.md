@@ -63,7 +63,7 @@ Inside Docker the agent's shell can only touch the container and the `data/` fol
 
 The window is laid out for a desktop screen. **Home base** shows the crew on the left, quests under way in the middle (with their approvals right on the card), and the quest log on the right. The box at the top sends a quest: type the task and the selected bot goes, start with `@name` to send someone else, or type a command such as "settings" (Ctrl K or ⌘K to jump there). A quest opens on its own page with its steps, its changes, its conversation and its budget. **Hatch a bot**, or **Edit** one, to change its name, look, instructions, model, powers and limits; your version is saved as a file in your data folder.
 
-Six starter bots ship with the app. Each is a keycap that hopped off your keyboard: the legend printed on the key is its job, and its colour tells it apart from the others.
+Six starter bots ship with the app. Each is a keycap that hopped off your keyboard, drawn in a single white line: the legend printed on the key is its job, and the texture on its base tells it apart from the others. The window is black and white; a bot shows how its quest is going by how it moves (pressed down while working, floating with a dashed edge while it waits for you, shaking when stuck) and by a symbol beside it: ● working, ◌ waiting, ✓ done, ■ stopped, ✕ failed, ↺ resumed.
 
 | Bot | Key | Type | Good at | Powers |
 | --- | --- | --- | --- | --- |
@@ -76,7 +76,7 @@ Six starter bots ship with the app. Each is a keycap that hopped off your keyboa
 
 Several quests run at once. A bot only gets the tools its powers grant: Pip cannot touch files.
 
-**Bots are files.** Each is a short YAML file (see [crew/](crew/)) with a name, a type, its key's legend and colour, instructions, powers, a model, approvals and a budget. To change one or add your own, put a file in your data folder's `crew/` folder; a file with the same name replaces the starter. To share bots with a project, put them in the repository's `.crew/` folder. Bots from a repository never get more than your own settings allow: they always ask before changes unless you chose "run everything", and their budget is capped at yours.
+**Bots are files.** Each is a short YAML file (see [crew/](crew/)) with a name, a type, its key's legend and base texture, instructions, powers, a model, approvals and a budget. To change one or add your own, put a file in your data folder's `crew/` folder; a file with the same name replaces the starter. To share bots with a project, put them in the repository's `.crew/` folder. Bots from a repository never get more than your own settings allow: they always ask before changes unless you chose "run everything", and their budget is capped at yours.
 
 **Quests on code.** Add a repository under Settings, then choose it when you send a quest. A bot that can change files gets its own branch and working copy, starting from your last commit, so your own files and branches are not touched. When the quest stops, its page shows the changes: **Keep the changes** makes one commit on the quest's branch (merge it when you like), and **Undo the quest** removes the branch and copy as if it never happened.
 

@@ -16,6 +16,12 @@ export function defaultLegend(type: string, name: string): string {
   return LEGENDS[type] ?? ([...name.trim()][0] ?? "?").toUpperCase();
 }
 
+/** Textures for the base of a key: in black and white, they are what tells two keys apart. */
+export const TEXTURES = ["dots", "lines", "hatch", "solid", "grid", "zigzag", "plain"] as const;
+export type Texture = (typeof TEXTURES)[number];
+const TYPE_TEXTURES: Record<string, Texture> = { scout: "dots", scribe: "lines", maker: "hatch", keeper: "solid", counter: "grid", spark: "zigzag" };
+export const defaultTexture = (type: string): Texture => TYPE_TEXTURES[type] ?? "plain";
+
 /** One to three visible characters, no spaces. */
 export function isLegend(text: string): boolean {
   const chars = [...text];
@@ -30,8 +36,8 @@ export interface Bot {
   name: string;
   /** scout, scribe, maker, keeper, counter, spark, or a type of one's own. */
   type: string;
-  /** How the bot looks: a keycap with this legend printed on it, in this colour. */
-  character: { legend: string; colour: string };
+  /** How the bot looks: a keycap with this legend printed on it and this texture on its base. */
+  character: { legend: string; texture: Texture };
   instructions: string;
   /** "provider/model", or undefined to use the default model in Settings. */
   model?: string;
@@ -66,8 +72,9 @@ export function parseBot(id: string, text: string, source: BotSource): Bot {
   // Bot files from before the keycaps may still name a hat; it is ignored.
   const legend = character.legend === undefined || character.legend === null ? defaultLegend(type, name) : String(character.legend);
   if (!isLegend(legend)) throw problem("legend is one to three characters printed on the key, such as ? or </>.");
-  const colour = typeof character.colour === "string" ? character.colour : "#5cc8ff";
-  if (!/^#[0-9a-f]{6}$/i.test(colour)) throw problem("colour must look like #5cc8ff.");
+  // Files from before black and white may name a colour (or a hat); both are ignored.
+  const texture = (character.texture ?? defaultTexture(type)) as Texture;
+  if (!TEXTURES.includes(texture)) throw problem(`texture must be one of ${TEXTURES.join(", ")}.`);
 
   const powers = Array.isArray(data.powers) ? data.powers : [];
   for (const power of powers) {
@@ -98,7 +105,7 @@ export function parseBot(id: string, text: string, source: BotSource): Bot {
     budget = { ...(steps !== undefined ? { steps: steps as number } : {}), ...(spend !== undefined ? { spend: spend as number } : {}) };
   }
 
-  return { id, name, type, character: { legend, colour }, instructions, model, powers: [...new Set(powers as Power[])], approvals, budget, source };
+  return { id, name, type, character: { legend, texture }, instructions, model, powers: [...new Set(powers as Power[])], approvals, budget, source };
 }
 
 /**

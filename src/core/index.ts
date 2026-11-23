@@ -17,5 +17,5 @@ export { CLAUDE_PRICES, FREE, costOf } from "./models/pricing.ts";
 export { checkModel } from "./models/check.ts";
 export type { CheckResult } from "./models/check.ts";
 export { pageTool, htmlToText, isPrivateAddress } from "./tools/page.ts";
-export { POWERS, LEGENDS, defaultLegend, isLegend, parseBot, limitProjectBot, botPrompt } from "./crew.ts";
-export type { Bot, BotSource, Power } from "./crew.ts";
+export { POWERS, LEGENDS, TEXTURES, defaultLegend, defaultTexture, isLegend, parseBot, limitProjectBot, botPrompt } from "./crew.ts";
+export type { Bot, BotSource, Power, Texture } from "./crew.ts";

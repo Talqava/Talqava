@@ -115,7 +115,7 @@ A bot is a small text file. Bots a project shares live in a `.crew/` folder in t
 # .crew/pip.yaml
 name: Pip
 type: scout
-character: { legend: "?", colour: "#5cc8ff" }   # a keycap: the legend is its job
+character: { legend: "?", texture: dots }   # a keycap: the legend is its job, the texture tells it apart
 instructions: >
   Research libraries and approaches. Cite every source with a link.
   Say plainly when something could not be confirmed.
