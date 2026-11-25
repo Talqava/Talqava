@@ -98,11 +98,12 @@ async function attempt(fn, where) {
 }
 
 /** A short message at the bottom of the window that goes away by itself. */
-function toast(text) {
+/** A short note at the bottom of the window. With an action ({ label, run }), it stays longer and offers a button, such as Undo. */
+function toast(text, action = null) {
   document.querySelector(".toast")?.remove();
-  const box = h("div", { class: "toast", role: "status" }, text);
+  const box = h("div", { class: "toast", role: "status" }, text, action ? h("button", { class: "plain small toastact", onclick: () => (box.remove(), Promise.resolve(action.run()).catch((err) => toast(err.message))) }, action.label) : null);
   document.body.append(box);
-  setTimeout(() => box.remove(), 6000);
+  setTimeout(() => box.remove(), action ? 12_000 : 6000);
 }
 
 const when = (iso) => (iso ? new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "never");
@@ -4384,6 +4385,39 @@ function marketCard(bot) {
   );
 }
 
+/** Before a page pack is added: its pages, who will see them, which start protected. Adding can be undone. */
+function packPreview(k) {
+  const dialog = h("dialog", { class: "aidialog" });
+  const close = () => (dialog.close(), dialog.remove());
+  const status = h("p", { class: "note", role: "status" });
+  const add = h("button", { class: "primary" }, "Add these pages");
+  add.addEventListener("click", async () => {
+    add.disabled = true;
+    try {
+      const top = await api("POST", `marketplace/packs/${encodeURIComponent(k.id)}/add`);
+      state.market = null;
+      close();
+      toast(`${k.name} was added to your Workspace.`, { label: "Undo", run: async () => (await api("DELETE", `workspace/pages/${top.id}`), (state.market = null), state.view === "workspace" ? workspaceView() : state.view === "market" ? marketView() : null) });
+      openPage(top.id);
+    } catch (err) {
+      status.textContent = err.message;
+      status.className = "note bad";
+      add.disabled = false;
+    }
+  });
+  fill(
+    dialog,
+    h("h3", {}, `${k.icon} ${k.name}`),
+    h("p", { class: "note" }, k.summary),
+    h("div", { class: "label" }, "What adding it does"),
+    h("ul", {}, h("li", {}, `Adds one page called “${k.name}” to your Workspace, with these ${k.pages.length} pages inside it:`), h("ul", {}, k.pages.map((x) => h("li", {}, `${x.icon} ${x.title}`, x.protected ? h("span", { class: "tag" }, "protected") : null))), h("li", {}, `They are shared with ${k.sharedWith}. You can change who sees each page afterwards.`), k.pages.some((x) => x.protected) ? h("li", {}, "Protected pages are never changed by agents directly: they can only suggest a change for you to accept.") : null, h("li", {}, "Nothing you already have is changed. To undo, press Undo, or delete the page; it stays in Deleted for 30 days.")),
+    status,
+    h("div", { class: "row" }, add, h("button", { class: "plain", onclick: close }, "Cancel")),
+  );
+  document.body.append(dialog);
+  dialog.showModal();
+}
+
 async function marketView() {
   ui.body.className = "body";
   ui.log = null;
@@ -4435,6 +4469,19 @@ async function marketView() {
         h("div", { class: "mfoot" }, h("span", { class: "mono small muted" }, "Free · added with their reporting lines"), add),
       );
     };
+    // Page packs: ready-made workspace pages. Preview first; adding can be undone.
+    const packs = (market.packs ?? []).filter((k) => cat !== "+mine" && (!cat || k.group === cat) && (!needle || `${k.name} ${k.summary} ${k.pages.map((x) => x.title).join(" ")}`.toLowerCase().includes(needle)));
+    const packCard = (k) => {
+      const add = h("button", { class: k.added ? "madd" : "madd primary" }, k.added ? "Open" : "Preview and add");
+      add.addEventListener("click", () => (k.added ? openPage(k.added) : packPreview(k)));
+      return h(
+        "article",
+        { class: "mcard tcard" },
+        h("div", { class: "mhead" }, h("span", { class: "packicon", "aria-hidden": "true" }, k.icon), h("div", {}, h("b", {}, k.name), h("div", { class: "by" }, `${k.pages.length} pages · for ${k.group}`))),
+        h("p", { class: "mdesc" }, k.summary),
+        h("div", { class: "mfoot" }, h("span", { class: "mono small muted" }, k.added ? "✓ In your workspace" : "Free · can be undone"), add),
+      );
+    };
     fill(
       results,
       featured.length
@@ -4452,6 +4499,7 @@ async function marketView() {
           )
         : null,
       teams.length ? h("section", {}, h("h2", {}, "Teams"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "A lead and the agents that report to it, added to your organization together."), h("div", { class: "mgrid wide" }, teams.map(teamCard))) : null,
+      packs.length ? h("section", {}, h("h2", {}, "Page packs"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Ready-made pages for your Workspace: procedures, a price list, handbooks. Agents follow them; you edit them to match how you work."), h("div", { class: "mgrid wide" }, packs.map(packCard))) : null,
       cat || needle ? section(cat === "+mine" ? "On my team" : cat || "Results", shown) : categories.map((c) => section(c, shown.filter((b) => b.listing.category === c))),
       shown.length ? null : h("p", { class: "note" }, cat === "+mine" ? "You have not added a marketplace agent yet." : "No agent matches that. Try other words, or create your own agent from the Work in progress page."),
     );
@@ -4459,7 +4507,7 @@ async function marketView() {
   search.addEventListener("input", () => ((ui.marketSearch = search.value), draw()));
   col.append(
     h("h1", {}, "Marketplace"),
-    h("p", { class: "lead" }, "Agents for every department, each built for one role. Read exactly what an agent is instructed to do before you add it to your organization."),
+    h("p", { class: "lead" }, "Agents for every department, ready-made teams, and page packs for your Workspace. Read exactly what each one does before you add it to your organization."),
     market.updates ? h("div", { class: "banner" }, `${market.updates} agent${market.updates === 1 ? "" : "s"} on your team ${market.updates === 1 ? "has" : "have"} a newer version. Open ${market.updates === 1 ? "it" : "one"} to see what changed and update, or keep yours.`, " ", h("button", { class: "plain link", onclick: () => ((ui.marketCat = "+mine"), marketView()) }, "Show them")) : null,
     pills,
     search,

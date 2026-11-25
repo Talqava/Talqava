@@ -75,7 +75,7 @@ A simple rule: if you would write it yourself and want it followed, make it a pa
 ### Start from a template
 
 1. Go to the **Workspace** home screen.
-2. Under **Start from a template**, choose **Operations handbook**, **Sales playbook** or **People handbook**, and press **Add these pages**.
+2. Under **Start from a template**, choose **Operations handbook**, **Sales playbook**, **People handbook**, **SOP library** or **Price list**, and press **Add these pages**. The same packs are in the **Marketplace** under **Page packs**, where **Preview and add** shows exactly what will be added and **Undo** takes it back.
 3. The pages appear under a new page named after the template. If your chart has a matching group (Operations, Sales or People), only that group can see them. The **Prices** and **Time off** pages start as Protected.
 4. Edit the pages to match how you really work.
 

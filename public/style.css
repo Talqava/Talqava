@@ -1807,3 +1807,7 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .checkin { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-m, 8px); }
 .checkin h3 { margin: 0 0 4px; font-size: 14px; }
 .checkinlist { margin: 4px 0 8px; padding-left: 18px; }
+
+/* Page packs in the Marketplace, and a toast with an action. */
+.packicon { font-size: 26px; line-height: 1; }
+.toast .toastact { margin-left: 12px; font-weight: 600; text-decoration: underline; color: inherit; }

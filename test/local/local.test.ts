@@ -2955,3 +2955,33 @@ test("the leads' daily check-in says, for each group, what moved, what is stuck 
     orgs.remove(org0.id);
   }
 });
+
+test("page packs: the Marketplace lists them with what they add, adding makes the pages, and deleting the top page undoes it", async () => {
+  const { orgs } = await import("../../src/local/orgs.ts");
+  const market = await import("../../src/local/marketplace.ts");
+  const { workspace } = await import("../../src/local/workspace.ts");
+  const org0 = orgs.create("Packs Co", "Sell well.", "custom");
+  try {
+    market.addTeam("sales-team");
+    const org = orgs.active();
+    const packs = workspace.packs(org);
+    assert.ok(packs.length >= 5);
+    for (const id of ["people", "sop-library", "price-list"]) assert.ok(packs.some((k) => k.id === id), id);
+    const prices = packs.find((k) => k.id === "price-list")!;
+    assert.equal(prices.added, null);
+    // The chart has a Sales group, so the pack's pages are shared with it; its prices start protected.
+    assert.equal(prices.sharedWith, "the Sales group");
+    assert.deepEqual(prices.pages.filter((p) => p.protected).map((p) => p.title), ["Prices", "Discount rules"]);
+    const top = workspace.addTemplate(org, "price-list");
+    assert.equal(workspace.packs(org).find((k) => k.id === "price-list")!.added, top.id);
+    const inside = workspace.tree(org).filter((p) => p.parent === top.id);
+    assert.deepEqual(inside.map((p) => p.title), ["Prices", "Discount rules", "How to write a quote"]);
+    assert.equal(workspace.get(org, inside[0].id).protected, true);
+    // Undo: the top page and everything in it go to Deleted, and the pack can be added again.
+    workspace.archive(org, top.id);
+    assert.equal(workspace.packs(org).find((k) => k.id === "price-list")!.added, null);
+    assert.equal(workspace.tree(org).length, 0);
+  } finally {
+    orgs.remove(org0.id);
+  }
+});

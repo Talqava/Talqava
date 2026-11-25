@@ -652,6 +652,29 @@ export const workspace = {
     return TEMPLATES.map((t) => ({ id: t.id, name: t.name, group: t.group, summary: t.summary, pages: t.pages.map((p) => p.title) }));
   },
 
+  /**
+   * The page packs, as the Marketplace lists them: what each adds, who would see its pages on this chart, which pages
+   * start protected, and whether it is already in the workspace (and where).
+   */
+  packs(org: Org) {
+    const d = db(org.id);
+    const groups = new Set(org.members.map((m) => m.department));
+    return TEMPLATES.map((t) => {
+      const top = d.prepare("select id from pages where template = ? and parent is null and archived = 0 order by created_at desc limit 1").get(t.id) as { id: string } | undefined;
+      return {
+        id: t.id,
+        name: t.name,
+        icon: t.icon,
+        summary: t.summary,
+        group: t.group,
+        /** Who sees the pages once added: the pack's group when the chart has it, otherwise every agent. */
+        sharedWith: groups.has(t.group) ? `the ${t.group} group` : "every agent",
+        pages: t.pages.map((p) => ({ title: p.title, icon: p.icon, protected: Boolean(p.protected) })),
+        added: top?.id ?? null,
+      };
+    });
+  },
+
   /** Adds a template's pages under a new page named after it, visible to the template's group if the chart has one. */
   addTemplate(org: Org, id: string): Page {
     const t = TEMPLATES.find((x) => x.id === id);

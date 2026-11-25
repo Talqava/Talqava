@@ -29,6 +29,12 @@ Click any agent card to open its own page. There you will see:
 
 ## How to…
 
+### Add a page pack to your Workspace
+
+1. Scroll to **Page packs**: ready-made pages such as an **SOP library**, a **Price list** and handbooks.
+2. Press **Preview and add**. The preview lists the pages, who will see them, and which start protected.
+3. Press **Add these pages**. The pack opens in your Workspace. **Undo** in the note at the bottom takes it back; later, delete the pack's top page (it stays in Deleted for 30 days).
+
 ### Find an agent for a job
 
 1. Open **Marketplace** in the left menu.
