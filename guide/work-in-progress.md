@@ -1,6 +1,6 @@
-# Work in progress
+# Agents
 
-Work in progress is your control room. You hand out work, clear what is waiting on you, and watch what each agent is doing right now. From here you can also open any single task to follow it step by step, or open an agent to change how it works.
+The Agents page is your control room. You hand out work, clear what is waiting on you, and watch what each agent is doing right now. From here you can also open any single task to follow it step by step, or open an agent to change how it works.
 
 ## What you'll see
 

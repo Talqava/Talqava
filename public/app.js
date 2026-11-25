@@ -9,7 +9,7 @@ const state = {
   convs: [],
   quests: [],
   crew: null,
-  view: "chat", // chat is the main screen; bots ("home") are an add-on
+  view: "start", // Home is where the app opens; "home" is the older name of the Agents page
   convId: null,
   botId: null,
   quest: null,
@@ -316,10 +316,39 @@ window.addEventListener("talqava-theme", () => {
 function render() {
   ui.rail = h("nav", { class: "rail", "aria-label": "Main" });
   ui.top = h("header", { class: "top" });
+  ui.tabs = h("nav", { class: "areatabs", "aria-label": "Parts of this area", hidden: true });
   ui.body = h("div", { class: "body" });
-  fill(app, ui.rail, h("div", { class: "main" }, ui.top, ui.body));
+  fill(app, ui.rail, h("div", { class: "main" }, ui.top, ui.tabs, ui.body));
   renderTop();
+  renderAreaTabs();
   renderBody();
+}
+
+/** Areas of the app that have several parts: the menu shows the area once, and its parts are tabs across the top. */
+const AREAS = {
+  office: { name: "Office", views: [["office", "Home"], ["docs", "Documents"], ["sheets", "Sheets"], ["slides", "Slides"], ["notes", "Notes"]] },
+  knowledge: { name: "Knowledge", views: [["workspace", "Workspace"], ["library", "Library"], ["memory", "Memory"], ["skills", "Skills"]] },
+};
+const areaOf = (view) => Object.keys(AREAS).find((a) => AREAS[a].views.some(([v]) => v === view)) ?? null;
+/** The part of an area last open, so the menu returns there. */
+const lastIn = (area) => {
+  try {
+    const v = localStorage.getItem(`talqava.area.${area}`);
+    return AREAS[area].views.some(([x]) => x === v) ? v : AREAS[area].views[0][0];
+  } catch {
+    return AREAS[area].views[0][0];
+  }
+};
+function renderAreaTabs() {
+  if (!ui.tabs) return;
+  const area = areaOf(state.view);
+  ui.tabs.hidden = !area;
+  if (!area) return fill(ui.tabs);
+  try {
+    localStorage.setItem(`talqava.area.${area}`, state.view);
+  } catch {}
+  ui.tabs.setAttribute("aria-label", `Parts of ${AREAS[area].name}`);
+  fill(ui.tabs, h("span", { class: "areaname" }, AREAS[area].name), AREAS[area].views.map(([v, label]) => h("button", { class: `areatab ${state.view === v ? "on" : ""}`, "aria-current": state.view === v ? "page" : null, onclick: () => go(v) }, label)));
 }
 
 // Line icons for the rail, drawn on a 20 px grid.
@@ -342,6 +371,7 @@ const ICONS = {
   notes: "M5 4.5h10v7.5l-3.5 3.5H5zM15 12h-3.5v3.5M7.5 7.5h5M7.5 10h3",
   sheets: "M4.5 4.5h11v11h-11zM4.5 8h11M4.5 11.5h11M8.5 4.5v11M12 8v7.5",
   office: "M4 4.5h5v5H4zM11 4.5h5v5h-5zM4 11.5h5v4H4zM11 11.5h5v4h-5z",
+  start: "M3.5 9.5L10 4l6.5 5.5M5.5 8.5v7h9v-7M8.5 15.5v-4h3v4",
   slides: "M3.5 5h13v8.5h-13zM10 13.5v3M7 16.5h6M7 8.5h6",
   projects: "M3 6.5a1.5 1.5 0 0 1 1.5-1.5h3l1.5 1.5h6.5A1.5 1.5 0 0 1 17 8v6.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5z",
   guide: "M10 5.5C8.5 4.3 6.5 4 4 4v11c2.5 0 4.5.3 6 1.5 1.5-1.2 3.5-1.5 6-1.5V4c-2.5 0-4.5.3-6 1.5zM10 5.5v11",
@@ -360,39 +390,51 @@ function renderRail() {
   const inbox = item("inbox", "Inbox", v === "inbox", "What needs you, what is being worked on, and what got done");
   ui.inboxCount = h("span", { class: "count", hidden: true });
   inbox.append(ui.inboxCount);
+  let adminOpen = true;
+  try {
+    adminOpen = localStorage.getItem("talqava.menu.admin") !== "closed";
+  } catch {}
+  const admin = ["security", "audit", "integrations", "settings"];
+  if (admin.includes(v)) adminOpen = true;
+  const area = areaOf(v);
   fill(
     ui.rail,
-    h("button", { class: "plain brand", onclick: () => go("chat"), title: "Chat", "aria-label": "Talqava, chat" }, brandLogo()),
-    h("div", { class: "railgroup" }, item("chat", "Chat", v === "chat", "Talk to your agents, or ask anything"), inbox),
+    h("button", { class: "plain brand", onclick: () => go("start"), title: "Home", "aria-label": "Talqava, home" }, brandLogo()),
+    h("div", { class: "railgroup" }, item("start", "Home", v === "start", "What needs you, what is running, and where to start"), item("chat", "Chat", v === "chat", "Talk to your agents, or ask anything"), inbox),
     h("div", { class: "raillabel" }, "Work"),
     h(
       "div",
       { class: "railgroup" },
       item("tasks", "Tasks", v === "tasks", "Every task and goal: queued, working, needing you, to review and done"),
       item("projects", "Projects", v === "projects" || v === "project", "One folder for each body of work: its tasks, chats, lead and progress"),
-      item("home", "Work in progress", ["home", "quest", "bot"].includes(v), "Your agents and what each is doing right now"),
       item("jobs", "Routines", v === "jobs", "Repeating work that runs by itself, for a position or the assistant"),
     ),
     h("div", { class: "raillabel" }, "Team"),
-    h("div", { class: "railgroup" }, item("team", "Organization", v === "team", "The org chart, departments and budgets"), item("market", "Marketplace", v === "market" || v === "marketbot", "Ready-made agents and teams for every department")),
-    h("div", { class: "raillabel" }, "Office"),
-    h("div", { class: "railgroup" }, item("office", "Office home", v === "office", "Start a document, sheet or note, and see what is waiting"), item("docs", "Documents", v === "docs", "Letters, proposals and reports you and your agents write together"), item("sheets", "Sheets", v === "sheets", "Budgets, forecasts and lists that calculate"), item("slides", "Slides", v === "slides", "Presentations you and your agents put together"), item("notes", "Notes", v === "notes", "Quick notes, meeting notes and ideas, private until you share them")),
-    h("div", { class: "raillabel" }, "Knowledge"),
+    h("div", { class: "railgroup" }, item("home", "Agents", ["home", "quest", "bot"].includes(v), "Your agents and what each is doing right now"), item("team", "Organization", v === "team", "The org chart, departments and budgets"), item("market", "Marketplace", v === "market" || v === "marketbot", "Ready-made agents, teams, templates and connectors")),
+    h("div", { class: "raillabel" }, "Make and know"),
     h(
       "div",
       { class: "railgroup" },
-      item("workspace", "Workspace", v === "workspace", "Pages your agents work from: procedures, checklists and decisions"),
-      item("library", "Library", v === "library", "Documents you share with your agents"),
-      item("memory", "Memory", v === "memory", "What your agents remember between tasks"),
-      item("skills", "Skills", v === "skills", "Step-by-step know-how your agents can follow"),
+      h("button", { class: `railitem ${area === "office" ? "on" : ""}`, onclick: () => go(lastIn("office")), title: "Documents, sheets, slides and notes you and your agents work on", "aria-current": area === "office" ? "page" : null }, icon("office"), h("span", { class: "grow" }, "Office")),
+      h("button", { class: `railitem ${area === "knowledge" ? "on" : ""}`, onclick: () => go(lastIn("knowledge")), title: "What your agents work from: pages, library documents, memory and skills", "aria-current": area === "knowledge" ? "page" : null }, icon("workspace"), h("span", { class: "grow" }, "Knowledge")),
     ),
-    h("div", { class: "raillabel" }, "Oversight"),
-    h("div", { class: "railgroup" }, item("audit", "Audit log", v === "audit", "Every operation, by you and by each agent"), item("security", "Security", v === "security", "People, roles and how everyone signs in")),
+    h(
+      "button",
+      { class: "raillabel railfold", "aria-expanded": String(adminOpen), title: adminOpen ? "Fold Admin away" : "Show Admin", onclick: () => {
+        try {
+          localStorage.setItem("talqava.menu.admin", adminOpen ? "closed" : "open");
+        } catch {}
+        renderRail();
+      } },
+      "Admin",
+      h("span", { "aria-hidden": "true" }, adminOpen ? " ▾" : " ▸"),
+    ),
+    adminOpen
+      ? h("div", { class: "railgroup" }, item("security", "Security", v === "security", "People, sign-in, sensitive information, rules for agents and backups"), item("audit", "Audit log", v === "audit", "Every operation, by you and by each agent"), item("integrations", "Integrations", v === "integrations", "AI models, repositories, connectors and keys"), item("settings", "Settings", v === "settings", "Approvals, budgets and how Talqava looks"))
+      : null,
     h(
       "div",
       { class: "railgroup railend" },
-      item("integrations", "Integrations", v === "integrations", "Connect the tools your business already uses"),
-      item("settings", "Settings", v === "settings", "AI models, approvals, budgets and how Talqava looks"),
       h("button", { class: "railitem", onclick: () => showGuide(guideFor(v) ?? "getting-started"), title: "How to use Talqava, page by page" }, icon("guide"), h("span", { class: "grow" }, "User guide")),
       state.me?.person ? h("button", { class: "railitem", onclick: () => attempt(async () => (await api("POST", "logout"), (state.me = null), showLogin())), title: `Signed in as ${state.me.person.name} (${state.me.role.name})` }, icon("security"), h("span", { class: "grow" }, "Sign out")) : null,
     ),
@@ -410,6 +452,7 @@ function go(view, id = null) {
   if (view === "project") state.projectId = id;
   closePalette();
   renderTop();
+  renderAreaTabs();
   renderBody();
   enterPage();
 }
@@ -433,7 +476,7 @@ function renderBody() {
   state.source = null;
   ui.log = null;
   ui.body.className = "body";
-  const views = { home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView, security: securityView, office: officeView, slides: slidesView, docs: docsView, notes: notesView, sheets: sheetsView };
+  const views = { home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView, security: securityView, start: startView, office: officeView, slides: slidesView, docs: docsView, notes: notesView, sheets: sheetsView };
   (views[state.view] || homeView)();
 }
 
@@ -1457,7 +1500,7 @@ function renderBoard() {
     : [stuck.length ? `${stuck.join(", ")} ${stuck.length === 1 ? "is" : "are"} waiting on you more than working: clear the approvals to unblock ${stuck.length === 1 ? "it" : "them"}.` : "", idle.length && idle.length < rows.length ? `No work this week in ${idle.slice(0, 4).join(", ")}${idle.length > 4 ? ` and ${idle.length - 4} more` : ""}.` : "", week.length - succeeded.length ? `${week.length - succeeded.length} task${week.length - succeeded.length === 1 ? "" : "s"} did not finish cleanly: open ${week.length - succeeded.length === 1 ? "it" : "them"} under Completed work.` : ""].filter(Boolean).join(" ") || "Work is flowing: nothing is blocked on you.";
 
   fill(ui.board, 
-    h("div", { class: "board-head" }, h("div", {}, h("h1", {}, "Work in progress"), h("p", { class: "lead" }, "Assign work, clear what is waiting on you, and see how each department is doing."))),
+    h("div", { class: "board-head" }, h("div", {}, h("h1", {}, "Agents"), h("p", { class: "lead" }, "Assign work, clear what is waiting on you, and see how each department is doing."))),
     composer,
     h(
       "section",
@@ -4380,7 +4423,7 @@ function gitIntegrationPage(git, act, col, again) {
       h("h2", {}, "Three steps"),
       step(connected, "1. Connect GitHub", h("p", { class: "note" }, connected ? "Done. You are signed in." : "Sign in on github.com in your browser. Start below.")),
       step(hasRepo, "2. Choose your repositories", h("p", { class: "note" }, hasRepo ? `${git.repos.filter((r) => r.found).length} connected. Add or remove any time.` : connected ? "Pick your account or your company below, and tick the ones you want." : "After you connect, you pick which ones to bring in: your own, or your company's.")),
-      step(hasRepo, "3. Give an agent a task on it", h("p", { class: "note" }, "Choose the repository at the top of Work in progress and assign a task. You review every change before it is kept.")),
+      step(hasRepo, "3. Give an agent a task on it", h("p", { class: "note" }, "Choose the repository at the top of the Agents page and assign a task. You review every change before it is kept.")),
     ),
     githubSection(),
     h("section", { class: "isec" }, h("h2", {}, `Connected repositories${git.repos.length ? ` · ${git.repos.length}` : ""}`), git.repos.length ? git.repos.map(repoCard) : h("p", { class: "note" }, "None yet. Connect GitHub above and choose the ones you want.")),
@@ -4429,7 +4472,7 @@ function gitIntegrationPage(git, act, col, again) {
         h("div", { class: "willbox wont" }, h("div", { class: "label" }, "✕ Never"), h("ul", {}, ...["Touch your own branches or your unsaved changes", "Commit to your branch: keeping a task makes one commit on the task's own branch", "Push, merge or deploy: those stay with you", "See your GitHub token"].map((x) => h("li", {}, x)))),
       ),
       h("p", { class: "note" }, git.coders.length ? `Agents that can change files, and so get a branch of their own: ${git.coders.map((b) => b.name).join(", ")}. Others can read a repository but not change it.` : "No agent on your team can change files yet. Add one from the marketplace, such as a developer."),
-      h("p", { class: "note" }, "To use it: connect a repository, choose it in the Repository box at the top of Work in progress, then assign a task. When the task stops, its page shows the changes with Keep the changes and Undo."),
+      h("p", { class: "note" }, "To use it: connect a repository, choose it in the Repository box at the top of the Agents page, then assign a task. When the task stops, its page shows the changes with Keep the changes and Undo."),
     ),
     git.repos.length || git.github.tokenSaved
       ? h(
@@ -4777,7 +4820,7 @@ async function marketView() {
       teams.length ? h("section", {}, h("h2", {}, "Teams"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "A lead and the agents that report to it, added to your organization together."), h("div", { class: "mgrid wide" }, teams.map(teamCard))) : null,
       packs.length ? h("section", {}, h("h2", {}, "Page packs"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Ready-made pages for your Workspace: procedures, a price list, handbooks. Agents follow them; you edit them to match how you work."), h("div", { class: "mgrid wide" }, packs.map(packCard))) : null,
       cat || needle ? section(cat === "+mine" ? "On my team" : cat || "Results", shown) : categories.map((c) => section(c, shown.filter((b) => b.listing.category === c))),
-      shown.length ? null : h("p", { class: "note" }, cat === "+mine" ? "You have not added a marketplace agent yet." : "No agent matches that. Try other words, or create your own agent from the Work in progress page."),
+      shown.length ? null : h("p", { class: "note" }, cat === "+mine" ? "You have not added a marketplace agent yet." : "No agent matches that. Try other words, or create your own agent from the Agents page."),
     );
   };
   search.addEventListener("input", () => ((ui.marketSearch = search.value), draw()));
@@ -7648,6 +7691,92 @@ function importOfficeFile(accept, box) {
   input.click();
 }
 
+/** Home: what needs you, what is running, where to start, and what you were last working on. */
+async function startView() {
+  ui.body.className = "body";
+  ui.log = null;
+  const col = h("div", { class: "integrations startpage" });
+  fill(ui.body, h("main", { class: "center" }, col));
+  let office = { files: [] };
+  try {
+    [office] = await Promise.all([api("GET", "workspace/office").catch(() => ({ files: [] })), loadMail(), state.crew ? null : loadCrew(), state.orgs ? null : loadOrgs()]);
+  } catch {}
+  if (state.view !== "start") return;
+  const org = activeOrg();
+  const mail = mailMessages();
+  const needs = mail.filter((m) => m.label === "needs" || m.label === "failed");
+  const working = mail.filter((m) => m.label === "working");
+  const today = new Date().toDateString();
+  const done = mail.filter((m) => m.label === "done" && new Date(m.activityAt ?? m.at).toDateString() === today);
+  const openMail = (m) => ((ui.mailOpen = m.id), go("inbox"));
+  const line = (m) => h("button", { class: "plain card startline", onclick: () => openMail(m) }, h("span", { class: `mlabel ${m.label}` }, LABEL_WORDS[m.label]), h("span", { class: "grow" }, h("b", {}, m.subject), m.snippet ? h("span", { class: "note small" }, ` · ${String(m.snippet).slice(0, 110)}`) : null), h("span", { class: "note small" }, m.bot ? agentRole(m.bot) : ""));
+  const hour = new Date().getHours();
+  const hello = `${hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"}${state.me?.person ? `, ${state.me.person.name.split(" ")[0]}` : ""}.`;
+  const start = (kind) =>
+    attempt(async () => {
+      const page = kind === "sheet" ? await api("POST", "workspace/sheets", { title: "Untitled sheet" }) : await api("POST", "workspace/pages", { kind, title: kind === "deck" ? "Untitled slides" : "Untitled", ...(kind === "deck" ? { markdown: "# Title of the presentation\n\nA line about what it covers\n" } : {}) });
+      ui.ws ??= { collapsed: new Set() };
+      ui.ws.focusTitle = true;
+      openPage(page.id);
+    }, col);
+  const tile = (label, about, run) => h("button", { class: "plain card starttile", onclick: run }, h("b", {}, label), h("span", { class: "note small" }, about));
+  const noTeam = !org.members?.length;
+  const noModel = needsKey(state.config);
+  const KIND = { doc: "Document", sheet: "Sheet", deck: "Slides", note: "Note" };
+  fill(
+    col,
+    h("div", {}, h("h1", {}, hello), h("p", { class: "lead" }, noTeam ? "Talqava runs your organization with a team of AI agents: you give work, they do it, and you stay in control. Three steps get you going." : needs.length ? `${needs.length} thing${needs.length === 1 ? " needs" : "s need"} you. ${working.length ? `${working.length} task${working.length === 1 ? " is" : "s are"} being worked on.` : "Nothing is running right now."}` : working.length ? `Nothing needs you. ${working.length} task${working.length === 1 ? " is" : "s are"} being worked on.` : "Nothing needs you, and nothing is running. Give your team something to do.")),
+    noTeam || noModel
+      ? h(
+          "section",
+          { class: "isec" },
+          h("h2", {}, "Get going"),
+          h("div", { class: "card form" }, [
+            ["1", "Connect an AI model", "Your agents think with it. Pick a service and paste its key, or use a free model on this computer.", !noModel, () => ((ui.integration = "ai-models"), go("integrations"))],
+            ["2", "Set up your team", "Choose the kind of business you run; Talqava suggests the positions. Or add ready-made agents from the Marketplace.", !noTeam, () => go("team")],
+            ["3", "Give your first task", "Say what you want done, in your own words. The agent sends you a plan or the result.", false, () => newTaskDialog()],
+          ].map(([n, title, about, isDone, run]) => h("div", { class: `istep ${isDone ? "done" : ""}` }, h("span", { class: "istepmark", "aria-hidden": "true" }, isDone ? "✓" : n), h("div", { class: "grow" }, h("b", {}, title), h("p", { class: "note" }, about)), isDone ? null : h("button", { class: "small", onclick: run }, "Go")))),
+        )
+      : null,
+    needs.length ? h("section", { class: "isec" }, h("div", { class: "row" }, h("h2", { class: "grow" }, `Needs you · ${needs.length}`), h("button", { class: "plain link", onclick: () => go("inbox") }, "Open the Inbox")), needs.slice(0, 6).map(line)) : null,
+    h(
+      "section",
+      { class: "isec" },
+      h("h2", {}, "Start something"),
+      h(
+        "div",
+        { class: "startgrid" },
+        tile("Give a task", "Hand work to an agent or a team", () => newTaskDialog()),
+        tile("Ask the assistant", "A quick chat, for anything", () => go("chat")),
+        tile("Document", "A letter, proposal or report", () => start("doc")),
+        tile("Sheet", "A budget, forecast or list that calculates", () => start("sheet")),
+        tile("Slides", "A presentation", () => start("deck")),
+        tile("Note", "A quick thought or meeting notes", () => start("note")),
+      ),
+    ),
+    working.length ? h("section", { class: "isec" }, h("div", { class: "row" }, h("h2", { class: "grow" }, `Being worked on · ${working.length}`), h("button", { class: "plain link", onclick: () => go("tasks") }, "All tasks")), working.slice(0, 5).map(line)) : null,
+    done.length ? h("section", { class: "isec" }, h("h2", {}, `Finished today · ${done.length}`), done.slice(0, 5).map(line)) : null,
+    office.files.length ? h("section", { class: "isec" }, h("div", { class: "row" }, h("h2", { class: "grow" }, "Pick up where you left off"), h("button", { class: "plain link", onclick: () => go("office") }, "All of Office")), h("div", { class: "startgrid" }, office.files.slice(0, 6).map((f) => tile(f.title, `${KIND[f.kind] ?? "Page"} · ${f.updatedBy} · ${officeDay(f.updatedAt)}`, () => openPage(f.id))))) : null,
+    h(
+      "section",
+      { class: "isec" },
+      h("h2", {}, "How Talqava fits together"),
+      h(
+        "div",
+        { class: "startmap" },
+        [
+          ["What needs you", "Inbox", "Plans to approve, questions, finished work and changes to accept.", "inbox"],
+          ["The work", "Tasks, Projects, Routines", "What you asked for, grouped into projects, and work that repeats by itself.", "tasks"],
+          ["The team", "Agents, Organization, Marketplace", "Who does the work, how they are organized, and ready-made additions.", "team"],
+          ["What you make", "Office", "Documents, sheets, slides and notes you and your agents work on together.", "office"],
+          ["What they know", "Knowledge", "Procedures, reference documents, memory and skills your agents follow.", "workspace"],
+          ["Keeping control", "Admin", "Who can do what, what may be sent where, and a record of everything.", "security"],
+        ].map(([head, where, about, view]) => h("button", { class: "plain card mapcard", onclick: () => go(view) }, h("span", { class: "label" }, head), h("b", {}, where), h("span", { class: "note small" }, about))),
+      ),
+    ),
+  );
+}
+
 /** A card for a ready-made Office file: preview its summary, make a file from it. */
 function officeTemplateCard(t) {
   const kind = { doc: "Document", sheet: "Sheet", note: "Note" }[t.kind];
@@ -8296,7 +8425,7 @@ async function securityView() {
       guardrailsSection(true),
       securityOpsSection(true),
       backupSection(true),
-    );
+    ), securityTabs(col);
   }
 
   const me = data.me;
@@ -8409,6 +8538,30 @@ async function securityView() {
     securityOpsSection(admin),
     admin || me?.role === "auditor" ? backupSection(admin) : null,
   );
+  securityTabs(col);
+}
+
+/** Splits the Security page into tabs: each section belongs to one, and only the chosen tab's sections show. */
+const SECURITY_TABS = [["overview", "Overview"], ["people", "People and sign-in"], ["info", "Information"], ["agents", "Agents"], ["watching", "Watching"], ["backups", "Backups"]];
+function securityTabs(col) {
+  const tabOf = (el) => {
+    if (el.classList.contains("seccenter")) return "overview";
+    const title = el.querySelector("h2")?.textContent ?? "";
+    return /^Sensitive information/.test(title) ? "info" : /^Agent guardrails/.test(title) ? "agents" : /^Alerts and reviews/.test(title) ? "watching" : /^Backups/.test(title) ? "backups" : "people";
+  };
+  const sections = [...col.children].slice(1);
+  for (const el of sections) el.dataset.tab = tabOf(el);
+  const have = new Set(sections.map((el) => el.dataset.tab));
+  if (state.me?.mustSetUpSecondStep) ui.securityTab = "people";
+  if (!have.has(ui.securityTab)) ui.securityTab = "overview";
+  const bar = h("div", { class: "pills sectabs", role: "tablist", "aria-label": "Parts of Security" });
+  const show = () => {
+    for (const el of sections) el.hidden = el.dataset.tab !== ui.securityTab;
+    fill(bar, SECURITY_TABS.filter(([id]) => have.has(id)).map(([id, label]) => h("button", { class: `mpill ${ui.securityTab === id ? "on" : ""}`, role: "tab", "aria-selected": String(ui.securityTab === id), onclick: () => ((ui.securityTab = id), show()) }, label)));
+  };
+  col.children[0].after(bar);
+  col.addEventListener("securitytab", (e) => ((ui.securityTab = e.detail), show(), bar.scrollIntoView({ block: "start" })));
+  show();
 }
 
 /** Security › Backups and stored data: whether the disk is encrypted, encrypted backups, and testing a restore. */
@@ -8602,7 +8755,7 @@ function securityCenter() {
         box,
         h("div", { class: "row wrap" }, h("h2", { class: "grow" }, `Where you stand · ${o.on} of ${o.of} protections on`), h("button", { onclick: report }, "Download a security report")),
         o.attention.length ? h("div", { class: "card form" }, h("b", {}, "Needs you now"), o.attention.map((a) => h("div", { class: "row" }, h("span", { class: `chip ${a.level === "high" ? "bad" : "warn"}` }, a.level === "high" ? "High" : "Soon"), h("div", { class: "grow" }, a.words, h("div", { class: "note small" }, a.next))))) : null,
-        h("div", { class: "card form" }, o.protections.map((x) => h("div", { class: "row secrow" }, h("span", { class: `chip ${x.state === "on" ? "on" : x.state === "partly" ? "warn" : ""}` }, word[x.state]), h("div", { class: "grow" }, h("b", {}, x.name), h("div", { class: "note small" }, x.words, x.next ? h("span", {}, " ", h("b", {}, x.next)) : null))))),
+        h("div", { class: "card form" }, o.protections.map((x) => h("div", { class: "row secrow" }, x.state === "on" ? null : h("button", { class: "small secgo", onclick: (e) => e.currentTarget.dispatchEvent(new CustomEvent("securitytab", { bubbles: true, detail: { people: "people", "second-step": "people", sensitivity: "info", masking: "info", changes: "agents", web: "agents", caps: "agents", audit: "watching", stored: "backups" }[x.id] ?? "overview" })) }, "Fix"), h("span", { class: `chip ${x.state === "on" ? "on" : x.state === "partly" ? "warn" : ""}` }, word[x.state]), h("div", { class: "grow" }, h("b", {}, x.name), h("div", { class: "note small" }, x.words, x.next ? h("span", {}, " ", h("b", {}, x.next)) : null))))),
         h("p", { class: "note small" }, "The report states the settings in force. It supports an audit; it is not a certificate."),
       );
     })
@@ -8863,7 +9016,7 @@ async function drawTables(box, pageId) {
 }
 
 /** Which guide explains each page. */
-const GUIDES_BY_VIEW = { chat: "chat", inbox: "inbox", tasks: "tasks", projects: "projects", project: "projects", home: "work-in-progress", quest: "work-in-progress", bot: "work-in-progress", jobs: "schedules", team: "organization", market: "marketplace", marketbot: "marketplace", workspace: "workspace", office: "office", slides: "office", docs: "office", notes: "office", security: "security", sheets: "office", library: "library", memory: "memory", skills: "skills", audit: "audit-log", integrations: "integrations", settings: "settings" };
+const GUIDES_BY_VIEW = { chat: "chat", inbox: "inbox", tasks: "tasks", projects: "projects", project: "projects", home: "work-in-progress", quest: "work-in-progress", bot: "work-in-progress", jobs: "schedules", team: "organization", market: "marketplace", marketbot: "marketplace", workspace: "workspace", start: "getting-started", office: "office", slides: "office", docs: "office", notes: "office", security: "security", sheets: "office", library: "library", memory: "memory", skills: "skills", audit: "audit-log", integrations: "integrations", settings: "settings" };
 const guideFor = (view) => (view === "integrations" && ui.integration === "ai-models" ? "ai-models" : GUIDES_BY_VIEW[view] ?? null);
 
 /** Shows a user guide in a reader beside the page. Links between guides open in the reader; the list of guides is on the left. */

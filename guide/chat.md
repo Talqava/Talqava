@@ -84,7 +84,7 @@ A new chat opens with a greeting and a few ideas to start from.
 ## Related guides
 
 - [Tasks and goals](tasks.md)
-- [Work in progress](work-in-progress.md)
+- [Agents](work-in-progress.md)
 - [Inbox](inbox.md)
 - [Organization](organization.md)
 - [Settings and AI models](settings.md)

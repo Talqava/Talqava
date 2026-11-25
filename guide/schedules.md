@@ -33,7 +33,7 @@ If the position you chose leaves the chart, the assistant does the job instead, 
 
 **Approvals still apply.** A run follows your **Approvals** choice in **Settings**:
 
-- **Ask me before commands, file changes and API writes** (the standard). When a run wants to make a change, such as running a command, changing a file, sending data to another service or clicking in a web page, it stops and waits for you. It shows on **Work in progress** under **Waiting on you**.
+- **Ask me before commands, file changes and API writes** (the standard). When a run wants to make a change, such as running a command, changing a file, sending data to another service or clicking in a web page, it stops and waits for you. It shows on **Agents** under **Waiting on you**.
 - **Run everything without asking.** The run goes ahead on its own. Even so, once it has read outside content, such as web pages, every change asks you first.
 
 Reading and searching never need approval. Your spending and step limits apply to routined runs too.
@@ -88,12 +88,12 @@ Reading and searching never need approval. Your spending and step limits apply t
 - **"The shortest interval is 1 minute."** Use **Every few minutes** with 1 or more.
 - **"Choose an agent from your organization chart, or the Talqava assistant."** The agent you picked is not on the chart of the organization you have open. Choose again.
 - **"That one-time job has already passed."** You pressed **Resume** on a **Once** routine that already ran. **Edit** it and pick a new date.
-- **A routine seems stuck.** It is probably waiting for your approval (see **Waiting on you** on **Work in progress**), or, for an agent, waiting its turn in the queue (see **Tasks**).
+- **A routine seems stuck.** It is probably waiting for your approval (see **Waiting on you** on **Agents**), or, for an agent, waiting its turn in the queue (see **Tasks**).
 
 ## Related guides
 
 - [Tasks and goals](tasks.md)
-- [Work in progress](work-in-progress.md)
+- [Agents](work-in-progress.md)
 - [Organization](organization.md)
 - [Chat](chat.md)
 - [Settings](settings.md)
