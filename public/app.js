@@ -3600,11 +3600,77 @@ async function langfusePage(col, again) {
   );
 }
 
+/** A catalogue connector, before connecting: what it reads, what it changes, where to make its key. */
+function connectorDialog(c, done) {
+  const dialog = h("dialog", { class: "aidialog" });
+  const close = () => (dialog.close(), dialog.remove());
+  const status = h("p", { class: "note", role: "status" });
+  const key = h("input", { type: "password", autocomplete: "off", placeholder: "Paste the key here", "aria-label": `${c.name} key` });
+  const add = h("button", { class: "primary" }, "Check the key and connect");
+  const form = h("form", { class: "form" }, h("label", {}, "Key", key), h("p", { class: "note small" }, c.keyHelp, " ", h("button", { type: "button", class: "plain link", onclick: () => window.open(c.docs, "_blank", "noopener") }, `${c.name}'s instructions`)), status, h("div", { class: "row" }, add, h("button", { type: "button", class: "plain", onclick: close }, "Cancel")));
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    add.disabled = true;
+    status.className = "note";
+    status.textContent = `Checking the key with ${c.name}…`;
+    try {
+      const r = await api("POST", `integrations/connectors/${c.id}/connect`, { key: key.value });
+      state.market = null;
+      state.config = await api("GET", "state");
+      close();
+      toast(`${c.name} is connected: ${r.tools} tool${r.tools === 1 ? "" : "s"}${r.readOnly ? `, ${r.readOnly} of them read-only` : ""}.`);
+      done?.();
+    } catch (err) {
+      status.textContent = err.message;
+      status.className = "note bad";
+      add.disabled = false;
+    }
+  });
+  fill(
+    dialog,
+    h("h3", {}, c.name),
+    h("p", { class: "note" }, c.about),
+    h("div", { class: "label" }, "Before you connect"),
+    h(
+      "ul",
+      {},
+      h("li", {}, h("b", {}, "Can read: "), c.reads),
+      h("li", {}, h("b", {}, "Can change: "), c.changes),
+      h("li", {}, "In Talqava, any tool that changes something asks you first, unless the service marks it read-only. Only agents with the “connected services” power can use it; it then shows on their line of the Access view."),
+      h("li", {}, `The key stays on this computer and is sent only to ${new URL(c.url).host}. The key decides what the connector can reach, so give it only what you want agents to have.`),
+      c.note ? h("li", {}, c.note) : null,
+    ),
+    form,
+  );
+  document.body.append(dialog);
+  dialog.showModal();
+  key.focus();
+}
+
+/** The connector catalogue as cards, grouped by kind, then the services that cannot be offered yet. */
+function connectorCatalog(cat, done) {
+  const card = (c) => {
+    const main = h("button", { class: c.connected ? "madd" : "madd primary" }, c.connected ? "Disconnect" : "See what it can do");
+    main.addEventListener("click", () =>
+      c.connected
+        ? confirm(`Disconnect ${c.name}? Your agents can no longer use its tools, and its key is forgotten.`) && attempt(async () => (await api("POST", `integrations/connectors/${c.id}/remove`), (state.market = null), (state.config = await api("GET", "state")), done?.()), ui.body)
+        : connectorDialog(c, done),
+    );
+    return h("article", { class: "mcard tcard" }, h("div", { class: "mhead" }, h("span", { class: "packicon conn", "aria-hidden": "true" }, c.name[0].toUpperCase()), h("div", {}, h("b", {}, c.name), h("div", { class: "by" }, c.category))), h("p", { class: "mdesc" }, c.about), h("div", { class: "mfoot" }, h("span", { class: "mono small muted" }, c.connected ? "✓ Connected" : "Needs a key from the service"), main));
+  };
+  return [
+    h("div", { class: "mgrid wide" }, cat.connectors.map(card)),
+    cat.coming.length
+      ? h("details", { class: "card onthis" }, h("summary", {}, h("b", {}, "Not available yet"), h("span", { class: "note small" }, "Email, calendar, accounting and more")), h("div", { class: "body" }, h("ul", {}, cat.coming.map((x) => h("li", {}, h("b", {}, x.name), ` (${x.category}). `, x.why)))))
+      : null,
+  ];
+}
+
 /** Under Integrations › MCP: connectors added by hand, including ones that run as a program on this computer. */
 function connectorsByHand(col, again) {
   const c = state.config;
   const save = connectionSaver(col, again);
-  const mName = h("input", { placeholder: "Name, e.g. notion" });
+  const mName = h("input", { placeholder: "Name, e.g. crm" });
   const mUrl = h("input", { placeholder: "https://… (the connector's MCP address)" });
   const mToken = h("input", { type: "password", placeholder: "Access token (if it needs one)", autocomplete: "off" });
   const mCommand = h("input", { placeholder: "Or a program to run, e.g. npx -y @some/mcp-server", class: "mono" });
@@ -3639,6 +3705,7 @@ async function integrationsView() {
   let list, git;
   try {
     [list, git] = await Promise.all([api("GET", "integrations"), ["git", "mcp", "openrouter"].includes(ui.integration) ? api("GET", `integrations/${ui.integration}`) : null]);
+    if (ui.integration === "mcp" && git) git.catalog = await api("GET", "integrations/connectors").catch(() => null);
   } catch (err) {
     return fill(col, h("div", { class: "banner error" }, err.message));
   }
@@ -3871,7 +3938,7 @@ function mcpIntegrationPage(mcp, act, col, again) {
     btn.addEventListener("click", () => copy(text, btn));
     return h("div", { class: "copybox" }, h("div", { class: "row" }, h("span", { class: "label grow", style: "margin: 0" }, label), btn), h("pre", {}, text));
   };
-  const name = h("input", { placeholder: "A short name, e.g. notion", "aria-label": "Connector name" });
+  const name = h("input", { placeholder: "A short name, e.g. crm", "aria-label": "Connector name" });
   const address = h("input", { placeholder: "Its web address, e.g. https://mcp.example.com/mcp", "aria-label": "Connector address" });
   const token = h("input", { type: "password", placeholder: "Access token (only if it needs one)", autocomplete: "off", "aria-label": "Access token" });
   return [
@@ -3902,6 +3969,7 @@ function mcpIntegrationPage(mcp, act, col, again) {
       h("h2", {}, `Give your agents tools from other services${mcp.connectors.length ? ` · ${mcp.connectors.length}` : ""}`),
       h("p", { class: "note", style: "margin: 0" }, "A connector lets your agents use another service, such as your documents, calendar or CRM. Their tools ask you before changing anything, and what they return is treated as outside information."),
       mcp.connectors.map((c) => h("div", { class: "card" }, h("div", { class: "row" }, h("div", { class: "grow" }, h("b", {}, c.name), h("div", { class: "mono small muted" }, c.where)), h("button", { class: "danger", onclick: () => confirm(`Remove the ${c.name} connector? Your agents can no longer use its tools.`) && act(() => api("PUT", "settings", { mcpServer: { name: c.name, remove: true } })) }, "Remove")))),
+      mcp.catalog ? [h("h3", {}, "From the catalogue"), ...connectorCatalog(mcp.catalog, again), h("h3", {}, "Any other connector")] : null,
       h("form", { class: "card form", onsubmit: (e) => (e.preventDefault(), act(() => api("PUT", "settings", { mcpServer: { name: name.value.trim(), url: address.value.trim(), token: token.value } }))) }, h("b", {}, "Add a connector"), h("p", { class: "note small" }, "The service gives you its MCP address, and a token if it needs one."), name, address, token, h("div", {}, h("button", { class: "primary" }, "Add connector"))),
       h("p", { class: "note small" }, "A connector that runs as a program on this computer is added below."),
     ),
@@ -4563,6 +4631,9 @@ async function marketView() {
       results,
       kitSection("company", "Company templates", "A running start for your kind of business: the positions on your chart, the pages your agents follow, and routines, set up together."),
       kitSection("playbook", "Playbooks", "One known process, ready to run: its procedure as a page, a routine for the group that owns it, and Run it now."),
+      market.connectors && !cat && (!needle || market.connectors.connectors.some((c) => `${c.name} ${c.about} ${c.category}`.toLowerCase().includes(needle)))
+        ? h("section", {}, h("h2", {}, "Connectors"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Give your agents the services your business already uses. Each says what it can read and change before you connect it."), connectorCatalog({ connectors: market.connectors.connectors.filter((c) => !needle || `${c.name} ${c.about} ${c.category}`.toLowerCase().includes(needle)), coming: needle ? [] : market.connectors.coming }, () => marketView()))
+        : null,
       featured.length
         ? h(
             "section",

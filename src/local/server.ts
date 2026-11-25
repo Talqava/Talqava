@@ -42,6 +42,7 @@ import { addKey, connect, disconnect, refreshHealth, serviceProblems, findLocal,
 import { board } from "./board.ts";
 import { accessGraph, accessGraphs } from "./access.ts";
 import { loadModelList } from "./modelprices.ts";
+import { connectCatalog, connectorLabel, disconnectCatalog, listCatalog } from "./connector-catalog.ts";
 import { installKit, listKits, previewKit, runPlaybook, undoKit } from "./kits.ts";
 import { connectLangfuse, langfuseIntegration, recordStep, removeLangfuse } from "./langfuse.ts";
 import { finishOpenRouterSignIn, openrouterIntegration, openrouterModels, removeOpenRouter, saveOpenRouterKey, startOpenRouterSignIn, useOpenRouterModel } from "./openrouter.ts";
@@ -183,6 +184,7 @@ function describeRequest(method: string, parts: string[], body: any, url: URL): 
     const map: Record<string, string> = { upload: `Uploaded “${name ?? "a file"}”`, folders: `Made the folder “${body.name ?? ""}”`, move: body.name ? `Renamed to “${body.name}”` : "Moved files", delete: "Deleted files", restore: "Restored from Deleted", purge: "Deleted for good", open: "Showed in Finder", launch: "Opened a file", search: "Searched the library", folder: "Changed who can use a folder" };
     return { kind: "library", action: map[id] ?? (method === "PATCH" ? "Changed who can use a file" : method === "DELETE" ? "Deleted a file" : `${method} library ${id ?? ""}`.trim()), detail: name ? `into ${url.searchParams.get("folder") ?? ""}` : words(body) };
   }
+  if (area === "integrations" && id === "connectors") return { kind: "integration", action: `${parts[3] === "remove" ? "Disconnected" : "Connected"} the ${connectorLabel(parts[2] ?? "")} connector from the catalogue` };
   if (area === "integrations") return { kind: "integration", action: `${id ? id[0].toUpperCase() + id.slice(1) : "Integration"}: ${(action ?? method.toLowerCase()).replace(/-/g, " ")}`, detail: words(body) };
   // Goals and projects write their own entries; small edits (a title, a description) are not worth a line each.
   if (area === "goals" || area === "projects") return method === "POST" || method === "DELETE" || (area === "goals" && method === "PATCH") ? null : { kind: "organization", action: "Changed a project", detail: words(body) };
@@ -857,7 +859,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       } catch {
         kits = [];
       }
-      return send(res, 200, { bots, teams: loadTeams(), packs, kits, problems: market.problems, updates: bots.filter((b) => b.install.state === "update").length });
+      return send(res, 200, { bots, teams: loadTeams(), packs, kits, connectors: listCatalog(), problems: market.problems, updates: bots.filter((b) => b.install.state === "update").length });
     }
     const plainly = <T>(fn: () => T): T => {
       try {
@@ -1313,6 +1315,10 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (route === "GET integrations" && !parts[1]) return send(res, 200, await listIntegrations());
     if (route === "GET integrations" && parts[1] === "git") return send(res, 200, await gitIntegration());
     if (route === "GET integrations" && parts[1] === "mcp") return send(res, 200, mcpIntegration());
+    // The connector catalogue: well-known services, what each can read and change, connected with a key.
+    if (route === "GET integrations" && parts[1] === "connectors") return send(res, 200, listCatalog());
+    if (route === "POST integrations" && parts[1] === "connectors" && parts[3] === "connect") return send(res, 200, await attempt(() => connectCatalog(parts[2], body.key)));
+    if (route === "POST integrations" && parts[1] === "connectors" && parts[3] === "remove") return send(res, 200, await attempt(() => disconnectCatalog(parts[2])));
     if (route === "GET integrations" && parts[1] === "langfuse") return send(res, 200, langfuseIntegration());
     if (route === "POST integrations" && parts[1] === "langfuse" && parts[2] === "connect") return send(res, 200, await attempt(() => connectLangfuse(body)));
     if (route === "POST integrations" && parts[1] === "langfuse" && parts[2] === "remove") return send(res, 200, await attempt(async () => removeLangfuse()));

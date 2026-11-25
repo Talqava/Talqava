@@ -69,6 +69,19 @@ A repository is a folder of code or documents with a full history of changes. Th
 3. Quit Claude completely and open it again. Keep Talqava open while you use it.
 4. Ask Claude, for example, "What agents are on my Talqava team?" Claude can see your team, give an agent a task, read how it went, list recent tasks, and search or add to your organization's memory. Work that changes files or sends something still waits for your approval in Talqava.
 
+### Connect a well-known service from the catalogue
+
+The catalogue lists services that publish their own connector and accept a key you make: **Stripe**, **Airtable**, **monday.com**, **Intercom**, **Linear** and **GitHub**. It is on the **MCP** page under **From the catalogue**, and in the **Marketplace** under **Connectors**.
+
+1. Press **See what it can do** on a service. Read what it **can read** and **can change** before anything is connected.
+2. Make a key in that service, following the line under the key box (the link opens the service's own instructions). Give the key only the access you want your agents to have: the key decides what the connector can reach.
+3. Paste the key and press **Check the key and connect**. Talqava checks the key with the service first; a key the service refuses is not saved.
+4. To stop, press **Disconnect** on its card. The key is forgotten.
+
+Only agents with the **connected services** power can use a connector, and each one shows under **Connected services** on that agent's line in **Organization → Access**. Tools that change something ask you first, unless the service marks them read-only.
+
+**Not available yet** lists services people ask for that cannot be offered yet, and why: Gmail, Google Calendar and Drive, Microsoft 365, QuickBooks and others need Talqava to be registered with those companies first.
+
 ### Give agents tools from another service (a connector)
 
 1. On the **MCP** page, under **Add a connector**, type a short name and the web address the service gives you.

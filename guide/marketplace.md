@@ -43,6 +43,14 @@ A playbook is one known process: **Month-end close**, **Hiring** or **Client onb
 2. Press **Run it now** on its card whenever you want it done. The work goes to the lead of the group that owns it, who sends you a plan to approve before anything starts.
 3. If your chart has no such group yet, Talqava says which one to add.
 
+### Connect a service your business already uses
+
+1. Scroll to **Connectors**: Stripe, Airtable, monday.com, Intercom, Linear and GitHub.
+2. Press **See what it can do** to read what it can read and change, then paste a key you make in that service and press **Check the key and connect**.
+3. **Not available yet** says which services cannot be connected yet, and why.
+
+See [Integrations](integrations.md) for the details.
+
 ### Add a page pack to your Workspace
 
 1. Scroll to **Page packs**: ready-made pages such as an **SOP library**, a **Price list** and handbooks.

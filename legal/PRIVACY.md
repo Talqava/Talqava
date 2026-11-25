@@ -30,6 +30,7 @@ Talqava sends information off your computer only to services you choose to use, 
 | Chat, or give an agent a task | Your message, the agent's instructions, and the parts of your memory, workspace pages and library documents that match the task (never documents or pages you marked Private) | The AI model provider you chose: Anthropic, OpenRouter, or any provider you add. A model running on your own computer receives it locally, and nothing leaves. |
 | Let an agent search or read the web | The search words, or the address of the page | Your AI provider's web search, or the web page's own site |
 | Connect GitHub or a repository | Requests about the repositories you choose, signed with your GitHub sign-in | GitHub |
+| Connect a service from the connector catalogue (Stripe, Airtable, monday.com, Intercom, Linear, GitHub) | The key you paste, and what an agent sends to that connector's tools | Only that service's own connector address |
 | Add a connector (MCP server) | What an agent sends to that connector's tools | That connector's service |
 | Store a key for another service | The requests an agent makes to that service, with your key | That service only |
 | Use OpenRouter | The name "Talqava" and the address talqava.com, as OpenRouter asks apps to identify themselves. Nothing about you. | OpenRouter |
