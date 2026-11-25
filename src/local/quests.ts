@@ -441,7 +441,7 @@ export class QuestRunner {
    * Starts a core quest: fills in its inputs, gathers what it needs (commits,
    * issues, builds), and remembers what its result must cover for the check.
    */
-  async startTemplate({ template, bot, given, project }: { template: QuestTemplate; bot: Bot; given: Record<string, unknown>; project?: string }): Promise<Quest> {
+  async startTemplate({ template, bot, given, project, maxTries = 2 }: { template: QuestTemplate; bot: Bot; given: Record<string, unknown>; project?: string; maxTries?: number }): Promise<Quest> {
     if (template.repository === "required" && !project) throw new Error(`${template.name} works on a repository. Choose one at the top first.`);
     const inputs = resolveInputs(template, given);
     let gathered = { text: "", mustMention: [] as string[] };
@@ -461,7 +461,7 @@ export class QuestRunner {
       text,
       project,
       title: first ? `${template.name}: ${first}` : template.name,
-      template: { id: template.id, name: template.name, check: template.check, inputs, mustMention: gathered.mustMention, tries: 0, maxTries: 2 },
+      template: { id: template.id, name: template.name, check: template.check, inputs, mustMention: gathered.mustMention, tries: 0, maxTries },
     });
   }
 

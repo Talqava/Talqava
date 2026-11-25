@@ -1,0 +1,29 @@
+# An office test task. The agent reads a supplier agreement and pulls out five
+# named terms. The check is an answer key; the wording of each term may vary.
+name: Key terms of a supplier contract
+summary: Five named terms found in a supplier agreement.
+bot: dusk
+prompt: |
+  Read the supplier agreement below and give me these five terms, one per line, each with its value:
+  1. How long the contract runs
+  2. How many days we have to pay an invoice
+  3. How much notice either side must give to end it
+  4. The most the price can go up in a year
+  5. The smallest order we can place
+  Reply with the five lines only. Do not repeat the agreement.
+
+  SUPPLY AGREEMENT between Northfield Packaging Ltd ("the Supplier") and the Customer.
+  1. Term. This agreement starts on the date both parties sign and continues for twenty-four (24) months. It then ends unless both parties agree in writing to extend it.
+  2. Orders. The Customer orders by email. Each order must be for at least 500 units. The Supplier confirms each order within two working days and delivers within 10 working days of confirming.
+  3. Price. Prices are set out in Schedule A. The Supplier may raise prices once in any twelve-month period, by no more than 4% of the price then in force, and must tell the Customer 30 days before the new price applies.
+  4. Payment. The Supplier invoices on delivery. The Customer pays each invoice within 45 days of the invoice date. Late payments bear interest at 2% above the base rate.
+  5. Quality. The Customer may reject goods that do not match the agreed specification within 14 days of delivery, and the Supplier replaces them at its own cost.
+  6. Ending the agreement. Either party may end this agreement for any reason by giving the other ninety (90) days' written notice. Either party may end it at once if the other fails to put right a serious breach within 21 days of being told of it.
+  7. Liability. The Supplier's total liability in any year is limited to the amount the Customer paid in that year.
+check:
+  mentions:
+    - "24 months|24-month|twenty-four months|two years|2 years|24 mo"
+    - "45 days|45-day|forty-five days|45 calendar days"
+    - "90 days|90-day|ninety days|90 days'"
+    - "4%|4 %|4 percent|four percent|4 per cent"
+    - "500"

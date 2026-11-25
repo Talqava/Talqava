@@ -1,0 +1,36 @@
+# An office test task. The agent adds up a month of sales and costs. The check
+# is an answer key of the four figures asked for.
+name: Summarise a month's numbers
+summary: Revenue, costs, profit and the best-selling product for one month.
+bot: tally
+prompt: |
+  From the sales and costs below, work out for March:
+  1. Total revenue
+  2. Total costs
+  3. Profit (revenue minus costs)
+  4. Which product brought in the most revenue, and how much
+  Reply with those four lines only, with the figures.
+
+  SALES (date, product, units sold, price per unit)
+  2026-03-02, Starter kit, 12, 45
+  2026-03-04, Pro kit, 5, 120
+  2026-03-07, Refill pack, 30, 9
+  2026-03-09, Starter kit, 8, 45
+  2026-03-12, Pro kit, 7, 120
+  2026-03-15, Refill pack, 42, 9
+  2026-03-18, Starter kit, 15, 45
+  2026-03-21, Pro kit, 4, 120
+  2026-03-25, Refill pack, 25, 9
+  2026-03-28, Starter kit, 10, 45
+
+  COSTS FOR MARCH
+  Materials, 1,840
+  Shipping, 465
+  Software, 129
+check:
+  mentions:
+    - "4,818|4818"
+    - "2,434|2434"
+    - "2,384|2384"
+    - "Starter kit"
+    - "2,025|2025"

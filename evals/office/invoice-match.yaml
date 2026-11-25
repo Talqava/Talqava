@@ -1,0 +1,38 @@
+# An office test task. The agent matches payments to invoices and reports only
+# what is still owed. The check is an answer key, and paid invoices must be left out.
+name: Find the unpaid invoices
+summary: The invoices not fully paid, and the total still owed.
+bot: tally
+prompt: |
+  Match the payments below to the invoices. Tell me which invoices are not fully paid, how much is still owed on each, and the total still owed.
+  List only the invoices that still have money owed, one per line, then the total. Do not list or mention the invoices that are fully paid.
+
+  INVOICES
+  INV-1041, Alder & Co, 640.00
+  INV-1042, Brook Lane Dental, 1,180.00
+  INV-1043, Castle Print, 820.00
+  INV-1044, Dove Street Cafe, 395.00
+  INV-1045, Elm Park School, 450.00
+  INV-1046, Fenwick Motors, 2,060.00
+  INV-1047, Grange Farm Shop, 1,275.00
+  INV-1048, Holt Surveyors, 510.00
+
+  PAYMENTS RECEIVED
+  3 March, Fenwick Motors, ref INV-1046, 2,060.00
+  5 March, Alder & Co, ref INV-1041, 640.00
+  9 March, Elm Park School, ref INV-1045, 300.00
+  11 March, Holt Surveyors, ref INV-1048, 510.00
+  14 March, Brook Lane Dental, ref INV-1042, 1,180.00
+  20 March, Dove Street Cafe, ref INV-1044, 395.00
+check:
+  mentions:
+    - "INV-1043"
+    - "INV-1045"
+    - "INV-1047"
+    - "2,245|2245"
+  avoids:
+    - "INV-1041"
+    - "INV-1042"
+    - "INV-1044"
+    - "INV-1046"
+    - "INV-1048"

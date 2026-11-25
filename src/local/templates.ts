@@ -25,6 +25,16 @@ export interface QuestCheck {
   covers?: "gathered";
   /** The reply must link at least this many different sources. */
   links?: number;
+  /**
+   * An answer key: points the reply must contain. Each entry may list accepted
+   * spellings separated by "|" ("45 days|45-day"). What is missing is never
+   * named back to the agent, so a second try cannot copy the answer.
+   */
+  mentions?: string[];
+  /** Things the reply must leave out, such as the items that do not belong in the answer. */
+  avoids?: string[];
+  /** An answer key of pairs: each key must share a line with its value ("T-01": "billing"). */
+  pairs?: Record<string, string>;
 }
 
 export interface QuestTemplate {
@@ -41,9 +51,9 @@ export interface QuestTemplate {
 
 const GATHERERS = ["git-log", "github-issues", "github-report"];
 
-function readTemplate(id: string, text: string): QuestTemplate {
+function readTemplate(id: string, text: string, folder = "quests"): QuestTemplate {
   const data = parse(text) as Record<string, any>;
-  const problem = (what: string) => new Error(`quests/${id}.yaml: ${what}`);
+  const problem = (what: string) => new Error(`${folder}/${id}.yaml: ${what}`);
   if (!data || typeof data !== "object") throw problem("is empty.");
   for (const key of ["name", "summary", "bot", "prompt"]) if (typeof data[key] !== "string" || !data[key].trim()) throw problem(`needs ${key}.`);
   const repository = data.repository ?? "none";
@@ -54,15 +64,24 @@ function readTemplate(id: string, text: string): QuestTemplate {
     return { id: input.id, label: input.label, placeholder: input.placeholder, default: input.default === undefined ? undefined : String(input.default), required: Boolean(input.required) };
   });
   const check = (data.check ?? {}) as QuestCheck;
+  for (const key of ["mentions", "avoids"] as const) {
+    if (check[key] !== undefined && (!Array.isArray(check[key]) || check[key]!.some((item) => typeof item !== "string" || !item.trim()))) throw problem(`check.${key} is a list of words or phrases.`);
+  }
+  if (check.pairs !== undefined && (typeof check.pairs !== "object" || Array.isArray(check.pairs) || Object.values(check.pairs).some((v) => typeof v !== "string" || !v.trim()))) throw problem("check.pairs maps each item to its answer.");
   return { id, name: data.name.trim(), summary: data.summary.trim(), bot: data.bot, repository, inputs, gather: data.gather, prompt: data.prompt, check };
 }
 
-export function loadTemplates(): QuestTemplate[] {
+/** The templates in a folder. Only the app's own folders are passed here, because a check can run a command. */
+export function loadTemplatesFrom(dir: string): QuestTemplate[] {
   let names: string[] = [];
   try {
-    names = fs.readdirSync(TEMPLATE_DIR).filter((n) => n.endsWith(".yaml")).sort();
+    names = fs.readdirSync(dir).filter((n) => n.endsWith(".yaml")).sort();
   } catch {}
-  return names.map((name) => readTemplate(name.replace(/\.yaml$/, ""), fs.readFileSync(path.join(TEMPLATE_DIR, name), "utf8")));
+  return names.map((name) => readTemplate(name.replace(/\.yaml$/, ""), fs.readFileSync(path.join(dir, name), "utf8"), path.relative(ROOT, dir) || "quests"));
+}
+
+export function loadTemplates(): QuestTemplate[] {
+  return loadTemplatesFrom(TEMPLATE_DIR);
 }
 
 export function findTemplate(id: string): QuestTemplate {

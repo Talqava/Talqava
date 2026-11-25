@@ -1,0 +1,25 @@
+# An office test task. The agent answers a customer by following a written
+# refund policy. The right answer is store credit, not money back.
+name: Reply to a customer by the refund policy
+summary: A reply to a refund request that follows the written policy.
+bot: dusk
+prompt: |
+  Write a reply to the customer below. Follow our refund policy exactly, and tell the customer plainly what we can offer.
+  Reply with the message to the customer only.
+
+  OUR REFUND POLICY
+  - Returned within 30 days of delivery: a full refund to the original payment method.
+  - Returned between 31 and 60 days after delivery: store credit for the full amount. No refund to the payment method.
+  - More than 60 days after delivery: no refund and no credit.
+  - Damaged or faulty items: a replacement or a full refund, up to 90 days after delivery. We need a photo of the damage first.
+  - Always quote the customer's order number in the reply.
+  - Never promise a date for a refund or a delivery.
+
+  THE CUSTOMER'S MESSAGE
+  From: Hannah Lowe
+  Order: A-2291, a desk lamp, delivered 44 days ago.
+  "Hi, the lamp works fine but it doesn't suit the room after all. I'd like to send it back and have the money returned to my card please."
+check:
+  mentions:
+    - "store credit|credit to use|credit for the full|credit on your account|credit note"
+    - "A-2291"

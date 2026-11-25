@@ -1,0 +1,29 @@
+# An office test task. The agent turns meeting notes into action items with an
+# owner and a date. One person in the notes has no action and must be left out.
+name: Action items from meeting notes
+summary: Each action from a meeting, with its owner and due date.
+bot: dusk
+prompt: |
+  Turn the meeting notes below into a list of action items. For each one give the owner, what they will do, and the date it is due.
+  List only people who agreed to do something. One action per line. Do not repeat the notes.
+
+  NOTES, Monday planning meeting
+  Present: Priya, Daniel, Sofia, Marcus, Elena.
+  We started with the Hartwell account. They liked the proposal but want the price reworked for a two-year term. Priya will send them a revised quote by 12 March.
+  Elena shared the customer survey results. Scores are up on last quarter and nobody had questions, so there is nothing to follow up.
+  The launch event still has no venue. Daniel said he would book one by 15 March, once he has the final headcount, which he already has from the invites.
+  Sofia reported that the checkout page fails for customers using a discount code. She will have it fixed before the sale starts, so by 10 March.
+  We talked about whether to move the Thursday stand-up to mornings. No decision; we will leave it as it is.
+  Last, hiring. We need a plan for the second quarter. Marcus will draft it and circulate it by 20 March.
+check:
+  mentions:
+    - "Priya"
+    - "Daniel"
+    - "Sofia"
+    - "Marcus"
+    - "12 March|March 12|12 Mar|Mar 12|12th March|March 12th|03-12|12/03|3/12"
+    - "15 March|March 15|15 Mar|Mar 15|15th March|March 15th|03-15|15/03|3/15"
+    - "10 March|March 10|10 Mar|Mar 10|10th March|March 10th|03-10|10/03|3/10"
+    - "20 March|March 20|20 Mar|Mar 20|20th March|March 20th|03-20|20/03|3/20"
+  avoids:
+    - "Elena"

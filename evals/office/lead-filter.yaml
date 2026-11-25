@@ -1,0 +1,37 @@
+# An office test task. The agent picks the companies that fit three criteria
+# from a list of twelve. Four fit; the other eight must be left out.
+name: Pick the leads that fit
+summary: The companies on a list that match a description of the ideal customer.
+bot: ember
+prompt: |
+  Our ideal customer is based in the UK, has between 10 and 50 employees, and works in logistics or wholesale.
+  From the list below, give me only the companies that match all three. One company name per line and nothing else. Do not mention the companies that do not match.
+
+  COMPANIES (name, country, employees, industry)
+  Ashdown Haulage, UK, 34, logistics
+  Birchfield Foods, UK, 120, wholesale
+  Calder Freight, Ireland, 22, logistics
+  Dunmore Supplies, UK, 18, wholesale
+  Eastgate Dental, UK, 12, healthcare
+  Fairholt Couriers, UK, 8, logistics
+  Glenview Trade Goods, UK, 47, wholesale
+  Harrow Legal, UK, 25, legal services
+  Inchmarlo Distribution, UK, 50, logistics
+  Juniper Wholesale, France, 30, wholesale
+  Kestrel Studios, UK, 15, design
+  Linden Cargo, UK, 210, logistics
+check:
+  mentions:
+    - "Ashdown"
+    - "Dunmore"
+    - "Glenview"
+    - "Inchmarlo"
+  avoids:
+    - "Birchfield"
+    - "Calder"
+    - "Eastgate"
+    - "Fairholt"
+    - "Harrow"
+    - "Juniper"
+    - "Kestrel"
+    - "Linden"

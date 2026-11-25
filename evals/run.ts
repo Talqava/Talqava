@@ -7,7 +7,11 @@
 //
 // Options:
 //   --model <provider/model>  the model to test (default: the one in Settings)
-//   --quests a,b              only these core quests
+//   --suite office            the office tasks in evals/office instead of the core quests:
+//                             each has an answer key, gets one try, and its cost is recorded
+//   --runs <n>                run each task this many times (default 1)
+//   --budget <dollars>        stop when the run has cost this much
+//   --quests a,b              only these quests
 //   --web                     also run research, which needs the internet
 //   --save                    save this result as the new baseline
 //   --minutes <n>             time allowed per quest (default 15)
@@ -93,6 +97,7 @@ interface Task {
   repo?: boolean;
   web?: boolean;
 }
+const OFFICE_DIR = path.join(ROOT, "evals", "office");
 const TASKS: Task[] = [
   { template: "changelog", bot: "margo", inputs: {}, repo: true },
   { template: "add-tests", bot: "rivet", inputs: { file: "src/slug.mjs", command: "node --test" }, repo: true },
@@ -118,26 +123,37 @@ async function main() {
   store.saveConfig({ model, projects: [repo], approvalMode: "auto", budget: { steps: 40 } });
   await import("../src/local/server.ts"); // wires the engine and the quest runner, without starting the web server
   const { quests, questStore } = await import("../src/local/quests.ts");
-  const { findTemplate } = await import("../src/local/templates.ts");
+  const { findTemplate, loadTemplatesFrom } = await import("../src/local/templates.ts");
   const { loadCrew } = await import("../src/local/crew.ts");
   const { resolveModel } = await import("../src/local/models.ts");
   const label = resolveModel(store.getConfig(), model).label;
 
   const only = option("quests")?.split(",");
-  const tasks = TASKS.filter((t) => (!only || only.includes(t.template)) && (!t.web || flag("web")));
+  const office = option("suite") === "office";
+  const officeTemplates = office ? loadTemplatesFrom(OFFICE_DIR) : [];
+  const all: Task[] = office ? officeTemplates.map((t) => ({ template: t.id, bot: t.bot, inputs: {} })) : TASKS;
+  const runs = Math.max(1, Math.round(Number(option("runs") ?? 1)) || 1);
+  const budget = Number(option("budget") ?? 0) || 0;
+  const tasks = all.filter((t) => (!only || only.includes(t.template)) && (!t.web || flag("web"))).flatMap((t) => Array.from({ length: runs }, () => t));
   const minutes = Number(option("minutes") ?? 15);
-  console.log(`Quest test suite · ${label} · ${tasks.length} quests\n`);
+  console.log(`${office ? "Office task suite" : "Quest test suite"} · ${label} · ${tasks.length / runs} ${office ? "tasks" : "quests"}${runs > 1 ? ` × ${runs} runs` : ""}\n`);
 
   const results = [];
+  let spent = 0;
   for (const task of tasks) {
-    const template = findTemplate(task.template);
+    if (budget && spent >= budget) {
+      console.log(`Stopped: the run has cost $${spent.toFixed(2)}, which reaches the budget of $${budget.toFixed(2)}.`);
+      break;
+    }
+    const template = office ? officeTemplates.find((t) => t.id === task.template)! : findTemplate(task.template);
     // The starter bot, on the model under test, allowed to work without asking (this is a sandbox).
     const starter = loadCrew(repo).bots.find((b) => b.id === task.bot)!;
     const bot = { ...starter, model, approvals: "auto" as const, budget: { steps: 40 } };
     const started = Date.now();
     let outcome: { passed: boolean; tries: number; steps: number; cost: number; detail: string };
     try {
-      const quest = await quests.startTemplate({ template, bot, given: task.inputs, project: task.repo ? repo : undefined });
+      // An office task gets one try: a second try after a failed answer key would not be a fair measure.
+      const quest = await quests.startTemplate({ template, bot, given: task.inputs, project: task.repo ? repo : undefined, maxTries: office ? 0 : 2 });
       let q = questStore.get(quest.id)!;
       while (Date.now() - started < minutes * 60_000) {
         q = questStore.get(quest.id)!;
@@ -160,16 +176,18 @@ async function main() {
       outcome = { passed: false, tries: 0, steps: 0, cost: 0, detail: `could not start: ${(err as Error).message}` };
     }
     const seconds = Math.round((Date.now() - started) / 1000);
+    spent += outcome.cost;
     results.push({ quest: task.template, ...outcome, seconds });
-    console.log(`${outcome.passed ? "✓" : "✕"} ${template.name.padEnd(22)} ${outcome.passed ? (outcome.tries ? `passed after ${outcome.tries} fix${outcome.tries === 1 ? "" : "es"}` : "passed first time") : outcome.detail}  · ${outcome.steps} steps · ${seconds}s`);
+    console.log(`${outcome.passed ? "✓" : "✕"} ${template.name.padEnd(office ? 42 : 22)} ${outcome.passed ? (outcome.tries ? `passed after ${outcome.tries} fix${outcome.tries === 1 ? "" : "es"}` : "passed first time") : outcome.detail}  · ${outcome.steps} steps · ${seconds}s${office ? ` · $${outcome.cost.toFixed(4)}` : ""}`);
   }
 
   // A quest passed first time scores 1; after fixes, a little less; not at all, 0.
   const score = results.reduce((n, r) => n + (r.passed ? 1 - 0.15 * r.tries : 0), 0);
-  const result = { model, label, score: Math.round(score * 100) / 100, out_of: results.length, at: new Date().toISOString(), results };
-  const baselineFile = path.join(BASELINES, `${model.replace(/[^a-z0-9.-]+/gi, "_")}.json`);
+  const cost = Math.round(results.reduce((n, r) => n + r.cost, 0) * 10000) / 10000;
+  const result = { model, label, suite: office ? "office" : "core", runs, score: Math.round(score * 100) / 100, out_of: results.length, cost, at: new Date().toISOString(), results };
+  const baselineFile = path.join(BASELINES, `${model.replace(/[^a-z0-9.-]+/gi, "_")}${office ? ".office" : ""}.json`);
   const baseline = fs.existsSync(baselineFile) ? JSON.parse(fs.readFileSync(baselineFile, "utf8")) : null;
-  console.log(`\nScore: ${result.score} of ${result.out_of}${baseline ? ` (baseline ${baseline.score} of ${baseline.out_of}, ${baseline.at.slice(0, 10)})` : " (no baseline yet)"}`);
+  console.log(`\nScore: ${result.score} of ${result.out_of}${baseline ? ` (baseline ${baseline.score} of ${baseline.out_of}, ${baseline.at.slice(0, 10)})` : " (no baseline yet)"}${office ? ` · cost $${cost.toFixed(4)}` : ""}`);
   if (process.env.TALQAVA_EVAL_JSON) fs.writeFileSync(process.env.TALQAVA_EVAL_JSON, JSON.stringify(result, null, 2));
   if (flag("save")) {
     fs.mkdirSync(BASELINES, { recursive: true });

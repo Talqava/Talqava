@@ -61,6 +61,42 @@ export function missingFrom(text: string, items: string[]): string[] {
   });
 }
 
+/** The text with markdown emphasis removed and spaces evened out, for matching an answer key. */
+function plain(text: string): string {
+  return text.replace(/[*_`]/g, "").replace(/[ \t\u00a0]+/g, " ").toLowerCase();
+}
+
+/** Whether a text contains a key entry. An entry may list accepted spellings separated by "|". Ids ending in a digit must not run on into a longer number. */
+export function hasPoint(text: string, entry: string): boolean {
+  const lower = plain(text);
+  return entry
+    .split("|")
+    .map((alt) => alt.trim().toLowerCase())
+    .filter(Boolean)
+    .some((alt) => {
+      let from = 0;
+      for (;;) {
+        const at = lower.indexOf(alt, from);
+        if (at === -1) return false;
+        const before = lower[at - 1] ?? " ";
+        const after = lower[at + alt.length] ?? " ";
+        // "500" is not found inside "1,500" or "5000", nor "INV-104" inside "INV-1041".
+        const digitBefore = /\d/.test(before) || (/[.,]/.test(before) && /\d/.test(lower[at - 2] ?? ""));
+        const runsOn = (/\d$/.test(alt) && /\d/.test(after)) || (/^\d/.test(alt) && digitBefore);
+        if (!runsOn) return true;
+        from = at + 1;
+      }
+    });
+}
+
+/** The keys of an answer key of pairs whose value is not on the same line as the key. */
+export function wrongPairs(text: string, pairs: Record<string, string>): string[] {
+  const lines = plain(text).split("\n");
+  return Object.entries(pairs)
+    .filter(([key, value]) => !lines.some((line) => hasPoint(line, key) && hasPoint(line, value)))
+    .map(([key]) => key);
+}
+
 function runCommand(command: string, cwd: string, timeoutMs: number): Promise<{ code: number | null; output: string }> {
   // Like the shell tool: no app keys or password in the environment.
   const env = { ...process.env };
@@ -120,6 +156,32 @@ export async function runChecks(ctx: CheckContext): Promise<CheckResult> {
       label: `Cites at least ${check.links} sources`,
       passed: sources.length >= check.links,
       detail: `${sources.length} found${sources.length ? `: ${sources.slice(0, 6).join(", ")}` : ""}.`,
+    });
+  }
+  // Answer keys. What is missing or wrong is counted, never named, so a second try cannot copy the key.
+  if (check.mentions?.length) {
+    const found = check.mentions.filter((entry) => hasPoint(`${reply}\n${added}`, entry)).length;
+    items.push({
+      label: `Contains all ${check.mentions.length} expected point${check.mentions.length === 1 ? "" : "s"}`,
+      passed: found === check.mentions.length,
+      detail: `${found} of ${check.mentions.length} found.`,
+    });
+  }
+  if (check.pairs && Object.keys(check.pairs).length) {
+    const total = Object.keys(check.pairs).length;
+    const wrong = wrongPairs(`${reply}\n${added}`, check.pairs).length;
+    items.push({
+      label: `Gives the right answer for all ${total} item${total === 1 ? "" : "s"}`,
+      passed: wrong === 0,
+      detail: `${total - wrong} of ${total} right. Give each item on its own line with its answer.`,
+    });
+  }
+  if (check.avoids?.length) {
+    const included = check.avoids.filter((entry) => hasPoint(`${reply}\n${added}`, entry)).length;
+    items.push({
+      label: "Leaves out what does not belong",
+      passed: included === 0,
+      detail: included ? `${included} thing${included === 1 ? "" : "s"} in the answer should not be there. Give only what was asked for.` : undefined,
     });
   }
   // The command runs last, after the other checks have looked at the files.

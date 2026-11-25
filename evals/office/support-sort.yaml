@@ -1,0 +1,39 @@
+# An office test task. The agent sorts twelve support messages into four
+# categories. Each message has one clearly right category.
+name: Sort support messages
+summary: Twelve customer messages, each put in the right category.
+bot: dusk
+prompt: |
+  Sort each customer message below into exactly one of these categories:
+  - billing: about charges, invoices, refunds or payment methods
+  - bug: something in the product is broken or shows an error
+  - how-to: a question about how to do something that works as intended
+  - account: signing in, passwords, email address or closing the account
+  Reply with one line per message in this form and nothing else: T-01: category
+
+  T-01: I was charged twice for my subscription this month.
+  T-02: The export button gives a blank file every time I click it.
+  T-03: How do I add a second person to my team?
+  T-04: I can't sign in, it says my password is wrong and the reset email never arrives.
+  T-05: Can I get an invoice with our company's tax number on it?
+  T-06: Where do I change the currency shown on my reports?
+  T-07: The app shows "Error 500" when I open the calendar.
+  T-08: Please change the email address on my login to my new work address.
+  T-09: I'd like a refund for the annual plan I bought yesterday by mistake.
+  T-10: Is there a way to schedule a report to send every Monday?
+  T-11: Search results show the same customer three times since yesterday's update.
+  T-12: I want to close my account and delete my login.
+check:
+  pairs:
+    "T-01": "billing"
+    "T-02": "bug"
+    "T-03": "how-to|how to|howto"
+    "T-04": "account"
+    "T-05": "billing"
+    "T-06": "how-to|how to|howto"
+    "T-07": "bug"
+    "T-08": "account"
+    "T-09": "billing"
+    "T-10": "how-to|how to|howto"
+    "T-11": "bug"
+    "T-12": "account"

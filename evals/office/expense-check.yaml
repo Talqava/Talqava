@@ -1,0 +1,32 @@
+# An office test task. The agent checks an expense claim against a written
+# policy. Three of six lines break it; the other three must be left out.
+name: Check an expense claim against the policy
+summary: The lines of an expense claim that break the written policy.
+bot: tally
+prompt: |
+  Check the expense claim below against our expenses policy. Tell me which lines break the policy and which rule each one breaks.
+  List only the lines that break the policy, one per line, starting with the line's number. Do not mention the lines that are allowed.
+
+  EXPENSES POLICY
+  - Meals: up to 40 per person per day.
+  - Hotels: up to 160 per night.
+  - Taxis: allowed only with a receipt.
+  - Alcohol: never paid for.
+  - Train travel: standard class only.
+
+  CLAIM, two-day client visit, one person
+  EXP-01, Train, standard class return, 86.00, receipt attached
+  EXP-02, Hotel, one night, 195.00, receipt attached
+  EXP-03, Dinner, day one, 38.50, receipt attached
+  EXP-04, Bottle of wine at the hotel bar, 28.00, receipt attached
+  EXP-05, Lunch, day two, 14.20, receipt attached
+  EXP-06, Taxi from the station to the client, 22.00, no receipt
+check:
+  mentions:
+    - "EXP-02"
+    - "EXP-04"
+    - "EXP-06"
+  avoids:
+    - "EXP-01"
+    - "EXP-03"
+    - "EXP-05"
