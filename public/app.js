@@ -4847,6 +4847,7 @@ function receiptText(r) {
   out.push("", "EVERY PART");
   for (const l of r.lines) {
     out.push(`  ${l.agent} · ${KINDS[l.kind] || l.kind}${l.from ? ` from ${l.from}` : ""} · ${STATUS_WORDS[l.status] || l.status} · ${money(l.cost)} · ${l.model}`, `    ${l.title.replace(/\s+/g, " ").slice(0, 160)}`);
+    for (const x of l.calls ?? []) out.push(`    step: ${x.model}${x.backup ? " (backup)" : ""}, ${Math.round(x.ms / 100) / 10} s${x.cost !== undefined ? `, ${money(x.cost)}` : ""}`);
     for (const a of l.actions) out.push(`    ${a.ok ? "done    " : "NOT DONE"} ${NAMES[a.name] || a.name}: ${String(summarize(a.name, a.input)).replace(/\s+/g, " ").slice(0, 140)}${a.error ? ` (${a.error.replace(/\s+/g, " ").slice(0, 140)})` : ""}`);
   }
   return out.join("\n");
@@ -4931,6 +4932,7 @@ async function renderReceipt(q) {
             l.actions.length
               ? h("ol", { class: "racts" }, l.actions.map((a) => h("li", { class: a.ok ? "" : "bad" }, h("span", { class: "rmark" }, a.ok ? "Done" : "Not done"), h("b", {}, NAMES[a.name] || a.name), h("span", { class: "grow" }, String(summarize(a.name, a.input)).replace(/\s+/g, " ").slice(0, 200)), a.error ? h("em", {}, a.error.replace(/\s+/g, " ")) : null)))
               : h("p", { class: "note small" }, "No actions: the agent only wrote its answer."),
+            l.calls?.length ? stepsTable(l.calls) : null,
             l.pages?.length ? h("div", { class: "rpages" }, h("span", { class: "label" }, "Workspace pages"), l.pages.map((p) => h("button", { class: "plain small", onclick: () => openPage(p.page) }, `${p.title} (${p.how.map((x) => ({ read: "read", found: "found", changed: "changed", suggested: "suggested a change", filed: "saved here" })[x] ?? x).join(", ")})`))) : null,
             l.said ? h("div", { class: "rsaid" }, h("span", { class: "label" }, "Its report"), l.said) : null,
             l.id !== q.id ? h("button", { class: "plain small", onclick: () => go("quest", l.id) }, "Open this part →") : null,
@@ -4938,6 +4940,24 @@ async function renderReceipt(q) {
         ),
       ),
       h("p", { class: "note small" }, "Costs are estimated from each model's list price, the same way as everywhere else in the app."),
+    ),
+  );
+}
+
+/** A part's model calls: which model answered each, how long it took and what it cost. Backups are marked. */
+function stepsTable(steps) {
+  const secs = (ms) => (ms < 1000 ? "under a second" : ms < 60_000 ? `${Math.round(ms / 1000)} s` : `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} s`);
+  const models = new Set(steps.map((x) => x.model));
+  const total = steps.reduce((n, x) => n + x.ms, 0);
+  return h(
+    "details",
+    { class: "rsteps" },
+    h("summary", {}, `${steps.length} step${steps.length === 1 ? "" : "s"} · ${secs(total)} thinking${models.size > 1 ? ` · ${models.size} models` : ` · ${[...models][0]}`}${steps.some((x) => x.backup) ? " · a backup answered" : ""}`),
+    h(
+      "table",
+      { class: "rsteptable" },
+      h("thead", {}, h("tr", {}, h("th", {}, "Step"), h("th", {}, "Model"), h("th", {}, "Time"), h("th", {}, "Cost"))),
+      h("tbody", {}, steps.map((x, i) => h("tr", {}, h("td", {}, String(i + 1)), h("td", {}, x.model, x.backup ? h("span", { class: "tag warn" }, "backup") : null), h("td", {}, secs(x.ms)), h("td", {}, x.cost !== undefined ? money(x.cost) : "")))),
     ),
   );
 }
@@ -6206,6 +6226,7 @@ function settingsView() {
   const savings = select([["off", "Off: every agent uses my model"], ["balanced", "On: match the model to the work"]], c.savings ?? "off");
   const checkFirst = select([["on", "Check first, and ask me if something is missing"], ["off", "Start straight away"]], c.checkFirst === false ? "off" : "on");
   const privacy = select([["off", "Off: send conversations as they are"], ["mask", "On: hide email addresses, phone and card numbers"]], c.privacy ?? "off");
+  const moveUp = select([["on", "On: try once with a stronger model I set up"], ["off", "Off: stop and leave a hand-over note"]], c.moveUp === false ? "off" : "on");
   const planFirst = select([["leads", "Tasks I give to a lead: plan first, for my approval"], ["all", "Every task I give: plan first, for my approval"], ["never", "Never: start straight away"]], c.planFirst ?? "leads");
   const mode = select(
     [
@@ -6256,7 +6277,7 @@ function settingsView() {
         class: "form",
         onsubmit: (e) => (
           e.preventDefault(),
-          save({ agentName: name.value, model: ref(), effort: effort.value, savings: savings.value, checkFirst: checkFirst.value === "on", planFirst: planFirst.value, privacy: privacy.value, approvalMode: mode.value, budget: { steps: Number(steps.value), spend: spend.value === "" ? null : Number(spend.value) } })
+          save({ agentName: name.value, model: ref(), effort: effort.value, savings: savings.value, checkFirst: checkFirst.value === "on", planFirst: planFirst.value, privacy: privacy.value, moveUp: moveUp.value === "on", approvalMode: mode.value, budget: { steps: Number(steps.value), spend: spend.value === "" ? null : Number(spend.value) } })
         ),
       },
       h("label", {}, "Name", name),
@@ -6273,6 +6294,8 @@ function settingsView() {
       h("p", { class: "note small" }, "With plans on, the agent first looks into the task and sends you a plan: the steps, who does each, and its cost estimate. It changes nothing and hands nothing on until you approve it, or ask for changes. A lead is an agent with people reporting to it."),
       h("p", { class: "note small" }, "With this on, an agent first checks it has what your task needs (information, a repository, documents, access). If something is missing, it asks you in your Inbox instead of spending money guessing. The check costs a few cents at most and shows on the receipt."),
       h("p", { class: "note small" }, "With cost saving on, and Claude Opus or Fable as your model: managers who plan and check keep your model, team members doing their own part use Claude Sonnet 5.5 (about half the price), and quick questions between agents use Claude Haiku 5.5 (about a fortieth). An agent you gave a model of its own keeps it. Off uses your model for everything."),
+      h("label", {}, "When a task gets stuck", moveUp),
+      h("p", { class: "note small" }, "Stuck means trying the same step again and again, or every step failing. With this on, the task first carries on once with the strongest model you set up (your team's model or a backup) that costs clearly more than the one in use, within the same budget. A model on this computer never moves up to one online. The receipt shows which model did each step."),
       h("label", {}, "Privacy: hide personal details from AI services", privacy),
       h("p", { class: "note small" }, "With this on, email addresses, phone numbers, card numbers and US Social Security numbers are replaced with placeholders such as [EMAIL 1] before anything is sent to an AI service, and put back in the answer, so an agent can still email the right person. Your chats keep the real details. It doesn't catch names, street addresses or details inside pictures, and models on this computer send nothing out, so they see everything."),
       h("label", {}, "Approvals", mode),

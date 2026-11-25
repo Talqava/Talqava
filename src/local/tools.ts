@@ -32,7 +32,7 @@ import { workspacePrompt, workspaceTool } from "./workspace.ts";
 import { goalsPrompt } from "./goals.ts";
 import { structureOf } from "./structures.ts";
 import { WORKSPACE, conversations, getConfig, memory, skills, spaces } from "./store.ts";
-import { resolveModel } from "./models.ts";
+import { resolveModel, strongerThan } from "./models.ts";
 import { connectorTools } from "./connectors.ts";
 import { browserAvailable, browserTool } from "./browser.ts";
 
@@ -717,6 +717,8 @@ export function localRunSpec(jobs: JobBook) {
         cautionAfter: [...CAUTION_TOOLS, ...linked.names],
         // The task and what is handed on from it share one budget, checked before every step.
         remaining: () => shareLeft(quest.id),
+        // Stuck, it tries once with a stronger model the owner set up, before stopping.
+        stronger: strongerThan(cfg, model),
       };
     }
 

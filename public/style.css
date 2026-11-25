@@ -1795,3 +1795,11 @@ dialog.guidedialog::backdrop { background: var(--scrim); }
 .plansteps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
 .plancard p { margin: 0; }
 .stopbanner { display: flex; gap: 12px; align-items: center; }
+
+/* A receipt part's model calls. */
+.rsteps { margin: 8px 0; }
+.rsteps summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
+.rsteptable { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12.5px; }
+.rsteptable th, .rsteptable td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.rsteptable th { font-weight: 600; color: var(--muted); }
+.rsteptable .tag { margin-left: 6px; }

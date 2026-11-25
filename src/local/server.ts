@@ -315,6 +315,7 @@ async function updateSettings(body: any) {
   if (typeof body.assistantSeesGroups === "boolean") patch.assistantSeesGroups = body.assistantSeesGroups;
   if (["leads", "all", "never"].includes(body.planFirst)) patch.planFirst = body.planFirst;
   if (body.privacy === "off" || body.privacy === "mask") patch.privacy = body.privacy;
+  if (typeof body.moveUp === "boolean") patch.moveUp = body.moveUp;
   if (["ask", "auto"].includes(body.approvalMode)) patch.approvalMode = body.approvalMode;
   if (typeof body.apiKey === "string") patch.apiKey = body.apiKey.trim();
 
@@ -551,6 +552,11 @@ function receiptOf(rootId: string) {
       output: conversation?.usage.output ?? 0,
       cached: conversation?.usage.cached ?? 0,
       saved: conversation?.usage.saved ?? 0,
+      // Each model call: which model answered (a backup is marked), how long it took, and its cost.
+      calls: journal
+        .read(quest.id)
+        .filter((e) => e.type === "assistant" && e.step)
+        .map((e) => ({ at: e.at, ...(e.step as { model: string; backup?: boolean; ms: number; cost?: number }) })),
       startedAt: quest.createdAt,
       endedAt: open ? null : quest.updatedAt,
       actions,

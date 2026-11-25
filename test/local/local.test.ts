@@ -2630,3 +2630,14 @@ test("Google Vertex AI connects with a service account key file and signs in wit
     server.close();
   }
 });
+
+test("a stuck task moves up only to a clearly stronger model the owner set up, never from this computer to online", async () => {
+  const { resolveModel, strongerThan } = await import("../../src/local/models.ts");
+  const cfg = { ...store.getConfig(), model: "anthropic/claude-opus-5-5", backups: [], privacy: "off" as const };
+  const haiku = resolveModel(cfg, "anthropic/claude-haiku-5-5");
+  assert.equal(strongerThan(cfg, haiku)?.ref, "anthropic/claude-opus-5-5");
+  // Already the strongest, or a model on this computer, or switched off: no move.
+  assert.equal(strongerThan(cfg, resolveModel(cfg, "anthropic/claude-opus-5-5")), undefined);
+  assert.equal(strongerThan(cfg, resolveModel(cfg, "local/qwen3:4b")), undefined);
+  assert.equal(strongerThan({ ...cfg, moveUp: false }, haiku), undefined);
+});

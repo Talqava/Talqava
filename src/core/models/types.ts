@@ -45,6 +45,8 @@ export interface ModelReply {
   content: ContentBlock[];
   stopReason: StopReason;
   usage: ModelUsage;
+  /** Which model answered, when it was not the one asked (a backup took over). */
+  answeredBy?: string;
 }
 
 export interface Model {
