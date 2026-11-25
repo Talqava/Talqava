@@ -3909,7 +3909,7 @@ async function wordpressPage(col, again) {
     return h(
       "div",
       { class: "card form" },
-      h("div", { class: "row" }, h("div", { class: "grow" }, h("b", {}, site.name), h("div", { class: "note small" }, `${site.url.replace(/^https?:\/\//, "")} · signed in as ${site.user}`)), h("span", { class: "chip on" }, "Connected")),
+      h("div", { class: "row" }, h("div", { class: "grow" }, h("b", {}, site.name), h("div", { class: "note small" }, `${site.url.replace(/^https?:\/\//, "")} · signed in as ${site.user}${site.via === "xmlrpc" ? " · connected through WordPress's older entrance, because the web host drops the usual sign-in" : ""}`)), h("span", { class: "chip on" }, "Connected")),
       h("label", {}, "What agents may do on this site", rule),
       h("p", { class: "note small" }, "With drafts only, nothing an agent writes is public until you publish it in WordPress. Agents never delete posts or pages, and WordPress keeps earlier versions under Revisions."),
       h("div", { class: "label" }, "Recent posts"),

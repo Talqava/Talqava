@@ -120,3 +120,76 @@ test("when the host drops the sign-in details, the owner is told what to do on t
     dropping.close();
   }
 });
+
+test("when the host drops the sign-in details, Talqava uses WordPress's other entrance, and agents work the same", async () => {
+  // A site whose host strips the Authorization header: the REST API never sees a sign-in, XML-RPC carries it inside.
+  const items = new Map<number, any>([[3, { post_id: "3", post_title: "Old news", post_status: "publish", link: "https://shop.example/old-news", post_modified: "20261120T10:00:00", post_content: "<p>Fish &amp; chips</p>" }]]);
+  let next = 20;
+  const seen: { method: string; fields: Record<string, string> }[] = [];
+  const val = (v: any): string => (Array.isArray(v) ? `<value><array><data>\n${v.map(val).join("\n")}\n</data></array></value>` : v && typeof v === "object" ? `<value><struct>\n${Object.entries(v).map(([k, x]) => `  <member><name>${k}</name>${k === "post_modified" ? `<value><dateTime.iso8601>${x}</dateTime.iso8601></value>` : val(x)}</member>`).join("\n")}\n</struct></value>` : typeof v === "boolean" ? `<value><boolean>${v ? 1 : 0}</boolean></value>` : `<value><string>${String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</string></value>`);
+  const answer = (v: any) => `<?xml version="1.0" encoding="UTF-8"?>\n<methodResponse>\n  <params>\n    <param>\n      ${val(v)}\n    </param>\n  </params>\n</methodResponse>`;
+  const fault = (code: number, why: string) => `<?xml version="1.0"?><methodResponse><fault><value><struct><member><name>faultCode</name><value><int>${code}</int></value></member><member><name>faultString</name><value><string>${why}</string></value></member></struct></value></fault></methodResponse>`;
+  const unesc = (t: string) => t.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  const older = http.createServer((req, res) => {
+    let raw = "";
+    req.on("data", (c) => (raw += c));
+    req.on("end", () => {
+      if (req.url === "/wp-json/") return (res.writeHead(200, { "content-type": "application/json" }), res.end(JSON.stringify({ name: "Corner Shop" })));
+      if (req.url !== "/xmlrpc.php") return (res.writeHead(401, { "content-type": "application/json" }), res.end(JSON.stringify({ code: "rest_not_logged_in", message: "You are not currently logged in." })));
+      assert.equal(req.headers.authorization, undefined, "nothing is sent in the header the host drops");
+      const method = /<methodName>([\w.]+)<\/methodName>/.exec(raw)![1];
+      const strings = [...raw.matchAll(/<param><value><string>(.*?)<\/string><\/value><\/param>/gs)].map((m) => unesc(m[1]));
+      const ints = [...raw.matchAll(/<param><value><int>(\d+)<\/int><\/value><\/param>/g)].map((m) => Number(m[1]));
+      const fields = Object.fromEntries([...raw.matchAll(/<member><name>(\w+)<\/name><value><(?:string|int|dateTime\.iso8601)>(.*?)<\/(?:string|int|dateTime\.iso8601)><\/value><\/member>/gs)].map((m) => [m[1], unesc(m[2])]));
+      const send = (body: string) => (res.writeHead(200, { "content-type": "text/xml" }), res.end(body));
+      if (strings[0] !== "ada" || strings[1] !== "abcd efgh ijkl mnop") return send(fault(403, "Incorrect username or password."));
+      seen.push({ method, fields });
+      if (method === "wp.getProfile") return send(answer({ user_id: "1", roles: ["editor"] }));
+      if (method === "wp.getPosts") return send(answer([...items.values()].filter((p) => !fields.s || p.post_title.toLowerCase().includes(fields.s.toLowerCase()))));
+      if (method === "wp.getPost") return items.has(ints[1]) ? send(answer(items.get(ints[1]))) : send(fault(404, "Invalid post ID."));
+      if (method === "wp.newPost") {
+        const id = next++;
+        items.set(id, { post_id: String(id), post_title: fields.post_title, post_status: fields.post_status, link: `https://shop.example/?p=${id}`, post_modified: "20261126T09:00:00", post_content: fields.post_content });
+        return send(answer(String(id)));
+      }
+      if (method === "wp.editPost") {
+        const p = items.get(ints[1]);
+        if (fields.post_title) p.post_title = fields.post_title;
+        if (fields.post_content) p.post_content = fields.post_content;
+        if (fields.post_status) p.post_status = fields.post_status;
+        return send(answer(true));
+      }
+      send(fault(-32601, "server error. requested method does not exist."));
+    });
+  });
+  await new Promise<void>((r) => older.listen(0, "127.0.0.1", r));
+  const at = `http://127.0.0.1:${(older.address() as AddressInfo).port}`;
+  try {
+    await assert.rejects(W.connectSite({ url: at, user: "ada", password: "wrong" }), /WordPress refused that: Incorrect username or password/);
+    assert.deepEqual(W.listSites(), []);
+    const s = await W.connectSite({ url: at, user: "ada", password: "abcd efgh ijkl mnop", publish: "ask" });
+    assert.equal(s.name, "Corner Shop");
+    assert.equal(W.listSites()[0].via, "xmlrpc");
+
+    assert.match(await run("wordpress__content", { action: "list" }), /\[3\] Old news · publish · 2026-11-20 · https:\/\/shop\.example\/old-news/);
+    assert.equal(await run("wordpress__content", { action: "list", search: "nothing like it" }), "Nothing found.");
+    assert.match(await run("wordpress__content", { action: "read", id: 3 }), /Old news\nStatus: publish.*\n\nFish & chips/);
+    assert.match(await run("wordpress__content", { action: "draft", title: "Winter <hours> & prices", markdown: "We close at **five** in December." }), /Saved as a draft on Corner Shop: “Winter <hours> & prices” \(post 20\)\. It is not public/);
+    assert.equal(items.get(20).post_status, "draft");
+    assert.equal(items.get(20).post_title, "Winter <hours> & prices");
+    assert.equal(items.get(20).post_content, "<p>We close at <strong>five</strong> in December.</p>");
+    assert.match(await run("wordpress__content", { action: "update", id: 20, title: "Winter hours" }), /Updated “Winter hours” on Corner Shop \(status: draft\)/);
+    assert.match(await run("wordpress__publish", { id: 20 }), /Published: “Winter hours”/);
+    assert.equal(items.get(20).post_status, "publish");
+    assert.match(await run("wordpress__publish", { id: 3, when: "2031-01-02T09:00:00Z" }), /Scheduled for 2031-01-02 09:00/);
+    const last = seen.at(-2)!;
+    assert.equal(last.method, "wp.editPost");
+    assert.equal(last.fields.post_status, "future");
+    assert.equal(last.fields.post_date_gmt, "20310102T09:00:00");
+    await assert.rejects(run("wordpress__content", { action: "read", id: 99 }), /WordPress answered: Invalid post ID/);
+    assert.equal((await W.listContent(s.id))[0].title, "Old news");
+    W.removeSite(s.id);
+  } finally {
+    older.close();
+  }
+});
