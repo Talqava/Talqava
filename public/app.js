@@ -7898,6 +7898,7 @@ async function securityView() {
       ),
       sensitivitySection(true),
       guardrailsSection(true),
+      securityOpsSection(true),
     );
   }
 
@@ -8002,7 +8003,63 @@ async function securityView() {
       : null,
     sensitivitySection(admin),
     guardrailsSection(admin),
+    securityOpsSection(admin),
   );
+}
+
+/** Security › watching: alerts, access reviews, and sending the audit record to a monitoring system. */
+function securityOpsSection(canEdit) {
+  const box = h("section", { class: "isec" }, h("h2", {}, "Alerts and reviews"));
+  const draw = async () => {
+    let d;
+    try {
+      d = await api("GET", "security-ops");
+    } catch (err) {
+      return fill(box, h("h2", {}, "Alerts and reviews"), h("div", { class: "banner error" }, err.message));
+    }
+    const act = (fn, done) => attempt(async () => (await fn(), done && toast(done), draw()), box);
+    const open = d.reviews.find((r) => !r.finishedAt);
+    const last = d.reviews.find((r) => r.finishedAt);
+    const url = h("input", { type: "url", value: d.feed.url, placeholder: "https://… (the address your monitoring system gives you)", disabled: !canEdit, "aria-label": "Address to send events to" });
+    const secret = h("input", { type: "password", placeholder: d.feed.signed ? "A signing secret is set; type a new one to replace it" : "Signing secret (optional)", autocomplete: "off", disabled: !canEdit, "aria-label": "Signing secret" });
+    const line = (r, i) => {
+      const note = h("input", { value: i.note, placeholder: "Note (optional)", "aria-label": `Note for ${i.name}` });
+      const set = (decision) => act(() => api("PATCH", `security-ops/reviews/${r.id}`, { item: i.id, decision, note: note.value }));
+      note.addEventListener("change", () => i.decision && set(i.decision));
+      return h("div", { class: "reviewline" }, h("div", { class: "grow" }, h("b", {}, i.name), h("span", { class: "note small" }, i.kind === "person" ? " · person" : " · agent"), h("div", { class: "note small" }, i.has)), h("div", { class: "row wrap" }, h("button", { class: `small ${i.decision === "keep" ? "primary" : ""}`, "aria-pressed": String(i.decision === "keep"), onclick: () => set("keep") }, "Still right"), h("button", { class: `small ${i.decision === "change" ? "primary" : ""}`, "aria-pressed": String(i.decision === "change"), onclick: () => set("change") }, "Needs a change"), note));
+    };
+    fill(
+      box,
+      h("h2", {}, "Alerts and reviews"),
+      h("div", { class: "card form" }, h("b", {}, "Worth a look, from the last 7 days"), d.alerts.length ? h("ul", { class: "refused" }, d.alerts.map((a) => h("li", {}, h("span", { class: `chip ${a.level === "high" ? "bad" : ""}` }, a.level === "high" ? "High" : "Note"), " ", a.words, h("div", { class: "note small" }, `${when(a.at)}${a.detail ? ` · ${a.detail}` : ""}`)))) : h("p", { class: "note small" }, "Nothing unusual: no run of refused sign-ins, no changes to people or rules, no agent refused again and again.")),
+      h(
+        "div",
+        { class: "card form" },
+        h("div", { class: "row wrap" }, h("div", { class: "grow" }, h("b", {}, "Access review"), h("p", { class: "note small", style: "margin: 2px 0 0" }, `Every ${d.every} days, go down the list of people and agents and confirm each still needs what it has. ${last ? `Last finished ${when(last.finishedAt)}.` : "None done yet."} ${d.due.overdue ? "One is due now." : `Next due ${new Date(d.due.next).toLocaleDateString()}.`}`)), canEdit && !open ? h("button", { class: d.due.overdue ? "primary" : "", onclick: () => act(() => api("POST", "security-ops/reviews")) }, "Start a review") : null),
+        open
+          ? [
+              h("p", { class: "note" }, `Started ${when(open.startedAt)} by ${open.startedBy}. Answer each line. Marking “Needs a change” only records it: make the change itself under People, or on the agent's page.`),
+              open.items.map((i) => line(open, i)),
+              canEdit ? h("div", { class: "row" }, h("button", { class: "primary", onclick: () => act(() => api("POST", `security-ops/reviews/${open.id}/finish`), "Review finished and recorded in the audit log.") }, "Finish the review"), h("span", { class: "note small" }, `${open.items.filter((i) => i.decision).length} of ${open.items.length} answered`)) : null,
+            ]
+          : last && last.items.some((i) => i.decision === "change")
+            ? h("div", {}, h("p", { class: "note small" }, "Marked “Needs a change” in the last review:"), h("ul", {}, last.items.filter((i) => i.decision === "change").map((i) => h("li", {}, h("b", {}, i.name), i.note ? ` · ${i.note}` : ""))))
+            : null,
+      ),
+      h(
+        "form",
+        { class: "card form", onsubmit: (e) => (e.preventDefault(), act(() => api("PUT", "security-ops/feed", { url: url.value, secret: secret.value || undefined }), url.value ? "Saved. Events are now sent as they happen." : "Stopped.")) },
+        h("b", {}, "Send every event to your monitoring system"),
+        h("p", { class: "note small" }, "Each entry of the audit log is also sent, as it is written, to an address you give (a “webhook” or “HTTP collector” in Splunk, Microsoft Sentinel, Datadog and similar). That copy is outside this computer, so it cannot be quietly changed here. With a signing secret, each delivery carries a signature your system can check."),
+        url,
+        secret,
+        d.feed.url ? h("p", { class: `note small ${d.feed.lastError ? "bad" : ""}` }, d.feed.lastError ? `Last delivery failed: ${d.feed.lastError} ${d.feed.waiting} waiting to be sent again.` : `${d.feed.sent.toLocaleString()} events sent since Talqava started${d.feed.lastSentAt ? `, the last ${when(d.feed.lastSentAt)}` : ""}.`) : null,
+        canEdit ? h("div", { class: "row wrap" }, h("button", {}, d.feed.url ? "Save" : "Start sending"), d.feed.url ? h("button", { type: "button", class: "plain danger", onclick: () => confirm("Stop sending events to your monitoring system?") && act(() => api("PUT", "security-ops/feed", { url: "" }), "Stopped.") }, "Stop sending") : null) : h("p", { class: "note small" }, "Only owners and administrators change this."),
+      ),
+    );
+  };
+  draw();
+  return box;
 }
 
 /** Security › the center: which protections are on, what needs attention, and a report to download. */

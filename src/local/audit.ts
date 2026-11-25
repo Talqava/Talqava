@@ -81,6 +81,12 @@ function readHead(): { seal: string; count: number } {
 const writeHead = (seal: string, count: number) => fs.writeFileSync(headFile(), JSON.stringify({ seal, count, mark: sealOf("head", `${seal}:${count}`) }), { mode: 0o600 });
 let head: { from: string; seal: string; count: number } | null = null;
 
+const listeners: ((entry: AuditEntry) => void)[] = [];
+/** Calls `fn` with every entry as it is written (used to send the record to a monitoring system). */
+export function onAudit(fn: (entry: AuditEntry) => void) {
+  listeners.push(fn);
+}
+
 /** Adds one line to the log. Never throws: a full disk must not stop the work being recorded. */
 export function audit(entry: Omit<AuditEntry, "at"> & { at?: string }) {
   try {
@@ -96,6 +102,11 @@ export function audit(entry: Omit<AuditEntry, "at"> & { at?: string }) {
     head.seal = seal;
     head.count++;
     writeHead(seal, head.count);
+    for (const fn of listeners) {
+      try {
+        fn({ ...(JSON.parse(body) as AuditEntry), seal } as AuditEntry);
+      } catch {}
+    }
   } catch (err) {
     console.error("The audit log could not be written:", (err as Error).message);
   }

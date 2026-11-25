@@ -6,6 +6,16 @@ import { describeGuardrails, guardrails } from "./guardrails.ts";
 import { LEVELS, LEVEL_WORDS, WHERE_WORDS, policy } from "./sensitivity.ts";
 import { verifyAudit } from "./audit.ts";
 import { isLocalRef } from "./gateway.ts";
+import { REVIEW_EVERY_DAYS, reviews } from "./auditfeed.ts";
+import { orgs } from "./orgs.ts";
+
+const orgHasAgents = () => {
+  try {
+    return orgs.active().members.length > 0;
+  } catch {
+    return false;
+  }
+};
 
 export interface Protection {
   id: string;
@@ -93,6 +103,8 @@ export function securityOverview(): { protections: Protection[]; attention: { le
   if (p.services.confidential === "approved" && !p.approved.length && cloud) attention.push({ level: "soon", words: "Confidential items may go only to approved AI services, and none is approved, so agents on outside services cannot read them.", next: "Tick the services you trust under “Sensitive information”." });
   const locked = list.filter((x) => x.locked);
   if (locked.length) attention.push({ level: "soon", words: `${locked.length} account${locked.length === 1 ? " is" : "s are"} locked after wrong passwords.`, next: "If that was not the person themselves, set a new password for them." });
+  const review = reviews.due();
+  if (review.overdue && (people.enabled() || orgHasAgents())) attention.push({ level: "soon", words: review.last ? `The last access review was finished on ${review.last.slice(0, 10)}; one is due every ${REVIEW_EVERY_DAYS} days.` : "No access review has been done yet.", next: "Start one under “Access reviews”." });
   return { protections, attention, on: protections.filter((x) => x.state === "on").length, of: protections.length };
 }
 
