@@ -81,7 +81,7 @@ const GUIDES = [
   ["organization", "Organization"],
   ["marketplace", "Marketplace"],
   ["workspace", "Workspace"],
-  ["office", "Office: Documents and Notes"],
+  ["office", "Office: Documents, Sheets and Notes"],
   ["library", "Library"],
   ["memory", "Memory"],
   ["skills", "Skills"],

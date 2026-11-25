@@ -13,7 +13,7 @@ Everything Talqava knows is stored in its data folder on your computer:
 - your organizations, positions and groups;
 - chats, tasks, their reports, receipts and the audit log;
 - memory, skills and schedules;
-- workspace pages, Office documents and notes, their history and their tables;
+- workspace pages, Office documents, sheets and notes, their history and their tables;
 - library documents, and the text read from them;
 - your settings, including API keys and sign-ins you add.
 
