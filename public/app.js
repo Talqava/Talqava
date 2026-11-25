@@ -3459,6 +3459,20 @@ async function auditView() {
   }
   if (state.view !== "audit") return;
   const again = () => auditView();
+  // Whether the record still matches its seals: nothing changed, removed or added by hand.
+  const sealBox = h("div", { role: "status" });
+  api("GET", "audit/verify")
+    .then((v) =>
+      sealBox.isConnected || state.view === "audit"
+        ? fill(
+            sealBox,
+            v.intact
+              ? h("p", { class: "note small sealok" }, h("span", { class: "chip on" }, "Record intact"), ` ${v.checked.toLocaleString()} sealed entr${v.checked === 1 ? "y" : "ies"} checked just now: none changed, removed or added by hand.${v.unsealed ? ` ${v.unsealed.toLocaleString()} older entries were written before sealing began and are not covered.` : ""}`)
+              : h("div", { class: "banner error" }, h("b", {}, "The audit record does not match its seals. "), `${v.problem?.why ?? ""}${v.problem?.at ? ` Near the entry of ${when(v.problem.at)}.` : ""} Someone or something changed the record outside Talqava. Entries after this point cannot be relied on.`),
+          )
+        : null,
+    )
+    .catch(() => {});
   const pick = (key, options, label) => h("select", { "aria-label": label, onchange: (e) => ((f[key] = e.target.value), again()) }, options.map(([v, t]) => h("option", { value: v, selected: v === f[key] }, t)));
   const who = pick("actor", [["", "Everyone"], ["owner", "You"], ["agents", "All agents"], ...bots.map((b) => [b.id, b.title || b.name])], "Who");
   const find = h("input", { type: "search", placeholder: "Search: a command, a file, a task…", value: f.q, "aria-label": "Search the audit log" });
@@ -3503,6 +3517,7 @@ async function auditView() {
 
   fill(
     col,
+    sealBox,
     h("div", { class: "row" }, h("div", { class: "grow" }, h("h1", {}, "Audit log"), h("p", { class: "lead" }, "Every operation, by you and by each agent: what was done, to what, whether it worked, and what it cost. Kept on this computer; keys and passwords are never written down.")), h("button", { onclick: csv, disabled: !data.entries.length }, "Export CSV")),
     h("div", { class: "auditfilters" }, find, who, pick("kind", AUDIT_KINDS, "Kind"), pick("since", AUDIT_SINCE, "When")),
     h("div", { class: "auditstats" }, [[String(data.total), `operation${data.total === 1 ? "" : "s"}`], [String(byAgent), "by agents"], [String(problems), "did not work"], [money(spent), "spent"]].map(([n, t]) => h("div", {}, h("b", {}, n), h("span", {}, t)))),

@@ -24,6 +24,8 @@ Click a line to open it. You see the full detail (for example the exact command 
 - **It only grows.** Lines are added, never edited. Very large logs are kept in an older file and a new one is started.
 - **Costs are estimates.** Spending is worked out from each AI service's list prices. Your AI provider's bill is the real figure.
 
+**The record is sealed.** Each entry is sealed to the one before it. At the top of the page, **Record intact** means Talqava has just checked every sealed entry and none was changed, removed or added by hand. If the record was edited outside Talqava, a red message says so and near which entry. Entries written before this feature existed are counted as "not covered". The seal's key is kept on this computer, so it shows quiet edits; it cannot stop someone with full use of this computer and the skill to forge the seal as well.
+
 ## How to…
 
 ### See what one agent did this week
@@ -68,6 +70,8 @@ Click a line to open it. You see the full detail (for example the exact command 
 - **"Showing the newest 1,000 of …"** There is more than the page shows. Narrow the filters, or export.
 - **Export CSV is greyed out.** There are no lines to export for the current filters.
 - **A red box instead of the list.** The log could not be loaded. Reopen the page; if it persists, restart Talqava.
+
+- **"The audit record does not match its seals."** The log file was changed outside Talqava: edited by hand, restored from an old copy, or damaged. Entries before the point named are still good. If you restored the data folder from a backup on purpose, that explains it.
 
 ## Related guides
 

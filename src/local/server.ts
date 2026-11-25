@@ -37,7 +37,7 @@ import { EVERYONE, ensureFolders, library, libraryFolder, removeLibrary, syncLib
 import { execFile } from "node:child_process";
 import { needsFor } from "./preflight.ts";
 import { acceptSuggestion, suggestPositions } from "./suggest.ts";
-import { audit, readAudit, redact } from "./audit.ts";
+import { audit, readAudit, redact, verifyAudit } from "./audit.ts";
 import { addKey, connect, disconnect, refreshHealth, serviceProblems, findLocal, gatewayState, listModels, setBackups, isLocalRef, memoryGb } from "./gateway.ts";
 import { board } from "./board.ts";
 import { accessGraph, accessGraphs } from "./access.ts";
@@ -1382,6 +1382,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (route === "DELETE library" && parts[1]) return send(res, 200, await attempt(async () => (await library.remove(org, Number(parts[1])), { ok: true })));
   }
 
+  if (route === "GET audit" && parts[1] === "verify") return send(res, 200, verifyAudit());
   if (route === "GET audit") {
     return send(res, 200, readAudit({ limit: Number(url.searchParams.get("limit")) || 500, actor: url.searchParams.get("actor") || undefined, kind: url.searchParams.get("kind") || undefined, q: url.searchParams.get("q") || undefined, since: url.searchParams.get("since") || undefined }));
   }
