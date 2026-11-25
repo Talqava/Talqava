@@ -628,6 +628,11 @@ export class QuestRunner {
     const org = orgs.active();
     const item = work.ofQuest(org, id);
     if (item) await work.comment(org, item.id, handoverText(handover, `the ${quest.bot.name}`), quest.bot.id).catch(() => {});
+    // The others on the task see it on the task's board too.
+    const { board } = await import("./board.ts");
+    try {
+      board.post(org, rootOf(quest), quest.bot.id, "handover", `Stopped: ${handover.why} ${handover.next}`);
+    } catch {}
   }
 
   #set(id: string, patch: Partial<Quest>) {

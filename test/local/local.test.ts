@@ -2236,3 +2236,58 @@ test("a task that stops leaves a hand-over note on the task, Try again picks up 
     orgs.remove(org0.id);
   }
 });
+
+test("succession and the task board: a stopped task goes to another agent with its note, and everyone on a task shares one board", { timeout: 40_000 }, async () => {
+  const { orgs } = await import("../../src/local/orgs.ts");
+  const market = await import("../../src/local/marketplace.ts");
+  const { work } = await import("../../src/local/work.ts");
+  const quests = await import("../../src/local/quests.ts");
+  const crewMod = await import("../../src/local/crew.ts");
+  const { board, boardPrompt, boardTool, MAX_POSTS } = await import("../../src/local/board.ts");
+  const org0 = orgs.create("Board Co", "Keep the books.", "custom");
+  const made: string[] = [];
+  try {
+    market.addTeam("finance-team");
+    const org = orgs.active();
+    const stamp = new Date().toISOString();
+    const lead = crewMod.loadCrew().bots.find((b) => b.id === "head-of-finance")!;
+    const keeper = crewMod.loadCrew().bots.find((b) => b.id === "bookkeeper")!;
+    const up = { id: "a".repeat(15) + "2", title: "Close November", bot: lead, status: "running" as const, steps: 0, createdAt: stamp, updatedAt: stamp };
+    const down = { id: "b".repeat(15) + "2", title: "Reconcile cards", bot: keeper, status: "running" as const, steps: 0, parent: { id: up.id, by: "Head of Finance", delivered: false }, depth: 1, createdAt: stamp, updatedAt: stamp };
+    for (const q of [up, down]) (quests.questStore.save(q), made.push(q.id));
+
+    // One board for the task and the part handed on from it: what one posts, the other reads.
+    const ctx = (id: string) => ({ signal: new AbortController().signal, conversation: { id, messages: [] } as unknown as Conversation });
+    assert.match(String(await boardTool.run({ action: "post", kind: "finding", text: "Three card payments have no receipt." }, ctx(down.id))), /Posted to the task's board as a finding/);
+    assert.match(String(await boardTool.run({ action: "read" }, ctx(up.id))), /Finding from the Bookkeeper: Three card payments have no receipt\./);
+    board.post(org, up.id, "owner", "decision", "Leave the November card fees for December.");
+    assert.match(boardPrompt(org, down.id), /The board so far[\s\S]*Finding from the Bookkeeper[\s\S]*Decision from the owner: Leave the November card fees/);
+    await assert.rejects(async () => boardTool.run({ action: "post", text: "ok" }, ctx(down.id)), /Write the note/);
+    await assert.rejects(async () => boardTool.run({ action: "read" }, ctx("c".repeat(16))), /belongs to a task/);
+    for (let i = board.list(org, up.id).length; i < MAX_POSTS; i++) board.post(org, up.id, "owner", "note", `Note ${i}`);
+    assert.throws(() => board.post(org, up.id, "owner", "note", "One more"), /board is full/);
+
+    // Succession: a task that stopped can be given to another agent, who starts from the brief and its hand-over note.
+    const item = work.create(org, { title: "Chase late invoices", description: "Chase the invoices more than 30 days late.", owner: "invoice-chaser", createdBy: "owner" });
+    const stopped = { id: "d".repeat(15) + "2", title: "Chase late invoices", bot: crewMod.loadCrew().bots.find((b) => b.id === "invoice-chaser")!, status: "failed" as const, steps: 4, stop: "repeat" as const, createdAt: stamp, updatedAt: stamp };
+    quests.questStore.save(stopped);
+    made.push(stopped.id);
+    const { openOrgDb } = await import("../../src/local/library.ts");
+    openOrgDb(org.id).prepare("update work_items set quest = ?, state = 'started' where id = ?").run(stopped.id, item.id);
+    await work.comment(org, item.id, "Hand-over note from the Accounts Receivable Specialist. Stopped: it tried the same step a third time.", "invoice-chaser");
+    assert.equal(work.get(org, item.id).status, "blocked");
+    const moved = work.update(org, item.id, { owner: "bookkeeper" });
+    assert.equal(moved.owner, "bookkeeper");
+    assert.equal(moved.quest, null);
+    assert.equal(moved.status === "todo" || moved.status === "working", true);
+    const said = work.comments(org, item.id).map((c: { text: string }) => c.text).join("\n");
+    assert.match(said, /Given to the Bookkeeper, from the Accounts Receivable Specialist\. Pick up from the hand-over note above/);
+    // A task still working cannot be moved; it must be stopped first.
+    quests.questStore.save({ ...stopped, status: "running" });
+    openOrgDb(org.id).prepare("update work_items set quest = ?, state = 'started', owner = 'invoice-chaser' where id = ?").run(stopped.id, item.id);
+    assert.throws(() => work.update(org, item.id, { owner: "bookkeeper" }), /working now\. Stop it first/);
+  } finally {
+    for (const id of made) quests.questStore.remove(id);
+    orgs.remove(org0.id);
+  }
+});

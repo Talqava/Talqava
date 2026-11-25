@@ -21,6 +21,7 @@ import {
   setting,
 } from "../core/index.ts";
 import type { Bot, Conversation, JobBook, Power, RunSpec, Tool } from "../core/index.ts";
+import { boardPrompt, boardTool } from "./board.ts";
 import { MAX_DEPTH, MAX_OPEN_HANDOFFS, chainBudget, chainCost, chainOf, chainOver, questStore, quests, rootOf, whyPrompt } from "./quests.ts";
 import { propose } from "./proposals.ts";
 import { loadCrew } from "./crew.ts";
@@ -641,7 +642,9 @@ export function localRunSpec(jobs: JobBook) {
       // Why the task exists, from the mission down: so a hand-off three levels deep still knows what it is for.
       const why = question ? "" : whyPrompt(quest);
       // Whoever may hand work to someone gets assign_task; every member can ask a colleague and use the shared memory.
-      const teamwork = !onChart ? [] : question ? [teamMemory, libraryForAgents, workspaceForAgents] : teamworkTools(org, bot.id);
+      // Every agent on a task, and on the parts handed on from it, shares the task's board.
+      const teamwork = !onChart ? [boardTool] : question ? [teamMemory, libraryForAgents, workspaceForAgents, boardTool] : [...teamworkTools(org, bot.id), boardTool];
+      const shared = question ? "" : boardPrompt(org, quest.id);
       if (question) {
         // Answering a colleague is a small job, so it is run as one: a short prompt with only who the agent is and
         // what the organization knows, the two look-up tools, low effort and a few steps. This is what keeps a
@@ -670,7 +673,7 @@ export function localRunSpec(jobs: JobBook) {
       }
       return {
         model,
-        system: `${localPrompt(root, bot.name, [...where, ...linked.note], conversation)}\n\n${botPrompt(bot)}${role ? `\n\n${role}` : ""}${why ? `\n\n${why}` : ""}${remembered ? `\n\n${remembered}` : ""}`,
+        system: `${localPrompt(root, bot.name, [...where, ...linked.note], conversation)}\n\n${botPrompt(bot)}${role ? `\n\n${role}` : ""}${why ? `\n\n${why}` : ""}${remembered ? `\n\n${remembered}` : ""}${shared ? `\n\n${shared}` : ""}`,
         tools: [...(await botTools(bot, root, jobs, claude)), ...teamwork, ...linked.tools],
         hostedTools: claude && bot.powers.includes("web") ? HOSTED_WEB : [],
         // Connectors are reached from this machine (see connectors.ts), so every model can use them.

@@ -39,6 +39,7 @@ import { needsFor } from "./preflight.ts";
 import { acceptSuggestion, suggestPositions } from "./suggest.ts";
 import { audit, readAudit, redact } from "./audit.ts";
 import { connect, disconnect, findLocal, gatewayState, listModels, setBackups } from "./gateway.ts";
+import { board } from "./board.ts";
 import { finishOpenRouterSignIn, openrouterIntegration, openrouterModels, removeOpenRouter, saveOpenRouterKey, startOpenRouterSignIn, useOpenRouterModel } from "./openrouter.ts";
 import { autoSetupGit, cloneRepository, disconnectRepository, gitIntegration, githubAccounts, githubRepos, installGit, listIntegrations, pollGithubSignIn, removeGitIntegration, startGithubSignIn, testGithub } from "./integrations.ts";
 import { ASSIGN_RULES, INDUSTRIES, REQUEST_RULES, STRUCTURES, seatsFor } from "./structures.ts";
@@ -158,7 +159,7 @@ function describeRequest(method: string, parts: string[], body: any, url: URL): 
   const words = (b: unknown) => JSON.stringify(redact(b ?? {})).slice(0, 400);
   if (area === "login") return { kind: "settings", action: "Signed in" };
   if (area === "quests" && !id && method === "POST") return null; // the route records it, knowing whether the task started
-  if (area === "quests" && id) return { kind: "task", task: id, action: action === "stop" ? "Stopped a task" : action === "escalate" ? "Handed a task to Claude" : action === "accept" ? "Kept a task's changes" : action === "undo" ? "Undid a task's changes" : method === "DELETE" ? "Deleted a task" : `${method} task ${action ?? ""}`.trim() };
+  if (area === "quests" && id) return { kind: "task", task: id, action: action === "stop" ? "Stopped a task" : action === "board" ? "Posted to a task's board" : action === "escalate" ? "Handed a task to Claude" : action === "accept" ? "Kept a task's changes" : action === "undo" ? "Undid a task's changes" : method === "DELETE" ? "Deleted a task" : `${method} task ${action ?? ""}`.trim() };
   if (area === "conversations") {
     if (action === "messages") return { kind: "chat", task: id, action: questStore.get(id) ? "Replied to an agent" : "Sent a chat message", detail: String(body.text ?? "").slice(0, 300) };
     if (action === "approvals") return null; // the agent's event records the decision
@@ -908,7 +909,16 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
         throw new HttpError(409, (err as Error).message);
       }
     };
-    if (!action && req.method === "GET") return send(res, 200, { ...questSummary(quest), journal: journal.read(id) });
+    // One task: everything about it, its journal, and the shared board of the task tree it belongs to.
+    if (!action && req.method === "GET") return send(res, 200, { ...questSummary(quest), journal: journal.read(id), board: board.list(orgs.active(), rootOf(quest)) });
+    // The owner posts to that board: the agents on the task see it when they next read it or start.
+    if (action === "board" && req.method === "POST") {
+      try {
+        return send(res, 200, board.post(orgs.active(), rootOf(quest), "owner", body.kind, body.text));
+      } catch (err) {
+        throw new HttpError(400, (err as Error).message);
+      }
+    }
     // The receipt covers the whole task: asked for from one of its parts, it is the receipt of the task that part came from.
     if (action === "receipt" && req.method === "GET") return send(res, 200, receiptOf(rootOf(quest)));
     // A finished task's report, saved as a page in the workspace.

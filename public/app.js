@@ -4295,6 +4295,50 @@ function handoverCard(q) {
       : null;
 }
 
+const BOARD_WORDS = { finding: "Finding", decision: "Decision", question: "Question", blocker: "Blocker", handover: "Hand-over", note: "Note" };
+
+/**
+ * The shared board of the task tree this run belongs to: what the agents on it have posted, and a box for the owner
+ * to post too. The box is made once, so a refresh of the list never wipes what is being typed.
+ */
+function taskBoard() {
+  const list = h("div", { class: "boardlist" });
+  const text = h("textarea", { rows: 2, placeholder: "Post a note every agent on this task will see, e.g. “Use the November export in the Finance folder.”", "aria-label": "Note for the board" });
+  const kind = h("select", { "aria-label": "Kind of note" }, ["note", "decision", "question", "finding"].map((k) => h("option", { value: k }, BOARD_WORDS[k])));
+  const form = h(
+    "form",
+    {
+      class: "row boardform",
+      onsubmit: (e) => {
+        e.preventDefault();
+        if (!text.value.trim()) return;
+        attempt(async () => {
+          await api("POST", `quests/${state.convId}/board`, { kind: kind.value, text: text.value });
+          text.value = "";
+          refreshQuest();
+        }, ui.qboard);
+      },
+    },
+    kind,
+    text,
+    h("button", { class: "small" }, "Post"),
+  );
+  const box = h("details", { class: "card taskboard" }, h("summary", {}, h("b", {}, "Task board"), h("span", { class: "note small count" })), list, form);
+  return {
+    node: box,
+    show(posts = []) {
+      box.querySelector(".count").textContent = posts.length ? ` · ${posts.length} note${posts.length === 1 ? "" : "s"} from everyone on this task` : " · empty so far: agents post findings, decisions, questions and blockers here";
+      if (posts.some((p) => p.kind === "blocker" || p.kind === "question") && !box.dataset.seen) (box.open = true), (box.dataset.seen = "1");
+      fill(
+        list,
+        posts.length
+          ? posts.map((p) => h("div", { class: `boardpost ${p.kind}` }, h("span", { class: "tag" }, BOARD_WORDS[p.kind] ?? p.kind), h("div", { class: "grow" }, h("div", {}, p.text), h("div", { class: "note small" }, `${p.authorName} · ${when(p.at)}`))))
+          : h("p", { class: "note small" }, "Nothing yet."),
+      );
+    },
+  };
+}
+
 function questView() {
   ui.body.className = "body questview";
   ui.qhead = h("div", { class: "subhead" });
@@ -4309,7 +4353,9 @@ function questView() {
   ui.receiptPanel = h("div", { class: "tabpanel pad", hidden: true });
   ui.convoPanel = h("div", { class: "tabpanel" }, conversationPane());
   ui.qnote = h("div", { class: "qnote" });
-  fill(ui.qcenter, ui.tabs, ui.qnote, ui.changesPanel, ui.receiptPanel, ui.convoPanel);
+  ui.qboardView = taskBoard();
+  ui.qboard = h("div", { class: "qnote" }, ui.qboardView.node);
+  fill(ui.qcenter, ui.tabs, ui.qnote, ui.qboard, ui.changesPanel, ui.receiptPanel, ui.convoPanel);
   ui.title = h("span");
   ui.meta = h("span", { class: "meta" });
   ui.changesFor = null;
@@ -4331,6 +4377,7 @@ async function refreshQuest(first = false) {
   const changed = !state.quest || state.quest.id !== q.id || state.quest.status !== q.status || state.quest.outcome !== q.outcome;
   state.quest = q;
   if (ui.qnote) fill(ui.qnote, handoverCard(q));
+  ui.qboardView?.show(q.board);
   const [label, tone] = standing(q);
   const where = q.branch ? ["on branch ", h("code", {}, q.branch), " · your own branch is untouched"] : q.project ? [`in ${basename(q.project)}`] : ["in the workspace folder"];
   fill(ui.qhead, 
@@ -6676,7 +6723,26 @@ async function drawTaskPanel(id) {
   title.addEventListener("change", () => title.value.trim() && title.value.trim() !== t.title && patch({ title: title.value.trim() }));
   const priority = h("select", { "aria-label": "Priority", onchange: (e) => patch({ priority: e.target.value }) }, ["urgent", "high", "normal", "low"].map((p) => h("option", { value: p, selected: t.priority === p }, PRIORITY_WORDS[p])));
   const ownerBot = crew.get(t.owner);
-  const owner = t.status === "todo" ? h("select", { "aria-label": "Assigned to", onchange: (e) => patch({ owner: e.target.value }) }, org.members.map((m) => h("option", { value: m.bot, selected: m.bot === t.owner }, m.title))) : h("span", { class: "row" }, ownerBot ? keycap(ownerBot, 20, "", ownerBot.type) : null, t.ownerName);
+  // A task not started can go to anyone; a stopped one can be given to someone else, who picks up from its hand-over note.
+  const owner =
+    t.status === "todo"
+      ? h("select", { "aria-label": "Assigned to", onchange: (e) => patch({ owner: e.target.value }) }, org.members.map((m) => h("option", { value: m.bot, selected: m.bot === t.owner }, m.title)))
+      : t.status === "blocked"
+        ? h(
+            "div",
+            {},
+            h("span", { class: "row" }, ownerBot ? keycap(ownerBot, 20, "stuck", ownerBot.type) : null, t.ownerName),
+            h(
+              "select",
+              {
+                "aria-label": "Give it to someone else",
+                onchange: (e) => e.target.value && confirm(`Give task #${t.number} to the ${org.members.find((m) => m.bot === e.target.value)?.title}?\n\nThey start a fresh run from the hand-over note it left.`) ? patch({ owner: e.target.value }) : (e.target.value = ""),
+              },
+              h("option", { value: "" }, "Give it to someone else…"),
+              org.members.filter((m) => m.bot !== t.owner).map((m) => h("option", { value: m.bot }, m.title)),
+            ),
+          )
+        : h("span", { class: "row" }, ownerBot ? keycap(ownerBot, 20, "", ownerBot.type) : null, t.ownerName);
   const parent = t.parent ? ui.tasks?.find((x) => x.id === t.parent) : null;
   const comment = h("textarea", { rows: 3, placeholder: t.status === "review" ? "What should change? Sending it back wakes the agent." : "Write a note for the agent…", "aria-label": "Comment" });
   const sendComment = () => comment.value.trim() && act(async () => (await api("POST", `work/${id}/comment`, { text: comment.value }), (comment.value = "")));
