@@ -1832,3 +1832,30 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .colrow { display: grid; grid-template-columns: 1.2fr 1fr auto; gap: 8px; align-items: center; }
 .colrow input[aria-label="Choices"] { grid-column: 1 / 3; }
 .tblnote { padding-left: 6px; }
+
+/* Office: documents and notes. */
+.officehome h1 { margin: 0 0 4px; }
+.officegroup { padding: 12px 10px 4px; }
+.officerow { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 7px 10px; border-radius: var(--r-m, 8px); }
+.officerow.on, .notecard.on { background: var(--raised, #eceeeb); }
+.officetable { overflow-x: auto; padding: 0; }
+.officetable table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 640px; }
+.officetable th { text-align: left; font-size: 12px; font-weight: 600; padding: 10px 12px; color: var(--muted, #5e615f); }
+.officetable td { padding: 9px 12px; border-top: 1px solid var(--line); }
+.officeask input { flex: 1 1 280px; }
+.officewait { display: block; width: 100%; text-align: left; margin-top: 6px; }
+.officeturn { display: flex; flex-wrap: wrap; gap: 6px; }
+.officetags { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 10px; }
+.notesside input[type="search"] { margin: 0 10px 4px; width: calc(100% - 20px); }
+.notecard { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; padding: 9px 10px; border-radius: var(--r-m, 8px); border-bottom: 1px solid var(--line); }
+.notecard .notesum { font-size: 13px; color: var(--ink-soft, #3c3f3d); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+/* A document looks like a sheet of paper. */
+.wsdoc.paper { background: var(--panel, #fff); border: 1px solid var(--line); padding: 40px 48px; max-width: 760px; }
+@media (max-width: 760px) { .wsdoc.paper { padding: 20px 16px; } }
+/* Printing a document or note: only its text. */
+@media print {
+  body.printing * { visibility: hidden; }
+  body.printing .wsdoc, body.printing .wsdoc * { visibility: visible; }
+  body.printing .wsdoc { position: absolute; left: 0; top: 0; width: 100%; border: 0; padding: 0; max-width: none; }
+  body.printing .wstoolbar, body.printing .wstrail, body.printing .wsmeta, body.printing .wstables button, body.printing .wsstatus { display: none; }
+}
