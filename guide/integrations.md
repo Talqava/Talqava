@@ -1,6 +1,6 @@
 # Integrations
 
-Integrations connect Talqava to the tools your business already uses, so your agents can work where the work is. Today there are six: **AI models** for the AI services your agents think with, **OpenRouter** for hundreds of models through one account, **Git and GitHub** for code and documents kept in repositories, **MCP** for using your team from Claude and for giving agents tools from other services, **API keys for other services**, and **Langfuse** for seeing your agents' costs in Langfuse if you use it. Each one says plainly what agents can and cannot do with it.
+Integrations connect Talqava to the tools your business already uses, so your agents can work where the work is. Today there are six: **AI models** for the AI services your agents think with, **OpenRouter** for hundreds of models through one account, **Git and GitHub** for code and documents kept in repositories, **Connectors and AI apps** for using your team from Claude and for giving agents tools from other services, **API keys for other services**, and **Langfuse** for seeing your agents' costs in Langfuse if you use it. Each one says plainly what agents can and cannot do with it.
 
 ## What you'll see
 
@@ -64,14 +64,14 @@ A repository is a folder of code or documents with a full history of changes. Th
 
 ### Use your Talqava team from Claude
 
-1. Open **MCP**.
+1. Open **Connectors and AI apps**.
 2. Under **Use your Talqava team from Claude**, press **Add Talqava to Claude**. Nothing else in Claude's settings changes, and a copy of them is kept first.
 3. Quit Claude completely and open it again. Keep Talqava open while you use it.
 4. Ask Claude, for example, "What agents are on my Talqava team?" Claude can see your team, give an agent a task, read how it went, list recent tasks, and search or add to your organization's memory. Work that changes files or sends something still waits for your approval in Talqava.
 
 ### Connect a well-known service from the catalogue
 
-The catalogue lists services that publish their own connector and accept a key you make: **Stripe**, **Airtable**, **monday.com**, **Intercom**, **Linear** and **GitHub**. It is on the **MCP** page under **From the catalogue**, and in the **Marketplace** under **Connectors**.
+The catalogue lists services that publish their own connector and accept a key you make: **Stripe**, **Airtable**, **monday.com**, **Intercom**, **Linear** and **GitHub**. It is on the **Connectors and AI apps** page under **From the catalogue**, and in the **Marketplace** under **Connectors**.
 
 1. Press **See what it can do** on a service. Read what it **can read** and **can change** before anything is connected.
 2. Make a key in that service, following the line under the key box (the link opens the service's own instructions). Give the key only the access you want your agents to have: the key decides what the connector can reach.
@@ -84,7 +84,7 @@ Only agents with the **connected services** power can use a connector, and each 
 
 ### Give agents tools from another service (a connector)
 
-1. On the **MCP** page, under **Add a connector**, type a short name and the web address the service gives you.
+1. On the **Connectors and AI apps** page, under **Add a connector**, type a short name and the web address the service gives you.
 2. Add an access token only if the service needs one.
 3. Press **Add connector**. Remove it any time with **Remove**.
 

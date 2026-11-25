@@ -95,6 +95,7 @@ const GUIDES = [
   ["workspace", "Workspace"],
   ["office", "Office: Documents, Sheets and Notes"],
   ["security", "Security: people, roles and sign-in"],
+  ["glossary", "Words Talqava uses"],
   ["library", "Library"],
   ["memory", "Memory"],
   ["skills", "Skills"],
@@ -886,6 +887,35 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (req.method === "POST" && parts[1] === "reviews" && parts[2] && parts[3] === "finish") return send(res, 200, await tryIt(() => reviews.finish(parts[2], by)));
     if (req.method === "PATCH" && parts[1] === "reviews" && parts[2]) return send(res, 200, await tryIt(() => reviews.decide(parts[2], String(body.item ?? ""), body.decision, body.note)));
     throw new HttpError(404, "Not found.");
+  }
+  // Find anything: files and pages (by name and by the words inside), library documents, tasks, chats and agents.
+  if (route === "GET find") {
+    const q = String(url.searchParams.get("q") ?? "").replace(/\s+/g, " ").trim().slice(0, 100);
+    if (q.length < 2) return send(res, 200, { query: q, results: [] });
+    const needle = q.toLowerCase();
+    const org = orgs.active();
+    const results: { kind: string; id: string; title: string; note: string }[] = [];
+    const seen = new Set<string>();
+    const add = (kind: string, id: string, title: string, note = "") => {
+      if (seen.has(`${kind}:${id}`) || results.filter((r) => r.kind === kind).length >= 6) return;
+      seen.add(`${kind}:${id}`);
+      results.push({ kind, id, title, note: note.replace(/\s+/g, " ").slice(0, 140) });
+    };
+    try {
+      const tree = workspace.tree(org);
+      for (const p of tree) if (p.title.toLowerCase().includes(needle)) add(p.kind, p.id, p.title, p.kind === "page" ? "" : p.folder);
+      const byId = new Map(tree.map((p) => [p.id, p]));
+      for (const hit of workspace.search(org, null, q, 12)) ((p) => p && add(p.kind, p.id, p.title, hit.text))(byId.get(hit.page));
+    } catch {}
+    try {
+      for (const hit of library.search(org, null, q, 6)) add("library", String(hit.document), hit.name, hit.part > 0 ? hit.text : hit.path);
+    } catch {}
+    try {
+      for (const t of work.list(org)) if (t.title.toLowerCase().includes(needle)) add("task", t.id, `#${t.number} ${t.title}`, `${t.ownerName} · ${t.status}`);
+    } catch {}
+    for (const c of conversations.list()) if (c.source !== "quest" && c.title.toLowerCase().includes(needle)) add("chat", c.id, c.title, c.updatedAt.slice(0, 10));
+    for (const m of org.members) if (`${m.title} ${m.department}`.toLowerCase().includes(needle)) add("agent", m.bot, m.title || m.bot, m.department);
+    return send(res, 200, { query: q, results });
   }
   if (route === "GET security-center") return send(res, 200, parts[1] === "report" ? { name: `talqava-security-report-${new Date().toISOString().slice(0, 10)}.md`, text: securityReport() } : securityOverview());
   if (route === "GET sensitivity") {

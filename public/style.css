@@ -1981,3 +1981,4 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .startpage .startmap { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
 .security .sectabs { position: sticky; top: 0; z-index: 2; background: var(--bg, #f5f6f4); padding: 8px 0; }
 .security .secrow .secgo { order: 3; }
+.palette ul { max-height: min(70vh, 560px); overflow-y: auto; }

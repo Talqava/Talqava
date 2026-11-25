@@ -52,7 +52,7 @@ export function mcpIntegration() {
   }
   const info: IntegrationInfo = {
     id: "mcp",
-    name: "MCP",
+    name: "Connectors and AI apps",
     category: "AI apps and connectors",
     summary: "Use your Talqava team from Claude and other AI apps, and give your agents tools from other services. MCP is the open standard both ways use.",
     state: claude.added || cfg.mcpServers.length ? "connected" : "needs-setup",
