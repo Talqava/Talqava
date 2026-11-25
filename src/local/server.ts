@@ -42,6 +42,7 @@ import { addKey, connect, disconnect, refreshHealth, serviceProblems, findLocal,
 import { board } from "./board.ts";
 import { accessGraph, accessGraphs } from "./access.ts";
 import { loadModelList } from "./modelprices.ts";
+import { installKit, listKits, previewKit, runPlaybook, undoKit } from "./kits.ts";
 import { connectLangfuse, langfuseIntegration, recordStep, removeLangfuse } from "./langfuse.ts";
 import { finishOpenRouterSignIn, openrouterIntegration, openrouterModels, removeOpenRouter, saveOpenRouterKey, startOpenRouterSignIn, useOpenRouterModel } from "./openrouter.ts";
 import { autoSetupGit, cloneRepository, disconnectRepository, gitIntegration, githubAccounts, githubRepos, installGit, listIntegrations, pollGithubSignIn, removeGitIntegration, startGithubSignIn, testGithub } from "./integrations.ts";
@@ -850,7 +851,13 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       } catch {
         packs = [];
       }
-      return send(res, 200, { bots, teams: loadTeams(), packs, problems: market.problems, updates: bots.filter((b) => b.install.state === "update").length });
+      let kits: ReturnType<typeof listKits> = [];
+      try {
+        kits = listKits(orgs.active());
+      } catch {
+        kits = [];
+      }
+      return send(res, 200, { bots, teams: loadTeams(), packs, kits, problems: market.problems, updates: bots.filter((b) => b.install.state === "update").length });
     }
     const plainly = <T>(fn: () => T): T => {
       try {
@@ -859,6 +866,21 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
         throw new HttpError(400, (err as Error).message);
       }
     };
+    // Company templates and playbooks: preview, install, undo, and (for a playbook) run it now.
+    if (parts[1] === "kits" && parts[2]) {
+      const org = orgs.active();
+      const attempt = async <T>(fn: () => T | Promise<T>): Promise<T> => {
+        try {
+          return await fn();
+        } catch (err) {
+          throw new HttpError(400, (err as Error).message);
+        }
+      };
+      if (req.method === "GET" && parts[3] === "preview") return send(res, 200, plainly(() => previewKit(org, parts[2])));
+      if (req.method === "POST" && parts[3] === "install") return send(res, 200, await attempt(async () => { return installKit(org.id, parts[2], jobs); }));
+      if (req.method === "POST" && parts[3] === "undo") return send(res, 200, await attempt(() => undoKit(org.id, parts[2], jobs)));
+      if (req.method === "POST" && parts[3] === "run") return send(res, 200, await attempt(async () => runPlaybook(org.id, parts[2])));
+    }
     // A page pack: its pages are added to the workspace under one page, which can be deleted again to undo it.
     if (req.method === "POST" && parts[1] === "packs" && parts[3] === "add") return send(res, 200, plainly(() => workspace.addTemplate(orgs.active(), parts[2])));
     // Before you install: what adding an agent or a team would do, in plain terms. Nothing changes.
