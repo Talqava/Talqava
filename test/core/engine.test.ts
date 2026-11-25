@@ -71,6 +71,9 @@ test("runs a tool the model asks for and feeds the result back", async () => {
   assert.equal(request.body.fallbacks, "default");
   assert.match(String(request.headers["anthropic-beta"]), /compact-2026-01-12/);
   assert.match(String(request.headers["anthropic-beta"]), /server-side-fallback-2026-07-01/);
+  // Old tool outputs are cleared on Anthropic's side, before the conversation is summarised.
+  assert.match(String(request.headers["anthropic-beta"]), /context-management-2025-06-27/);
+  assert.deepEqual(request.body.context_management.edits.map((e: { type: string }) => e.type), ["clear_tool_uses_20250919", "compact_20260112"]);
   assert.deepEqual(request.body.tools.map((t: { name: string }) => t.name), ["write_note", "read_note", "memory", "web_search"]);
   // The second request carries the tool result back.
   assert.equal(request.body.messages.at(-1).content[0].type, "tool_result");
@@ -187,4 +190,22 @@ test("secrets are only filled in for their own host", () => {
   assert.throws(() => fillSecrets("{{secret:KEY}}", "evil.com", secrets), /only be sent to/);
   assert.throws(() => fillSecrets("{{secret:KEY}}", "evilapi.example.com.evil.com", secrets), /only be sent to/);
   assert.throws(() => fillSecrets("{{secret:NOPE}}", "api.example.com", secrets), /No secret/);
+});
+
+test("a service that refuses clearing old outputs is asked again without it", async () => {
+  approvalMode = "auto";
+  const model = new AnthropicModel({ apiKey: "test-key", model: "claude-opus-5-5", effort: "high" });
+  script.push({ content: [], stop_reason: "end_turn", error: { status: 400, message: "context_management.edits.0: clear_tool_uses_20250919 is not supported" } }, say("Fine."), say("Again."));
+  const from = mock.requests.length;
+  const callbacks = { onText() {}, onThinking() {}, onToolStart() {} };
+  const request = { system: "s", messages: [{ role: "user" as const, content: "hi" }], tools: [], hostedTools: [], mcpServers: [], signal: new AbortController().signal };
+  const reply = await model.call(request, callbacks);
+  assert.equal((reply.content[0] as { text: string }).text, "Fine.");
+  await model.call(request, callbacks);
+  const [refused, retried, later] = mock.requests.slice(from);
+  assert.equal(refused.body.context_management.edits.length, 2);
+  for (const r of [retried, later]) {
+    assert.deepEqual(r.body.context_management.edits, [{ type: "compact_20260112" }]);
+    assert.doesNotMatch(String(r.headers["anthropic-beta"]), /context-management/);
+  }
 });

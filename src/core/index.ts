@@ -8,6 +8,8 @@ export { rank, excerpt, terms } from "./rank.ts";
 export { selectMemory, visibleMemory, MEMORY_PROMPT_BUDGET, MEMORY_ENTRY_LIMIT } from "./memory.ts";
 export { BRAND, setting } from "./brand.ts";
 export { clip, defineTool, checkInput, MAX_OUTPUT } from "./tooling.ts";
+export { trimOldResults, SHORTENED } from "./context.ts";
+export type { TrimOptions, Trimmed } from "./context.ts";
 export { memoryTool, conversationSearchTool, skillTool, scheduleTool } from "./tools/shared.ts";
 export { httpTool, fillSecrets } from "./tools/http.ts";
 export * from "./models/types.ts";

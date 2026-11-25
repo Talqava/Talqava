@@ -2,6 +2,7 @@
 // never on where data is actually kept (files today, a database later).
 import type Anthropic from "@anthropic-ai/sdk";
 import type { Model } from "./models/types.ts";
+import type { TrimOptions } from "./context.ts";
 
 export type MaybePromise<T> = T | Promise<T>;
 export type Message = Anthropic.Beta.BetaMessageParam;
@@ -29,7 +30,15 @@ export interface Conversation {
   /** Tools the user chose "always allow" for in this conversation. */
   allowed: string[];
   /** Tokens used, and the estimated cost in US dollars when the model's prices are known. */
-  usage: { input: number; output: number; cost?: number };
+  usage: {
+    input: number;
+    output: number;
+    cost?: number;
+    /** Of the input tokens, how many the service read from its cache (charged at about a tenth). */
+    cached?: number;
+    /** Dollars saved by sending old, large tool outputs shortened (an estimate). */
+    saved?: number;
+  };
   /** Why its last run stopped before finishing (a budget, its time, being stuck), kept so the chat can say so later. Cleared when it runs again. */
   lastStop?: { reason: RunStop; text: string; at: string } | null;
 }
@@ -183,6 +192,8 @@ export interface RunSpec {
   remaining?: () => number;
   /** The exits every run has besides its budget (see RunLimits). */
   limits?: RunLimits;
+  /** Send old, large tool outputs shortened, to save cost on long runs (default on). See context.ts. */
+  trimOutputs?: boolean | TrimOptions;
 }
 
 /**

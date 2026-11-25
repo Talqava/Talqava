@@ -286,8 +286,14 @@ export class OpenAICompatibleModel implements Model {
 
     let text = "";
     let finish: string | null | undefined;
-    const usage: { input: number; output: number; cost?: number } = { input: 0, output: 0 };
-    const total = () => ({ input: usage.input + summaryUsage.input, output: usage.output + summaryUsage.output, ...(usage.cost !== undefined ? { cost: usage.cost } : {}) });
+    const usage: { input: number; output: number; cached: number; cost?: number } = { input: 0, output: 0, cached: 0 };
+    // Tokens read from the service's cache are reported apart, since they cost much less.
+    const total = () => ({
+      input: usage.input - usage.cached + summaryUsage.input,
+      output: usage.output + summaryUsage.output,
+      ...(usage.cached ? { cacheRead: usage.cached } : {}),
+      ...(usage.cost !== undefined ? { cost: usage.cost } : {}),
+    });
     const calls: { id: string; name: string; args: string }[] = [];
 
     for await (const data of events(response.body)) {
@@ -302,6 +308,8 @@ export class OpenAICompatibleModel implements Model {
       if (chunk.usage) {
         usage.input = chunk.usage.prompt_tokens ?? usage.input;
         usage.output = chunk.usage.completion_tokens ?? usage.output;
+        const cached = chunk.usage.prompt_tokens_details?.cached_tokens;
+        if (typeof cached === "number" && cached >= 0 && cached <= usage.input) usage.cached = cached;
         // OpenRouter reports what the call actually cost.
         if (typeof chunk.usage.cost === "number" && Number.isFinite(chunk.usage.cost)) usage.cost = chunk.usage.cost;
       }

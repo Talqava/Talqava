@@ -17,8 +17,20 @@ export interface AnthropicOptions {
   providerId?: string;
 }
 
-function params(model: string, effort: Effort, request: ModelRequest) {
-  const betas = ["compact-2026-01-12"];
+/**
+ * Old tool outputs are cleared on Anthropic's side once a conversation is long, keeping the newest whole. Done there,
+ * not here: Claude checks that earlier steps were not changed, and edits made by the service itself are allowed.
+ * It clears only when that saves a good amount, since each clear means the changed part is read afresh once.
+ */
+export const CLEAR_OLD_OUTPUTS = {
+  type: "clear_tool_uses_20250919",
+  trigger: { type: "input_tokens", value: 30_000 },
+  keep: { type: "tool_uses", value: 6 },
+  clear_at_least: { type: "input_tokens", value: 10_000 },
+};
+
+function params(model: string, effort: Effort, request: ModelRequest, clearOld: boolean) {
+  const betas = ["compact-2026-01-12", ...(clearOld ? ["context-management-2025-06-27"] : [])];
   const body: Record<string, unknown> = {
     model,
     max_tokens: MAX_TOKENS,
@@ -33,7 +45,8 @@ function params(model: string, effort: Effort, request: ModelRequest) {
     output_config: { effort },
     cache_control: { type: "ephemeral" },
     // Long conversations are summarised on the server instead of overflowing.
-    context_management: { edits: [{ type: "compact_20260112" }] },
+    // Old outputs are cleared first, and the conversation summarised only if it still grows too long.
+    context_management: { edits: [...(clearOld ? [CLEAR_OLD_OUTPUTS] : []), { type: "compact_20260112" }] },
     betas,
   };
   if (FALLBACK_MODELS.has(model)) {
@@ -75,6 +88,10 @@ export class AnthropicModel implements Model {
   #client: Anthropic;
   #model: string;
   #effort: Effort;
+  /** False once the service has refused clearing old outputs, so later calls go without it. */
+  #clearOld = true;
+  /** Old outputs are shortened by the service, so the engine leaves them alone. */
+  readonly trimsOnServer = true;
 
   constructor(options: AnthropicOptions) {
     this.#client = new Anthropic(options.apiKey ? { apiKey: options.apiKey } : {});
@@ -86,7 +103,20 @@ export class AnthropicModel implements Model {
   }
 
   async call(request: ModelRequest, callbacks: ModelCallbacks): Promise<ModelReply> {
-    const stream = this.#client.beta.messages.stream(params(this.#model, this.#effort, request), { signal: request.signal });
+    try {
+      return await this.#call(request, callbacks);
+    } catch (err) {
+      // A service or model that does not offer clearing old outputs: carry on without it.
+      if (this.#clearOld && err instanceof Anthropic.BadRequestError && /clear_tool_uses|context[-_]management/i.test(err.message)) {
+        this.#clearOld = false;
+        return this.#call(request, callbacks);
+      }
+      throw err;
+    }
+  }
+
+  async #call(request: ModelRequest, callbacks: ModelCallbacks): Promise<ModelReply> {
+    const stream = this.#client.beta.messages.stream(params(this.#model, this.#effort, request, this.#clearOld), { signal: request.signal });
     stream.on("streamEvent", (event) => {
       if (event.type === "content_block_start" && /tool_use$/.test(event.content_block.type)) {
         callbacks.onToolStart((event.content_block as { name: string }).name);
@@ -97,6 +127,9 @@ export class AnthropicModel implements Model {
     });
     const message = await stream.finalMessage();
     const usage = message.usage;
+    // What the service cleared from this call: tokens that were not read again.
+    const edits = (message as { context_management?: { applied_edits?: { cleared_input_tokens?: number }[] } | null }).context_management?.applied_edits ?? [];
+    const cleared = edits.reduce((n, e) => n + (e.cleared_input_tokens ?? 0), 0);
     return {
       content: message.content,
       stopReason: stopReason(message.stop_reason),
@@ -105,6 +138,7 @@ export class AnthropicModel implements Model {
         output: usage?.output_tokens ?? 0,
         cacheRead: usage?.cache_read_input_tokens ?? 0,
         cacheWrite: usage?.cache_creation_input_tokens ?? 0,
+        ...(cleared ? { cleared } : {}),
       },
     };
   }

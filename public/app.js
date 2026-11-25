@@ -695,8 +695,12 @@ function renderConversation(conv, live) {
 
 function showUsage(usage) {
   const total = (usage?.input || 0) + (usage?.output || 0);
-  const cost = usage?.cost ? ` · about $${usage.cost < 0.1 ? usage.cost.toFixed(3) : usage.cost.toFixed(2)}` : "";
-  ui.meta.textContent = total ? `${total.toLocaleString()} tokens${cost}` : "";
+  const dollars = (n) => `$${n < 0.1 ? n.toFixed(3) : n.toFixed(2)}`;
+  const cost = usage?.cost ? ` · about ${dollars(usage.cost)}` : "";
+  const cached = usage?.cached && usage.input ? ` · ${Math.round((usage.cached / usage.input) * 100)}% from cache` : "";
+  const saved = usage?.saved >= 0.001 ? ` · about ${dollars(usage.saved)} saved` : "";
+  ui.meta.textContent = total ? `${total.toLocaleString()} tokens${cost}${cached}${saved}` : "";
+  ui.meta.title = "Read from cache: parts of the chat the AI service had already read, charged at about a tenth of the price. Shortening old steps: large outputs the agent has already used are sent shortened in later steps.";
 }
 
 function setRunning(running) {
@@ -4834,7 +4838,7 @@ const KINDS = { task: "Your task", handoff: "Handed on", question: "Question", d
 const STATUS_WORDS = { done: "Finished", failed: "Failed", budget: "Out of budget", stopped: "Stopped", running: "Working", waiting: "Waiting" };
 
 function receiptText(r) {
-  const out = [`RECEIPT: ${r.title}`, `${new Date(r.startedAt).toLocaleString()}${r.endedAt ? ` to ${new Date(r.endedAt).toLocaleString()}` : " (still under way)"}`, `Total ${money(r.total)} of a ${money(r.budget)} budget · ${r.lines.length} parts · ${r.actions} actions · ${r.failedActions} did not work`, "", "COST BY AGENT"];
+  const out = [`RECEIPT: ${r.title}`, `${new Date(r.startedAt).toLocaleString()}${r.endedAt ? ` to ${new Date(r.endedAt).toLocaleString()}` : " (still under way)"}`, `Total ${money(r.total)} of a ${money(r.budget)} budget · ${r.lines.length} parts · ${r.actions} actions · ${r.failedActions} did not work`, ...(r.saved >= 0.001 ? [`Saved about ${money(r.saved)} by shortening old outputs`] : []), "", "COST BY AGENT"];
   for (const a of r.byAgent) out.push(`  ${a.agent}: ${money(a.cost)} · ${a.tasks} part${a.tasks === 1 ? "" : "s"} · ${a.actions} actions · ${tokens(a.input)} read, ${tokens(a.output)} written`);
   out.push("", "NOT DONE");
   if (r.total > r.budget) out.push(`  The task cost ${money(r.total)}, over its ${money(r.budget)} budget.`);
@@ -4886,6 +4890,9 @@ async function renderReceipt(q) {
         h("div", {}, h("span", {}, "Actions taken"), h("b", {}, String(r.actions)), h("i", { class: r.failedActions ? "bad" : "" }, r.failedActions ? `${r.failedActions} did not work` : "all worked")),
         h("div", {}, h("span", {}, "Reading and writing"), h("b", {}, tokens(r.input + r.output)), h("i", {}, `tokens: ${tokens(r.input)} read, ${tokens(r.output)} written`)),
       ),
+      r.cached || r.saved >= 0.001
+        ? h("p", { class: "note small" }, [r.cached && r.input ? `${Math.round((r.cached / r.input) * 100)}% of what the agents read came from the AI service's cache, at about a tenth of the price.` : "", r.saved >= 0.001 ? `Shortening large outputs the agents had already used saved about ${money(r.saved)}.` : ""].filter(Boolean).join(" "))
+        : null,
       h("h3", {}, "Cost by agent"),
       h(
         "div",

@@ -6,6 +6,8 @@ type Block = { type: "text"; text: string } | { type: "tool_use"; id: string; na
 export interface Reply {
   content: Block[];
   stop_reason: string;
+  /** Answer with this error instead, as the API does for a request it refuses. */
+  error?: { status: number; message: string };
 }
 export interface Recorded {
   url: string;
@@ -24,6 +26,11 @@ export function startMockApi(script: Reply[] | ((body: any) => Reply | Promise<R
     requests.push({ url: req.url ?? "", headers: req.headers, body: JSON.parse(raw) });
     const body = requests.at(-1)!.body;
     const reply = handle.route?.(body) ?? (typeof script === "function" ? await script(body) : script.shift()) ?? { content: [{ type: "text", text: "(script ended)" }], stop_reason: "end_turn" };
+    if (reply.error) {
+      res.writeHead(reply.error.status, { "content-type": "application/json" });
+      res.end(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: reply.error.message } }));
+      return;
+    }
     res.writeHead(200, { "content-type": "text/event-stream" });
     const send = (event: { type: string; [key: string]: unknown }) => res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
     send({

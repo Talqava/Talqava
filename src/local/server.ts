@@ -547,6 +547,8 @@ function receiptOf(rootId: string) {
       cost: conversation?.usage.cost ?? 0,
       input: conversation?.usage.input ?? 0,
       output: conversation?.usage.output ?? 0,
+      cached: conversation?.usage.cached ?? 0,
+      saved: conversation?.usage.saved ?? 0,
       startedAt: quest.createdAt,
       endedAt: open ? null : quest.updatedAt,
       actions,
@@ -583,6 +585,10 @@ function receiptOf(rootId: string) {
     total,
     input: lines.reduce((sum, line) => sum + line.input, 0),
     output: lines.reduce((sum, line) => sum + line.output, 0),
+    // Of what was read, how much came from the service's cache (charged at about a tenth), and what shortening
+    // old outputs saved: the two ways a long task is kept cheap.
+    cached: lines.reduce((sum, line) => sum + line.cached, 0),
+    saved: lines.reduce((sum, line) => sum + line.saved, 0),
     actions: lines.reduce((sum, line) => sum + line.actions.length, 0),
     failedActions: lines.reduce((sum, line) => sum + line.actions.filter((a) => !a.ok).length, 0),
     byAgent: [...agents.values()].sort((a, b) => b.cost - a.cost),
