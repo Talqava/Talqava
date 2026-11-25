@@ -32,7 +32,7 @@ Your mission is at the top. Below it are goal cards, grouped under "The whole or
 - a progress bar toward the target, with a **Now at** box to update the number
 - the due date, in red once it is overdue
 - how many of its tasks are done
-- its projects, each with its lead and task count, and **Tasks**, **+ Task** and **Edit** buttons
+- its projects, each with its lead and task count, and **Tasks**, **+ Task** and **Open** buttons
 
 ## Key ideas
 
@@ -171,9 +171,12 @@ Chats with Talqava itself keep working while agents are paused.
 3. Tick **Show achieved and dropped goals** to see them again. Click **Make it active again** to bring one back.
 
 **Start a project**
-1. On a goal card, click **+ Project**.
+
+A project is a folder for a body of work, with its own page under **Projects** in the menu. See [Projects](projects.md).
+
+1. On a goal card, click **+ Project**, or open **Projects** and click **+ New project**.
 2. Name it, say what it covers under **About**, and choose who it is **Led by**.
-3. Click **Start the project**. Use **Edit** later to change its status to **Paused** or **Done**.
+3. Click **Start the project**. Open it later to change its status to **Paused** or **Done**.
 
 **Add a task to a goal or project**
 1. Click **+ Task** on the goal card or project row. The form opens with that goal or project chosen, and with the project's lead as the agent.
@@ -211,6 +214,7 @@ Chats with Talqava itself keep working while agents are paused.
 
 ## Related guides
 
+- [Projects](projects.md)
 - [Work in progress](work-in-progress.md)
 - [Inbox](inbox.md)
 - [Chat](chat.md)

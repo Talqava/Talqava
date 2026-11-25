@@ -68,4 +68,4 @@ If Talqava ever starts sending anything to us, we will say so here and in the ap
 
 ## Contact
 
-Questions about privacy: contact us through [talqava.com](https://talqava.com).
+Questions about privacy: contact us at [talqava.com/contact](https://talqava.com/contact).

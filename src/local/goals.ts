@@ -11,7 +11,8 @@ import { openOrgDb } from "./library.ts";
 import { audit } from "./audit.ts";
 
 export type GoalStatus = "active" | "achieved" | "dropped";
-export type ProjectStatus = "active" | "paused" | "done";
+export type ProjectStatus = "planning" | "active" | "paused" | "done";
+export const PROJECT_STATUSES: ProjectStatus[] = ["planning", "active", "paused", "done"];
 
 export interface Goal {
   id: string;
@@ -43,6 +44,12 @@ export interface Project {
   lead: string | null;
   leadName: string | null;
   status: ProjectStatus;
+  /** What "done" looks like, in the owner's words. */
+  doneWhen: string;
+  /** The day it is due, or null. */
+  due: string | null;
+  /** The chat folder that holds its chats and its own memory, once it has one. */
+  space: string | null;
   tasks: { total: number; done: number };
   createdAt: string;
   updatedAt: string;
@@ -84,12 +91,17 @@ export function goalsDb(orgId: string): DatabaseSync {
   const cols = new Set((d.prepare("pragma table_info(work_items)").all() as unknown as { name: string }[]).map((c) => c.name));
   if (cols.size && !cols.has("goal")) d.exec("alter table work_items add column goal text");
   if (cols.size && !cols.has("project_id")) d.exec("alter table work_items add column project_id text");
+  // Projects made before they became folders get what "done" looks like, a due day and their chat folder.
+  const pcols = new Set((d.prepare("pragma table_info(projects)").all() as unknown as { name: string }[]).map((c) => c.name));
+  if (!pcols.has("done_when")) d.exec("alter table projects add column done_when text not null default ''");
+  if (!pcols.has("due")) d.exec("alter table projects add column due text");
+  if (!pcols.has("space")) d.exec("alter table projects add column space text");
   ready.add(d);
   return d;
 }
 
 interface GoalRow { id: string; title: string; grp: string | null; target: number | null; current: number | null; unit: string; due: string | null; status: string; position: number; created_at: string; updated_at: string }
-interface ProjectRow { id: string; title: string; description: string; goal: string | null; lead: string | null; status: string; created_at: string; updated_at: string }
+interface ProjectRow { id: string; title: string; description: string; goal: string | null; lead: string | null; status: string; done_when: string; due: string | null; space: string | null; created_at: string; updated_at: string }
 
 const cleanTitle = (t: unknown) => String(t ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
 function number(v: unknown, what: string): number | null {
@@ -215,7 +227,7 @@ export const goals = {
     const d = goalsDb(org.id);
     const c = counts(d);
     const titles = new Map((d.prepare("select id, title from goals").all() as unknown as { id: string; title: string }[]).map((g) => [g.id, g.title]));
-    return (d.prepare("select * from projects order by case status when 'active' then 0 when 'paused' then 1 else 2 end, created_at").all() as unknown as ProjectRow[]).map((p) => ({
+    return (d.prepare("select * from projects order by case status when 'active' then 0 when 'planning' then 1 when 'paused' then 2 else 3 end, created_at").all() as unknown as ProjectRow[]).map((p) => ({
       id: p.id,
       title: p.title,
       description: p.description,
@@ -223,7 +235,10 @@ export const goals = {
       goalTitle: p.goal ? (titles.get(p.goal) ?? null) : null,
       lead: p.lead,
       leadName: titleOf(org, p.lead),
-      status: (["active", "paused", "done"].includes(p.status) ? p.status : "active") as ProjectStatus,
+      status: (PROJECT_STATUSES.includes(p.status as ProjectStatus) ? p.status : "active") as ProjectStatus,
+      doneWhen: p.done_when ?? "",
+      due: p.due ?? null,
+      space: p.space ?? null,
       tasks: c.projects.get(p.id) ?? { total: 0, done: 0 },
       createdAt: p.created_at,
       updatedAt: p.updated_at,
@@ -236,7 +251,7 @@ export const goals = {
     return p;
   },
 
-  createProject(org: Org, input: { title?: unknown; description?: unknown; goal?: unknown; lead?: unknown }): Project {
+  createProject(org: Org, input: { title?: unknown; description?: unknown; goal?: unknown; lead?: unknown; doneWhen?: unknown; due?: unknown; status?: unknown; space?: string | null; quiet?: boolean }): Project {
     const d = goalsDb(org.id);
     const title = cleanTitle(input.title);
     if (!title) throw new Error("Give the project a name.");
@@ -244,12 +259,13 @@ export const goals = {
     const lead = input.lead ? String(input.lead) : null;
     if (lead && !org.members.some((m) => m.bot === lead)) throw new Error("The lead must be a position on the chart.");
     const id = newId();
-    d.prepare("insert into projects (id, title, description, goal, lead, status, created_at, updated_at) values (?, ?, ?, ?, ?, 'active', ?, ?)").run(id, title, String(input.description ?? "").trim().slice(0, 4000), goal, lead, now(), now());
-    audit({ actor: "owner", actorName: "You", kind: "organization", action: `Started the project “${title}”` });
+const status = input.status === "planning" ? "planning" : "active";
+    d.prepare("insert into projects (id, title, description, goal, lead, status, done_when, due, space, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(id, title, String(input.description ?? "").trim().slice(0, 4000), goal, lead, status, String(input.doneWhen ?? "").trim().slice(0, 1000), date(input.due), input.space ?? null, now(), now());
+    if (!input.quiet) audit({ actor: "owner", actorName: "You", kind: "organization", action: `Started the project “${title}”` });
     return this.project(org, id);
   },
 
-  updateProject(org: Org, id: string, patch: { title?: unknown; description?: unknown; goal?: unknown; lead?: unknown; status?: unknown }): Project {
+  updateProject(org: Org, id: string, patch: { title?: unknown; description?: unknown; goal?: unknown; lead?: unknown; status?: unknown; doneWhen?: unknown; due?: unknown; space?: string | null }): Project {
     const d = goalsDb(org.id);
     const p = this.project(org, id);
     const set = (col: string, v: unknown) => d.prepare(`update projects set ${col} = ? where id = ?`).run(v as never, p.id);
@@ -262,9 +278,12 @@ export const goals = {
       set("lead", lead);
     }
     if (patch.status !== undefined) {
-      if (!["active", "paused", "done"].includes(String(patch.status))) throw new Error("A project is active, paused or done.");
+      if (!PROJECT_STATUSES.includes(String(patch.status) as ProjectStatus)) throw new Error("A project is in planning, active, paused or done.");
       set("status", String(patch.status));
     }
+    if (patch.doneWhen !== undefined) set("done_when", String(patch.doneWhen ?? "").trim().slice(0, 1000));
+    if (patch.due !== undefined) set("due", date(patch.due));
+    if (patch.space !== undefined) set("space", patch.space);
     set("updated_at", now());
     return this.project(org, p.id);
   },

@@ -43,6 +43,7 @@ import { board } from "./board.ts";
 import { accessGraph, accessGraphs } from "./access.ts";
 import { loadModelList } from "./modelprices.ts";
 import { COLUMN_TYPES, peopleOf, tables } from "./tables.ts";
+import { projects } from "./projects.ts";
 import { connectCatalog, connectorLabel, disconnectCatalog, listCatalog } from "./connector-catalog.ts";
 import { installKit, listKits, previewKit, runPlaybook, undoKit } from "./kits.ts";
 import { connectLangfuse, langfuseIntegration, recordStep, removeLangfuse } from "./langfuse.ts";
@@ -73,6 +74,7 @@ const GUIDES = [
   ["chat", "Chat"],
   ["inbox", "Inbox"],
   ["tasks", "Tasks and goals"],
+  ["projects", "Projects"],
   ["work-in-progress", "Work in progress"],
   ["schedules", "Schedules"],
   ["organization", "Organization"],
@@ -1073,15 +1075,18 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   if (parts[0] === "goals" || parts[0] === "projects") {
     const org = orgs.active();
     const [kind, id] = parts;
-    if (req.method === "GET" && !id) return send(res, 200, { goals: goals.list(org), projects: goals.projects(org) });
+    if (req.method === "GET" && !id) return send(res, 200, { goals: goals.list(org), projects: projects.list(org) });
+    // One project: its card, its tasks and its chats. Its chat folder is made the first time a chat is started in it.
+    if (kind === "projects" && req.method === "GET" && id) return send(res, 200, await attempt(() => projects.page(org, id)));
+    if (kind === "projects" && req.method === "POST" && id && parts[2] === "chat") return send(res, 200, await attempt(() => ({ space: projects.space(org, id) })));
     if (kind === "goals") {
       if (req.method === "POST" && !id) return send(res, 200, await attempt(() => goals.create(org, body)));
       if (req.method === "PATCH" && id) return send(res, 200, await attempt(() => goals.update(org, id, body)));
       if (req.method === "DELETE" && id) return send(res, 200, await attempt(() => goals.remove(org, id)));
     } else {
       if (req.method === "POST" && !id) return send(res, 200, await attempt(() => goals.createProject(org, body)));
-      if (req.method === "PATCH" && id) return send(res, 200, await attempt(() => goals.updateProject(org, id, body)));
-      if (req.method === "DELETE" && id) return send(res, 200, await attempt(() => goals.removeProject(org, id)));
+      if (req.method === "PATCH" && id) return send(res, 200, await attempt(() => projects.update(org, id, body)));
+      if (req.method === "DELETE" && id) return send(res, 200, await attempt(() => projects.remove(org, id)));
     }
     throw new HttpError(404, "Not found.");
   }
@@ -1456,8 +1461,8 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
 
   if (route === "GET spaces") return send(res, 200, spaces.list());
   if (route === "POST spaces") return send(res, 200, await attempt(() => spaces.create(body.name)));
-  if (route === "PATCH spaces") return send(res, 200, await attempt(() => spaces.rename(parts[1], body.name)));
-  if (route === "DELETE spaces") return send(res, 200, await attempt(() => spaces.remove(parts[1])));
+  if (route === "PATCH spaces") return send(res, 200, await attempt(() => ((sp) => (projects.folderRenamed(sp.id, sp.name), sp))(spaces.rename(parts[1], body.name))));
+  if (route === "DELETE spaces") return send(res, 200, await attempt(() => (spaces.remove(parts[1]), projects.folderRemoved(parts[1]))));
 
   if (route === "GET skills") return send(res, 200, skills.list());
   if (route === "DELETE skills") return send(res, 200, await attempt(() => skills.remove(decodeURIComponent(parts[1]))));
