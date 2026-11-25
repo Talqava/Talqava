@@ -284,6 +284,7 @@ const ICONS = {
   audit: "M6 3.5h6l3 3v10H6A1.5 1.5 0 0 1 4.5 15V5A1.5 1.5 0 0 1 6 3.5zM7.5 9h5M7.5 11.5h5M7.5 14h3",
   workspace: "M5.5 3.5h6l3 3v10h-9zM11.5 3.5v3h3M7.5 10h5M7.5 12.5h5M7.5 7.5h2",
   tasks: "M4 4.5h3v11H4zM8.5 4.5h3v7h-3zM13 4.5h3v4h-3z",
+  projects: "M3 6.5a1.5 1.5 0 0 1 1.5-1.5h3l1.5 1.5h6.5A1.5 1.5 0 0 1 17 8v6.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5z",
   guide: "M10 5.5C8.5 4.3 6.5 4 4 4v11c2.5 0 4.5.3 6 1.5 1.5-1.2 3.5-1.5 6-1.5V4c-2.5 0-4.5.3-6 1.5zM10 5.5v11",
   library: "M3.5 6A1.5 1.5 0 0 1 5 4.5h3l1.5 2H15A1.5 1.5 0 0 1 16.5 8v6A1.5 1.5 0 0 1 15 15.5H5A1.5 1.5 0 0 1 3.5 14zM7 10.5h6M7 12.8h4",
 };
@@ -309,6 +310,7 @@ function renderRail() {
       "div",
       { class: "railgroup" },
       item("tasks", "Tasks", v === "tasks", "Every task and goal: queued, working, needing you, to review and done"),
+      item("projects", "Projects", v === "projects" || v === "project", "One folder for each body of work: its tasks, chats, lead and progress"),
       item("home", "Work in progress", ["home", "quest", "bot"].includes(v), "Your agents and what each is doing right now"),
       item("jobs", "Routines", v === "jobs", "Repeating work that runs by itself, for a position or the assistant"),
     ),
@@ -343,6 +345,7 @@ function go(view, id = null) {
   state.convId = view === "chat" || view === "quest" ? id : null;
   state.botId = view === "bot" ? id : null;
   state.marketId = view === "marketbot" ? id : null;
+  if (view === "project") state.projectId = id;
   closePalette();
   renderTop();
   renderBody();
@@ -368,7 +371,7 @@ function renderBody() {
   state.source = null;
   ui.log = null;
   ui.body.className = "body";
-  const views = { home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView };
+  const views = { home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView };
   (views[state.view] || homeView)();
 }
 
@@ -7340,7 +7343,7 @@ async function drawTables(box, pageId) {
 }
 
 /** Which guide explains each page. */
-const GUIDES_BY_VIEW = { chat: "chat", inbox: "inbox", tasks: "tasks", home: "work-in-progress", quest: "work-in-progress", bot: "work-in-progress", jobs: "schedules", team: "organization", market: "marketplace", marketbot: "marketplace", workspace: "workspace", library: "library", memory: "memory", skills: "skills", audit: "audit-log", integrations: "integrations", settings: "settings" };
+const GUIDES_BY_VIEW = { chat: "chat", inbox: "inbox", tasks: "tasks", projects: "projects", project: "projects", home: "work-in-progress", quest: "work-in-progress", bot: "work-in-progress", jobs: "schedules", team: "organization", market: "marketplace", marketbot: "marketplace", workspace: "workspace", library: "library", memory: "memory", skills: "skills", audit: "audit-log", integrations: "integrations", settings: "settings" };
 const guideFor = (view) => (view === "integrations" && ui.integration === "ai-models" ? "ai-models" : GUIDES_BY_VIEW[view] ?? null);
 
 /** Shows a user guide in a reader beside the page. Links between guides open in the reader; the list of guides is on the left. */
@@ -7803,7 +7806,7 @@ function drawGoals() {
                 h("span", { class: "grow" }, h("b", {}, `◇ ${p.title}`), h("span", { class: "note small" }, [p.leadName ? `Led by ${p.leadName}` : "No lead", p.tasks.total ? `${p.tasks.done} of ${p.tasks.total} tasks done` : "No tasks yet", p.status !== "active" ? (p.status === "done" ? "Done" : "Paused") : null].filter(Boolean).join(" · "))),
                 h("button", { class: "plain small", onclick: () => (((ui.taskFilter ??= { who: "", q: "", cancelled: false, plan: "" }).plan = `project:${p.id}`), (ui.tasksMode = "board"), drawBoard()) }, "Tasks"),
                 h("button", { class: "plain small", onclick: () => newTaskDialog({ projectId: p.id, owner: p.lead || "" }) }, "+ Task"),
-                h("button", { class: "plain small", onclick: () => projectDialog({ project: p }) }, "Edit"),
+                h("button", { class: "plain small", onclick: () => go("project", p.id) }, "Open"),
               ),
             ),
           )
@@ -7877,13 +7880,142 @@ async function projectDialog({ project = null, goal = null } = {}) {
   const about = h("textarea", { rows: 3, placeholder: "What it covers (optional)", "aria-label": "About" }, project?.description ?? "");
   const forGoal = h("select", { "aria-label": "Goal" }, h("option", { value: "" }, "No goal"), (ui.goals ?? []).filter((x) => x.status === "active" || x.id === project?.goal).map((x) => h("option", { value: x.id, selected: (project?.goal ?? goal?.id) === x.id }, x.title)));
   const lead = h("select", { "aria-label": "Lead" }, h("option", { value: "" }, "No lead"), org.members.map((m) => h("option", { value: m.bot, selected: project?.lead === m.bot }, m.title)));
-  const status = project ? h("select", { "aria-label": "Status" }, ["active", "paused", "done"].map((s) => h("option", { value: s, selected: project.status === s }, { active: "Active", paused: "Paused", done: "Done" }[s]))) : null;
-  const got = await libDialog(project ? "Edit the project" : "New project", h("div", { class: "composeform" }, h("label", {}, "Project", title), h("label", {}, "About", about), h("div", { class: "row" }, h("label", { class: "grow" }, "Goal", forGoal), h("label", { class: "grow" }, "Led by", lead), status ? h("label", {}, "Status", status) : null), h("p", { class: "note small" }, "Tasks in a project serve its goal. Its lead is the natural owner of its tasks.")), [[project ? "Save" : "Start the project", () => ({ title: title.value.trim(), description: about.value.trim(), goal: forGoal.value || null, lead: lead.value || null, ...(status ? { status: status.value } : {}) }), true]]);
+  const status = h("select", { "aria-label": "Status" }, (project ? ["planning", "active", "paused", "done"] : ["active", "planning"]).map((s) => h("option", { value: s, selected: (project?.status ?? "active") === s }, PROJECT_STATUS_WORDS[s])));
+  const doneWhen = h("textarea", { rows: 2, placeholder: "e.g. Ten shops stock the new line and reorder once", "aria-label": "Done when" }, project?.doneWhen ?? "");
+  const due = h("input", { type: "date", value: project?.due ?? "", "aria-label": "Due" });
+  const got = await libDialog(project ? "Edit the project" : "New project", h("div", { class: "composeform" }, h("label", {}, "Project", title), h("label", {}, "About", about), h("label", {}, "Done when", doneWhen), h("div", { class: "row" }, h("label", { class: "grow" }, "Due", due), h("label", { class: "grow" }, "Status", status)), h("div", { class: "row" }, h("label", { class: "grow" }, "Goal", forGoal), h("label", { class: "grow" }, "Led by", lead)), h("p", { class: "note small" }, "A project is one folder for a body of work: its tasks, its chats and its own memory. Tasks in it serve its goal, and its lead is the natural owner of its tasks.")), [[project ? "Save" : "Start the project", () => ({ title: title.value.trim(), description: about.value.trim(), doneWhen: doneWhen.value.trim(), due: due.value || null, goal: forGoal.value || null, lead: lead.value || null, status: status.value }), true]]);
   if (!got) return;
   await attempt(async () => {
-    if (project) await api("PATCH", `projects/${project.id}`, got);
-    else await api("POST", "projects", got);
+    const saved = project ? await api("PATCH", `projects/${project.id}`, got) : await api("POST", "projects", got);
+    ui.projects = null;
+    await loadSpaces().catch(() => {});
+    if (state.view === "projects") return projectsView();
+    if (state.view === "project") return projectView();
+    if (!project && state.view !== "tasks") return go("project", saved.id);
     ui.tasksMode = "goals";
     await refreshTasks(true);
-  }, ui.tasksCol);
+  }, ui.tasksCol ?? ui.body);
+}
+
+// ---------- projects: one folder for a body of work ----------
+const PROJECT_STATUS_WORDS = { planning: "Planning", active: "Active", paused: "Paused", done: "Done" };
+const HEALTH_WORDS = { "on-track": ["On track", "ok"], "at-risk": ["At risk", "warnline"], "off-track": ["Off track", "badline"] };
+const healthTag = (p) => (p.health ? h("span", { class: `tag ${HEALTH_WORDS[p.health][1]}`, title: p.healthWhy || "Nothing is late or stuck" }, HEALTH_WORDS[p.health][0]) : null);
+
+/** Every project as a card, grouped by status. */
+async function projectsView() {
+  ui.body.className = "body";
+  ui.log = null;
+  const col = h("div", { class: "projectspage" });
+  fill(ui.body, h("main", { class: "center" }, col));
+  let data;
+  try {
+    data = await api("GET", "projects");
+  } catch (err) {
+    return fill(col, h("div", { class: "banner error" }, err.message));
+  }
+  if (state.view !== "projects") return;
+  ui.goals = data.goals;
+  ui.projects = data.projects;
+  loadSpaces().catch(() => {});
+  const org = activeOrg();
+  const f = (ui.projectFilter ??= { needs: false, goal: "", lead: "" });
+  const shown = data.projects.filter((p) => (!f.needs || p.needsYou) && (!f.goal || p.goal === f.goal) && (!f.lead || p.lead === f.lead));
+  const card = (p) =>
+    h(
+      "button",
+      { class: `card projectcard st-${p.status}`, onclick: () => go("project", p.id) },
+      h("div", { class: "row" }, h("b", { class: "grow projecttitle" }, p.title), healthTag(p)),
+      h("div", { class: "note small" }, [p.leadName ? `Led by ${p.leadName}` : "No lead", p.goalTitle ? `Serves: ${p.goalTitle}` : null].filter(Boolean).join(" · ")),
+      p.tasks.total ? h("span", { class: "goalbar tasks", role: "progressbar", "aria-valuenow": String(p.tasks.done), "aria-valuemax": String(p.tasks.total) }, h("i", { style: `width:${(p.tasks.done / p.tasks.total) * 100}%` })) : null,
+      h("div", { class: "row note small" }, h("span", { class: "grow" }, [p.tasks.total ? `${p.tasks.done} of ${p.tasks.total} task${p.tasks.total === 1 ? "" : "s"} done` : "No tasks yet", p.chats ? `${p.chats} chat${p.chats === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ")), p.due ? h("span", { class: p.health === "off-track" && p.healthWhy.startsWith("Past") ? "bad" : "" }, dueWords(p.due)) : null),
+      p.needsYou ? h("div", {}, h("span", { class: "tag warnline" }, `${p.needsYou} need${p.needsYou === 1 ? "s" : ""} you`)) : null,
+    );
+  const group = (status) => {
+    const list = shown.filter((p) => p.status === status);
+    if (!list.length) return null;
+    const grid = h("div", { class: "projectgrid" }, list.map(card));
+    return status === "done" ? h("details", { class: "projectgroup" }, h("summary", {}, `Done · ${list.length}`), grid) : h("section", { class: "projectgroup" }, h("h2", {}, `${PROJECT_STATUS_WORDS[status]} · ${list.length}`), grid);
+  };
+  const pick = (label, value, options, set) => h("select", { "aria-label": label, onchange: (e) => (set(e.target.value), projectsView()) }, h("option", { value: "" }, label), options.map(([v, words]) => h("option", { value: v, selected: v === value }, words)));
+  fill(
+    col,
+    h("div", { class: "row wrap" }, h("div", { class: "grow" }, h("h1", {}, "Projects"), h("p", { class: "lead" }, "One folder for each body of work: its tasks, its chats and its own memory, its lead, and where it stands.")), h("button", { class: "primary", onclick: () => projectDialog() }, "+ New project")),
+    data.projects.length
+      ? h(
+          "div",
+          { class: "row wrap projectfilters" },
+          h("label", { class: "power" }, h("input", { type: "checkbox", checked: f.needs, onchange: (e) => ((f.needs = e.target.checked), projectsView()) }), "Needs me"),
+          data.goals.length ? pick("Any goal", f.goal, data.goals.map((g) => [g.id, g.title]), (v) => (f.goal = v)) : null,
+          org.members.length ? pick("Any lead", f.lead, org.members.filter((m) => data.projects.some((p) => p.lead === m.bot)).map((m) => [m.bot, m.title]), (v) => (f.lead = v)) : null,
+        )
+      : null,
+    data.projects.length
+      ? shown.length
+        ? ["active", "planning", "paused", "done"].map(group)
+        : h("p", { class: "note" }, "No project matches. Clear a filter to see them all.")
+      : h("div", { class: "card projectempty" }, h("b", {}, "No projects yet"), h("p", { class: "note" }, "Start one for a client, a launch or anything with several tasks. Its tasks and chats then sit together, and its chats keep their own memory, apart from other projects."), h("div", {}, h("button", { class: "primary", onclick: () => projectDialog() }, "+ New project"))),
+  );
+}
+
+/** One project: its header, then Overview, Tasks and Chats. */
+async function projectView() {
+  ui.body.className = "body";
+  ui.log = null;
+  const col = h("div", { class: "projectspage" });
+  fill(ui.body, h("main", { class: "center" }, col));
+  const id = state.projectId;
+  let data;
+  try {
+    [data] = await Promise.all([api("GET", `projects/${id}`), ui.goals ? null : api("GET", "goals").then((g) => ((ui.goals = g.goals), (ui.projects = g.projects)))]);
+  } catch (err) {
+    return fill(col, h("button", { class: "plain back", onclick: () => go("projects") }, "← All projects"), h("div", { class: "banner error" }, err.message));
+  }
+  if (state.view !== "project" || state.projectId !== id) return;
+  const p = data.project;
+  const again = () => projectView();
+  const act = (fn) => attempt(async () => (await fn(), (ui.projects = null), await again()), col);
+  const tab = (ui.projectTab ??= "overview");
+  const tabBtn = (key, label) => h("button", { class: tab === key ? "on" : "", role: "tab", "aria-selected": String(tab === key), onclick: () => ((ui.projectTab = key), again()) }, label);
+  const status = h("select", { "aria-label": "Status", onchange: (e) => act(() => api("PATCH", `projects/${p.id}`, { status: e.target.value })) }, Object.entries(PROJECT_STATUS_WORDS).map(([v, words]) => h("option", { value: v, selected: p.status === v }, words)));
+  const taskRow = (t) => h("button", { class: "plain projectrow", onclick: () => openTask(t.id) }, h("span", { class: `taskdot st-${t.status}`, title: TASK_STATUS_WORDS[t.status] }), h("span", { class: "grow" }, `#${t.number} ${t.title}`), h("span", { class: "note small" }, `${t.ownerName} · ${TASK_STATUS_WORDS[t.status]}`));
+  const needs = data.tasks.filter((t) => ["review", "waiting", "blocked"].includes(t.status));
+  const startChat = () =>
+    attempt(async () => {
+      const { space } = await api("POST", `projects/${p.id}/chat`);
+      await loadSpaces();
+      setSpace(space);
+      go("chat");
+    }, col);
+  const openChat = (c) =>
+    attempt(async () => {
+      await loadSpaces();
+      setSpace(p.space);
+      go("chat", c.id);
+    }, col);
+  const remove = () => confirm(`Remove the project “${p.title}”?\n\nIts ${data.tasks.length} task${data.tasks.length === 1 ? "" : "s"} stay, without a project. Its chats move to General, and the project's own memory is deleted.`) && attempt(async () => (await api("DELETE", `projects/${p.id}`), (ui.projects = null), await loadSpaces().catch(() => {}), go("projects")), col);
+  const overview = () => [
+    h("section", { class: "card" }, h("div", { class: "label" }, "What it covers"), p.description ? h("p", {}, p.description) : h("p", { class: "note" }, "No description yet. Press Edit to add one."), h("div", { class: "label" }, "Done when"), p.doneWhen ? h("p", {}, p.doneWhen) : h("p", { class: "note" }, "Not said yet. Saying what done looks like helps your agents aim at it.")),
+    h("section", { class: "card" }, h("div", { class: "label" }, `Needs you · ${needs.length}`), needs.length ? needs.map(taskRow) : h("p", { class: "note" }, "Nothing in this project is waiting on you.")),
+    h("section", { class: "card" }, h("div", { class: "label" }, "Team"), p.team.length ? h("p", {}, p.team.join(", ")) : h("p", { class: "note" }, "Nobody yet. Agents join when they take a task in the project.")),
+  ];
+  const tasks = () => {
+    const order = ["working", "review", "waiting", "blocked", "todo", "paused", "done"];
+    const sorted = [...data.tasks].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status) || a.number - b.number);
+    return [
+      h("div", { class: "row" }, h("span", { class: "grow note" }, p.tasks.total ? `${p.tasks.done} of ${p.tasks.total} done` : "No tasks yet. Add the first one."), data.tasks.length ? h("button", { class: "small", onclick: () => (((ui.taskFilter ??= { who: "", q: "", cancelled: false, plan: "" }).plan = `project:${p.id}`), (ui.tasksMode = "board"), go("tasks")) }, "Open on the board") : null, h("button", { class: "small primary", onclick: () => newTaskDialog({ projectId: p.id, owner: p.lead || "" }) }, "+ Task")),
+      sorted.length ? h("section", { class: "card" }, sorted.map(taskRow)) : null,
+    ];
+  };
+  const chats = () => [
+    h("div", { class: "row" }, h("span", { class: "grow note" }, "Chats in this project share the project's own memory, kept apart from other projects."), h("button", { class: "small primary", onclick: startChat }, "+ Chat in this project")),
+    data.chats.length ? h("section", { class: "card" }, data.chats.map((c) => h("button", { class: "plain projectrow", onclick: () => openChat(c) }, h("span", { class: "grow" }, c.title || "New chat"), h("span", { class: "note small" }, when(c.updatedAt))))) : h("p", { class: "note" }, "No chats yet."),
+  ];
+  fill(
+    col,
+    h("button", { class: "plain back", onclick: () => go("projects") }, "← All projects"),
+    h("div", { class: "row wrap projecthead" }, h("div", { class: "grow" }, h("h1", {}, p.title), h("div", { class: "note" }, [p.leadName ? `Led by ${p.leadName}` : "No lead", p.goalTitle ? `Serves: ${p.goalTitle}` : "No goal", p.due ? dueWords(p.due) : "No due day"].join(" · "), p.healthWhy ? ` · ${p.healthWhy}` : "")), healthTag(p), status, h("button", { class: "small", onclick: () => projectDialog({ project: p }) }, "Edit"), h("button", { class: "small plain danger", onclick: remove }, "Remove")),
+    h("div", { class: "segmented projecttabs", role: "tablist", "aria-label": "Parts of this project" }, tabBtn("overview", "Overview"), tabBtn("tasks", `Tasks · ${data.tasks.length}`), tabBtn("chats", `Chats · ${data.chats.length}`)),
+    tab === "tasks" ? tasks() : tab === "chats" ? chats() : overview(),
+  );
 }
