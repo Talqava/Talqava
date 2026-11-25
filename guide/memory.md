@@ -14,7 +14,7 @@ Memory is where Talqava keeps short facts worth remembering between chats and ta
 
 **General memory goes everywhere.** Entries under **General** go into every chat, in every project. Your agents also get them when they work on tasks.
 
-**Projects keep things apart.** A project is a separate space for one client or piece of work. Its memory goes only into that project's chats, together with General memory. What the agent learns in a project's chat stays in that project.
+**Projects keep things apart.** A project is the folder for one client or piece of work; it also holds that work's tasks and chats (see [Projects](projects.md)). Its memory goes only into that project's chats, together with General memory. What the agent learns in a project's chat stays in that project.
 
 **Memory is for facts, not documents.** Each entry is short (up to 1,500 characters). When there is more memory than fits comfortably, Talqava picks the entries that match what you are talking about, plus the newest ones. The rest are still kept.
 
@@ -55,7 +55,7 @@ You can also just say it in a chat: "Remember that our office is closed on Frida
 1. Open the project's tab.
 2. Press **Rename**, type the new name and press **Save name**. Or press **Delete project** and confirm.
 
-Deleting a project deletes its memories for good. Its chats move to General.
+Deleting a project deletes its memories for good. Its chats move to General, and its tasks stay without a project.
 
 ### Add something every agent in the organization should know
 
