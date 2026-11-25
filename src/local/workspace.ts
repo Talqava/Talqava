@@ -32,6 +32,10 @@ export interface PageInfo {
   folder: string;
   /** A note's tags. */
   tags: string[];
+  /** Kept at the top of its list. */
+  pinned: boolean;
+  /** When the owner asked to be reminded of it, or null. */
+  remindAt: string | null;
   /** How sensitive it is: decides which AI services may receive it, and hides a Restricted item from agents not named on it. */
   level: Level;
   parent: string | null;
@@ -127,11 +131,15 @@ function db(orgId: string): DatabaseSync {
   if (!have.has("folder")) d.exec("alter table pages add column folder text not null default ''");
   if (!have.has("tags")) d.exec("alter table pages add column tags text not null default '[]'");
   if (!have.has("level")) d.exec("alter table pages add column level text not null default 'internal'");
+  if (!have.has("pinned")) d.exec("alter table pages add column pinned integer not null default 0");
+  if (!have.has("remind_at")) d.exec("alter table pages add column remind_at text");
   ready.add(d);
   return d;
 }
 
 interface Row {
+  pinned?: number;
+  remind_at?: string | null;
   level: string;
   kind: string;
   folder: string;
@@ -328,6 +336,8 @@ function info(org: Org, d: DatabaseSync, row: Row, byId: Map<string, Row>, open:
     folder: row.folder ?? "",
     tags: tagsOf(row.tags),
     level: levelOf(row.level),
+    pinned: Boolean(row.pinned),
+    remindAt: row.remind_at ?? null,
     parent: row.parent,
     position: row.position,
     title: row.title,
@@ -413,9 +423,17 @@ export const workspace = {
     return all.filter((r) => seen(org, byId, r, who)).map((r) => info(org, d, r, byId, open));
   },
 
+  /** The owner's reminders that are due: notes and documents whose reminder time has come. */
+  reminders(org: Org, now = new Date()): { id: string; title: string; kind: PageKind; remindAt: string }[] {
+    return this.tree(org)
+      .filter((p) => p.remindAt && p.remindAt <= now.toISOString())
+      .map((p) => ({ id: p.id, title: p.title, kind: p.kind, remindAt: p.remindAt! }))
+      .sort((a, b) => a.remindAt.localeCompare(b.remindAt));
+  },
+
   /** Office: the documents and notes `who` may see, newest first, with their folders, notebooks and tags. */
   office(org: Org, who: Who = OWNER) {
-    const files = this.tree(org, who).filter((p) => p.kind !== "page").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const files = this.tree(org, who).filter((p) => p.kind !== "page").sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt));
     const names = (kind: PageKind) => [...new Set(files.filter((f) => f.kind === kind && f.folder).map((f) => f.folder))].sort((a, b) => a.localeCompare(b));
     return { files, folders: names("doc"), notebooks: names("note"), tags: [...new Set(files.flatMap((f) => f.tags))].sort() };
   },
@@ -480,7 +498,7 @@ export const workspace = {
   },
 
   /** The owner changes a page's title, icon, place, who may see it, or how agents may change it. */
-  update(org: Org, id: string, patch: { title?: unknown; icon?: unknown; parent?: unknown; position?: unknown; access?: unknown; edit?: unknown; protected?: unknown; kind?: unknown; folder?: unknown; tags?: unknown; level?: unknown }): Page {
+  update(org: Org, id: string, patch: { title?: unknown; icon?: unknown; parent?: unknown; position?: unknown; access?: unknown; edit?: unknown; protected?: unknown; kind?: unknown; folder?: unknown; tags?: unknown; level?: unknown; pinned?: unknown; remindAt?: unknown }): Page {
     const d = db(org.id);
     const { row, byId } = visible(org, d, id, OWNER);
     if (patch.title !== undefined) {
@@ -508,6 +526,12 @@ export const workspace = {
     if (patch.edit !== undefined) d.prepare("update pages set edit = ? where id = ?").run(patch.edit === "direct" ? "direct" : "suggest", row.id);
     if (patch.protected !== undefined) d.prepare("update pages set protected = ? where id = ?").run(patch.protected ? 1 : 0, row.id);
     if (patch.folder !== undefined) d.prepare("update pages set folder = ? where id = ?").run(cleanFolder(patch.folder), row.id);
+    if (patch.pinned !== undefined) d.prepare("update pages set pinned = ? where id = ?").run(patch.pinned ? 1 : 0, row.id);
+    if (patch.remindAt !== undefined) {
+      const at = patch.remindAt ? new Date(String(patch.remindAt)) : null;
+      if (at && Number.isNaN(at.getTime())) throw new Error("Choose a date and time for the reminder.");
+      d.prepare("update pages set remind_at = ? where id = ?").run(at ? at.toISOString() : null, row.id);
+    }
     if (patch.level !== undefined && levelOf(patch.level) !== levelOf(row.level)) {
       d.prepare("update pages set level = ? where id = ?").run(levelOf(patch.level), row.id);
       audit({ actor: "owner", actorName: "You", kind: "workspace", action: `Marked “${row.title}” ${LEVEL_WORDS[levelOf(patch.level)].name}`, detail: `It was ${LEVEL_WORDS[levelOf(row.level)].name}.` });

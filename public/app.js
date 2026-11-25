@@ -341,6 +341,7 @@ const ICONS = {
   docs: "M6 3.5h5.5l3 3V15A1.5 1.5 0 0 1 13 16.5H6A1.5 1.5 0 0 1 4.5 15V5A1.5 1.5 0 0 1 6 3.5zM11.5 3.5v3h3M7 9.5h6M7 12h6M7 14.5h3.5",
   notes: "M5 4.5h10v7.5l-3.5 3.5H5zM15 12h-3.5v3.5M7.5 7.5h5M7.5 10h3",
   sheets: "M4.5 4.5h11v11h-11zM4.5 8h11M4.5 11.5h11M8.5 4.5v11M12 8v7.5",
+  office: "M4 4.5h5v5H4zM11 4.5h5v5h-5zM4 11.5h5v4H4zM11 11.5h5v4h-5z",
   projects: "M3 6.5a1.5 1.5 0 0 1 1.5-1.5h3l1.5 1.5h6.5A1.5 1.5 0 0 1 17 8v6.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5z",
   guide: "M10 5.5C8.5 4.3 6.5 4 4 4v11c2.5 0 4.5.3 6 1.5 1.5-1.2 3.5-1.5 6-1.5V4c-2.5 0-4.5.3-6 1.5zM10 5.5v11",
   library: "M3.5 6A1.5 1.5 0 0 1 5 4.5h3l1.5 2H15A1.5 1.5 0 0 1 16.5 8v6A1.5 1.5 0 0 1 15 15.5H5A1.5 1.5 0 0 1 3.5 14zM7 10.5h6M7 12.8h4",
@@ -374,7 +375,7 @@ function renderRail() {
     h("div", { class: "raillabel" }, "Team"),
     h("div", { class: "railgroup" }, item("team", "Organization", v === "team", "The org chart, departments and budgets"), item("market", "Marketplace", v === "market" || v === "marketbot", "Ready-made agents and teams for every department")),
     h("div", { class: "raillabel" }, "Office"),
-    h("div", { class: "railgroup" }, item("docs", "Documents", v === "docs", "Letters, proposals and reports you and your agents write together"), item("sheets", "Sheets", v === "sheets", "Budgets, forecasts and lists that calculate"), item("notes", "Notes", v === "notes", "Quick notes, meeting notes and ideas, private until you share them")),
+    h("div", { class: "railgroup" }, item("office", "Office home", v === "office", "Start a document, sheet or note, and see what is waiting"), item("docs", "Documents", v === "docs", "Letters, proposals and reports you and your agents write together"), item("sheets", "Sheets", v === "sheets", "Budgets, forecasts and lists that calculate"), item("notes", "Notes", v === "notes", "Quick notes, meeting notes and ideas, private until you share them")),
     h("div", { class: "raillabel" }, "Knowledge"),
     h(
       "div",
@@ -431,7 +432,7 @@ function renderBody() {
   state.source = null;
   ui.log = null;
   ui.body.className = "body";
-  const views = { home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView, security: securityView, docs: docsView, notes: notesView, sheets: sheetsView };
+  const views = { home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView, security: securityView, office: officeView, docs: docsView, notes: notesView, sheets: sheetsView };
   (views[state.view] || homeView)();
 }
 
@@ -1734,8 +1735,9 @@ const agentWho = (bot) => (bot && state.mail?.names?.[bot.id] ? `${agentName(bot
 async function loadPageSuggestions() {
   const before = JSON.stringify((state.pageSuggestions ?? []).map((s) => s.id));
   const rowsBefore = JSON.stringify((state.rowChanges ?? []).map((c) => c.id));
-  [state.pageSuggestions, state.rowChanges] = await Promise.all([api("GET", "workspace/suggestions").catch(() => state.pageSuggestions ?? []), api("GET", "workspace/tables/waiting").catch(() => state.rowChanges ?? [])]);
-  if (state.view === "inbox" && (JSON.stringify(state.pageSuggestions.map((s) => s.id)) !== before || JSON.stringify(state.rowChanges.map((c) => c.id)) !== rowsBefore)) renderInbox();
+  const remindersBefore = JSON.stringify((state.reminders ?? []).map((r) => r.id));
+  [state.pageSuggestions, state.rowChanges, state.reminders] = await Promise.all([api("GET", "workspace/suggestions").catch(() => state.pageSuggestions ?? []), api("GET", "workspace/tables/waiting").catch(() => state.rowChanges ?? []), api("GET", "workspace/reminders").catch(() => state.reminders ?? [])]);
+  if (state.view === "inbox" && (JSON.stringify(state.reminders.map((r) => r.id)) !== remindersBefore || JSON.stringify(state.pageSuggestions.map((s) => s.id)) !== before || JSON.stringify(state.rowChanges.map((c) => c.id)) !== rowsBefore)) renderInbox();
 }
 
 async function loadMail() {
@@ -1796,6 +1798,8 @@ function mailMessages() {
     const bot = state.crew?.bots.find((b) => b.id === sg.author) ?? null;
     out.push({ id: `page:${sg.id}`, kind: "pagechange", suggestion: sg, bot, subject: `Suggested change: “${sg.pageTitle}”`, snippet: sg.note || "A change to a workspace page, for you to accept or decline.", at: sg.createdAt, activityAt: sg.createdAt, label: "needs" });
   }
+  // A reminder you set on a note or document, once its time has come.
+  for (const r of state.reminders ?? []) out.push({ id: `remind:${r.id}:${r.remindAt}`, kind: "reminder", reminder: r, bot: null, subject: `Reminder: “${r.title}”`, snippet: "You asked to be reminded of this.", at: r.remindAt, activityAt: r.remindAt, label: "needs" });
   // So does a change an agent asked for in a workspace table.
   for (const ch of state.rowChanges ?? []) {
     const bot = state.crew?.bots.find((b) => b.id === ch.author) ?? null;
@@ -2060,6 +2064,19 @@ function readMail(m) {
 
   const body = h("div", { class: "readbody" });
   const act = (fn) => attempt(async () => (await fn(), await Promise.all([loadQuests(), refreshList(), loadCrew(), loadMail()]), renderInbox(), syncInboxCount()), body);
+  if (m.kind === "reminder") {
+    const r = m.reminder;
+    const clear = (open) =>
+      attempt(async () => {
+        await api("PATCH", `workspace/pages/${r.id}`, { remindAt: null });
+        await loadPageSuggestions();
+        ui.mailOpen = null;
+        syncInboxCount();
+        open ? openPage(r.id) : renderInbox();
+      }, body);
+    fill(body, h("p", {}, `You asked to be reminded of “${r.title}” at ${when(r.remindAt)}.`), h("div", { class: "row" }, h("button", { class: "primary", onclick: () => clear(true) }, "Open it"), h("button", { onclick: () => clear(false) }, "Done")), h("p", { class: "note small" }, "Either button clears the reminder."));
+    return [tools, h("h2", { class: "readsubject" }, m.subject, h("span", { class: `mlabel ${m.label}` }, LABEL_WORDS[m.label])), from, body];
+  }
   if (m.kind === "rowchange") {
     const ch = m.change;
     const decide = (decision) =>
@@ -4735,6 +4752,9 @@ async function marketView() {
     fill(
       results,
       kitSection("company", "Company templates", "A running start for your kind of business: the positions on your chart, the pages your agents follow, and routines, set up together."),
+      market.officeTemplates?.length && !cat && (!needle || market.officeTemplates.some((t) => `${t.name} ${t.summary}`.toLowerCase().includes(needle)))
+        ? h("section", {}, h("h2", {}, "Office templates"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Ready-made documents and sheets: a proposal, a quote, a budget, a cash forecast."), h("div", { class: "mgrid wide" }, market.officeTemplates.filter((t) => !needle || `${t.name} ${t.summary}`.toLowerCase().includes(needle)).map(officeTemplateCard)))
+        : null,
       kitSection("playbook", "Playbooks", "One known process, ready to run: its procedure as a page, a routine for the group that owns it, and Run it now."),
       market.connectors && !cat && (!needle || market.connectors.connectors.some((c) => `${c.name} ${c.about} ${c.category}`.toLowerCase().includes(needle)))
         ? h("section", {}, h("h2", {}, "Connectors"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Give your agents the services your business already uses. Each says what it can read and change before you connect it."), connectorCatalog({ connectors: market.connectors.connectors.filter((c) => !needle || `${c.name} ${c.about} ${c.category}`.toLowerCase().includes(needle)), coming: needle ? [] : market.connectors.coming }, () => marketView()))
@@ -7298,6 +7318,9 @@ function officePanel(page, id, surface, patch, col) {
   folder.addEventListener("change", () => patch({ folder: folder.value }));
   const tags = h("input", { value: page.tags.join(", "), placeholder: "e.g. follow-up, pricing", "aria-label": "Tags" });
   tags.addEventListener("change", () => patch({ tags: tags.value }));
+  const local = (iso) => ((d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16))(new Date(iso));
+  const remind = h("input", { type: "datetime-local", value: page.remindAt ? local(page.remindAt) : "", "aria-label": "Remind me at" });
+  remind.addEventListener("change", () => patch({ remindAt: remind.value ? new Date(remind.value).toISOString() : null }));
   const html = () => (surface.querySelector(".ProseMirror") ?? surface).innerHTML;
   const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const forWord = () => {
@@ -7321,6 +7344,10 @@ function officePanel(page, id, surface, patch, col) {
       toast("Saved to Memory. Your agents will remember it.");
     }, col);
   return [
+    h("label", { class: "power" }, h("input", { type: "checkbox", checked: page.pinned, onchange: (e) => patch({ pinned: e.target.checked }) }), `Pinned: keep at the top of ${isNote ? "Notes" : "Documents"}`),
+    h("div", { class: "label" }, "Remind me"),
+    remind,
+    page.remindAt ? h("p", { class: "note small" }, `You will be reminded in your Inbox ${new Date(page.remindAt) <= new Date() ? "now" : `on ${when(page.remindAt)}`}. Clear the box to cancel.`) : h("p", { class: "note small" }, "Pick a date and time; the reminder appears in your Inbox."),
     h("div", { class: "label" }, isNote ? "Notebook" : "Folder"),
     folder,
     h("datalist", { id: listId }, names.map((n) => h("option", { value: n }))),
@@ -7371,6 +7398,88 @@ const officeNew = (kind, folder = "") =>
     ui.ws.open = page.id;
     wsReload();
   });
+
+/** A card for a ready-made Office file: preview its summary, make a file from it. */
+function officeTemplateCard(t) {
+  const kind = { doc: "Document", sheet: "Sheet", note: "Note" }[t.kind];
+  return h(
+    "article",
+    { class: "mcard tcard" },
+    h("div", { class: "mhead" }, h("span", { class: "packicon conn", "aria-hidden": "true" }, kind[0]), h("div", {}, h("b", {}, t.name), h("div", { class: "by" }, `${kind} template`))),
+    h("p", { class: "mdesc" }, t.summary, t.uses ? ` Best filled from your “${t.uses}” page.` : ""),
+    h("div", { class: "mfoot" }, h("span", { class: "mono small muted" }, "Free · delete the file to undo"), h("button", { class: "madd primary", onclick: () => attempt(async () => ((p) => (toast(`A new ${kind.toLowerCase()} was made from “${t.name}”. Replace the parts in [SQUARE BRACKETS].`), openPage(p.id)))(await api("POST", `workspace/office-templates/${t.id}`))) }, "Use this template")),
+  );
+}
+
+/** Office home: start something, what is waiting, recent files of every kind, and a search across them all. */
+async function officeView() {
+  ui.body.className = "body";
+  ui.log = null;
+  ui.wsFlush?.();
+  const col = h("div", { class: "integrations officehomepage" });
+  fill(ui.body, h("main", { class: "center" }, col));
+  let data, templates;
+  try {
+    [data, templates] = await Promise.all([api("GET", "workspace/office"), api("GET", "workspace/office-templates"), state.crew ? null : loadCrew(), state.orgs ? null : loadOrgs()]);
+  } catch (err) {
+    return fill(col, h("div", { class: "banner error" }, err.message));
+  }
+  if (state.view !== "office") return;
+  const org = activeOrg();
+  const KIND = { doc: ["Document", "Letters, proposals, policies", "docs"], sheet: ["Sheet", "Budgets, forecasts, lists that calculate", "sheets"], note: ["Note", "Quick thoughts, meetings, saved pages", "notes"] };
+  const start = (kind) =>
+    attempt(async () => {
+      const page = kind === "sheet" ? await api("POST", "workspace/sheets", { title: "Untitled sheet" }) : await api("POST", "workspace/pages", { kind, title: "Untitled" });
+      ui.ws ??= { collapsed: new Set() };
+      ui.ws.focusTitle = true;
+      openPage(page.id);
+    }, col);
+  const what = h("input", { placeholder: "e.g. A cash forecast for the next three months, from our sales sheet", "aria-label": "What should the agent make" });
+  const who = h("select", { "aria-label": "Agent" }, org.members.map((m) => h("option", { value: m.bot }, m.title)));
+  const ask = () =>
+    attempt(async () => {
+      const text = what.value.trim();
+      if (!text) throw new Error("Say what the agent should make.");
+      const quest = await startTask({ bot: who.value, text: `Make this: ${text}\n\nFirst look in the workspace for pages that apply (prices, procedures, rules) and follow them. If it is writing, save it as an Office document with the workspace tool (action "file", kind "document"). If it is numbers that calculate, make a sheet with the sheet tool (action "create", then "set"). Say in your report where it is.`, title: `Make: ${text}`.slice(0, 80) });
+      if (quest?.id) go("quest", quest.id);
+      else if (quest?.queued) openTask(quest.queued.id);
+    }, col);
+  const waiting = data.files.filter((f) => f.suggestions);
+  const q = h("input", { type: "search", placeholder: "Search every document, sheet and note, including the words inside", "aria-label": "Search Office" });
+  const results = h("div");
+  const recent = () =>
+    h(
+      "div",
+      { class: "card officetable" },
+      h(
+        "table",
+        {},
+        h("thead", {}, h("tr", {}, ["Name", "Kind", "Last change", "Who can read it", "Sensitivity"].map((t) => h("th", { scope: "col" }, t)))),
+        h("tbody", {}, data.files.slice(0, 15).map((f) => h("tr", {}, h("td", {}, h("button", { class: "plain link", onclick: () => openPage(f.id) }, f.title), f.pinned ? h("span", { class: "tag" }, "pinned") : null), h("td", {}, `${KIND[f.kind]?.[0] ?? "Page"}${f.folder ? ` · ${f.folder}` : ""}`), h("td", {}, `${f.updatedBy} · ${officeDay(f.updatedAt)}`), h("td", {}, officeWho(f)), h("td", {}, LEVEL_NAMES[f.level] ?? "Internal")))),
+      ),
+    );
+  let timer = null;
+  q.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      const text = q.value.trim();
+      if (text.length < 2) return fill(results, h("div", { class: "label" }, "Recent"), data.files.length ? recent() : h("p", { class: "note" }, "Nothing yet. Start something above."));
+      const hits = (await api("GET", `workspace/search?q=${encodeURIComponent(text)}`).catch(() => [])).filter((x) => data.files.some((f) => f.id === x.page));
+      const seen = new Set();
+      fill(results, h("div", { class: "label" }, `Found for “${text}”`), hits.length ? hits.filter((x) => !seen.has(x.page) && seen.add(x.page)).map((x) => h("button", { class: "plain card officewait", onclick: () => openPage(x.page) }, h("b", {}, x.title), h("div", { class: "note small" }, x.text.slice(0, 200)))) : h("p", { class: "note" }, "Nothing matches that in your documents, sheets or notes."));
+    }, 250);
+  });
+  fill(
+    col,
+    h("div", {}, h("h1", {}, "Office"), h("p", { class: "lead" }, "Documents, sheets and notes that you and your agents work on together. Everything stays on this computer.")),
+    q,
+    h("section", { class: "isec" }, h("h2", {}, "Start something"), h("div", { class: "mgrid wide" }, Object.entries(KIND).map(([kind, [name, about]]) => h("button", { class: "plain card officestart", onclick: () => start(kind) }, h("b", {}, `+ ${name}`), h("div", { class: "note small" }, about)))), org.members.length ? h("form", { class: "card form officeask", onsubmit: (e) => (e.preventDefault(), ask()) }, h("b", {}, "Or ask an agent to make it"), h("div", { class: "row wrap" }, what, who, h("button", {}, "Give the task"))) : null),
+    waiting.length ? h("section", { class: "isec" }, h("h2", {}, `Waiting for you · ${waiting.length}`), waiting.map((f) => h("button", { class: "plain card officewait", onclick: () => openPage(f.id) }, h("b", {}, f.title), h("span", { class: "note small" }, ` · ${KIND[f.kind]?.[0] ?? ""} · ${f.suggestions} change${f.suggestions === 1 ? "" : "s"} from an agent to review`)))) : null,
+    h("section", { class: "isec" }, results),
+    h("section", { class: "isec" }, h("h2", {}, "Start from a template"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Ready-made files with the parts to fill in marked in [SQUARE BRACKETS]."), h("div", { class: "mgrid wide" }, templates.map(officeTemplateCard))),
+  );
+  q.dispatchEvent(new Event("input"));
+}
 
 /** Office › Documents: letters, proposals and reports, by folder. Agents write them, suggest changes, or read them. */
 async function docsView() {
@@ -7863,6 +7972,7 @@ async function notesView() {
     fill(
       side,
       h("div", { class: "wssidehead" }, h("button", { class: `plain wshome ${ui.ws.open ? "" : "on"}`, onclick: () => ((ui.ws.open = null), notesView()) }, "Notes"), h("button", { class: "small", onclick: () => officeNew("note", f0.notebook ?? "") }, "+ Note")),
+      h("button", { class: "plain small clipbtn", onclick: () => ((address) => address && attempt(async () => ((ui.ws.open = (await api("POST", "workspace/clip", { url: address })).id), toast("Saved as a note. It is private until you share it."), notesView()), side))(prompt("Save a web page as a note.\n\nPaste the page's address:")) }, "Save a web page as a note"),
       q,
       h("div", { class: "label officegroup" }, "Notebooks"),
       pick("All notes", !f0.notebook, () => (f0.notebook = null), notes.length),
@@ -8454,7 +8564,7 @@ async function drawTables(box, pageId) {
 }
 
 /** Which guide explains each page. */
-const GUIDES_BY_VIEW = { chat: "chat", inbox: "inbox", tasks: "tasks", projects: "projects", project: "projects", home: "work-in-progress", quest: "work-in-progress", bot: "work-in-progress", jobs: "schedules", team: "organization", market: "marketplace", marketbot: "marketplace", workspace: "workspace", docs: "office", notes: "office", security: "security", sheets: "office", library: "library", memory: "memory", skills: "skills", audit: "audit-log", integrations: "integrations", settings: "settings" };
+const GUIDES_BY_VIEW = { chat: "chat", inbox: "inbox", tasks: "tasks", projects: "projects", project: "projects", home: "work-in-progress", quest: "work-in-progress", bot: "work-in-progress", jobs: "schedules", team: "organization", market: "marketplace", marketbot: "marketplace", workspace: "workspace", office: "office", docs: "office", notes: "office", security: "security", sheets: "office", library: "library", memory: "memory", skills: "skills", audit: "audit-log", integrations: "integrations", settings: "settings" };
 const guideFor = (view) => (view === "integrations" && ui.integration === "ai-models" ? "ai-models" : GUIDES_BY_VIEW[view] ?? null);
 
 /** Shows a user guide in a reader beside the page. Links between guides open in the reader; the list of guides is on the left. */
