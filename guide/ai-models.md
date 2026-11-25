@@ -1,6 +1,6 @@
 # AI models
 
-AI models is where you connect the AI services your agents think with: Claude, OpenAI, Google Gemini, Mistral, DeepSeek, Azure, Amazon Bedrock, a LiteLLM gateway and more than 20 others, or free models that run on your own computer. You pick a service, paste its key, and Talqava checks it and finds its models. Open it from **Integrations → AI models**.
+AI models is where you connect the AI services your agents think with: Claude, OpenAI, Google Gemini, Mistral, DeepSeek, Azure, Amazon Bedrock, Google Vertex AI, a LiteLLM gateway and more than 20 others, or free models that run on your own computer. You pick a service, paste its key, and Talqava checks it and finds its models. Open it from **Integrations → AI models**.
 
 ## What you'll see
 
@@ -95,6 +95,7 @@ Without prices, only the step budget can stop a task. Set the context size to wh
 - **"… does not list its models, so type the name of the model you want."** Use **Or type a model's name**.
 - **"No model runner is running on this computer."** Install Ollama or LM Studio, download a model, start it, then look again.
 - **"That does not look like an Azure resource name."** Type only the first part of the address, for example my-company.
+- **Google Vertex AI** needs a service account's key file, not a pasted key. In Google Cloud, open **IAM → Service accounts**, choose or create one with the **Vertex AI User** role, then **Keys → Add key → JSON**, and choose that file in Talqava. Leave the region empty for global. Some companies block key files by policy; ask whoever runs your Google Cloud. If Talqava says **"Google did not accept the service account key"**, the key was deleted or disabled: make a new one and connect again.
 - **"That does not look like an AWS region."** For Amazon Bedrock, type your region, for example us-east-1. You can see it at the top right of the AWS console. The key is a Bedrock API key, made in the Bedrock console under **API keys**. Long-term keys expire on the date chosen when they were made; when one expires, connect again with a new key.
 - **"Up to four backups."** Remove one before adding another.
 - **"… rejected the API key."** during a task: the key was revoked or ran out. Connect the service again with a new key.

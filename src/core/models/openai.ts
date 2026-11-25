@@ -13,6 +13,8 @@ export interface OpenAICompatibleOptions {
   /** e.g. http://localhost:11434/v1 */
   baseUrl: string;
   apiKey?: string;
+  /** For services whose key is a short-lived token (Google Vertex AI): asked for the key before each request. */
+  getKey?: () => Promise<string>;
   model: string;
   prices?: Prices;
   maxTokens?: number;
@@ -222,7 +224,8 @@ export class OpenAICompatibleModel implements Model {
   }
 
   async call(request: ModelRequest, callbacks: ModelCallbacks): Promise<ModelReply> {
-    const { baseUrl, apiKey, model, providerName } = this.#options;
+    const { baseUrl, model, providerName } = this.#options;
+    const apiKey = this.#options.getKey ? await this.#options.getKey() : this.#options.apiKey;
     const doFetch = this.#options.fetch ?? fetch;
     const tools = toChatTools(request.tools);
     // Room is left for the reply and the tool descriptions.
@@ -386,7 +389,8 @@ export class OpenAICompatibleModel implements Model {
     const first = clip(messages[1].content ?? "", 2000);
     const ask = `How the conversation started:\n${first}\n\n${known ? `Summary so far:\n${known.summary}\n\n` : ""}What happened next:\n${said}\n\nWrite the updated summary of everything so far.`;
 
-    const { baseUrl, apiKey, model } = this.#options;
+    const { baseUrl, model } = this.#options;
+    const apiKey = this.#options.getKey ? await this.#options.getKey() : this.#options.apiKey;
     const response = await (this.#options.fetch ?? fetch)(`${baseUrl.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json", ...this.#options.headers, ...keyHeaders(apiKey, this.#options.keyHeader) },

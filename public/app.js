@@ -6021,7 +6021,10 @@ function aiModelsSection(col) {
   };
 
   const connectDialog = (s) => {
-    const key = s.needsKey || s.id === "custom" || s.id === "litellm" ? h("input", { type: "password", autocomplete: "off", placeholder: s.keyPrefix ? `${s.keyPrefix}…` : s.needsKey ? "Paste the key" : "Key, if it needs one", "aria-label": "Key" }) : null;
+    // Google Vertex AI takes the service account's key file, not a pasted key: the file is read here and sent as text.
+    const keyFile = s.id === "vertex" ? h("input", { type: "file", accept: ".json,application/json", "aria-label": "Service account key file (.json)" }) : null;
+    const key = keyFile ? { value: "" } : s.needsKey || s.id === "custom" || s.id === "litellm" ? h("input", { type: "password", autocomplete: "off", placeholder: s.keyPrefix ? `${s.keyPrefix}…` : s.needsKey ? "Paste the key" : "Key, if it needs one", "aria-label": "Key" }) : null;
+    keyFile?.addEventListener("change", async () => (key.value = keyFile.files?.[0] ? await keyFile.files[0].text() : ""));
     const address = s.addressHint ? h("input", { placeholder: s.addressHint, "aria-label": "Address" }) : null;
     const name = s.id === "custom" ? h("input", { placeholder: "Its name, e.g. Portkey", "aria-label": "Name", maxlength: 60 }) : null;
     const status = h("p", { class: "note", role: "status" });
@@ -6057,7 +6060,8 @@ function aiModelsSection(col) {
           : null,
       name,
       address,
-      key,
+      keyFile ? h("label", {}, "Service account key file (.json)", keyFile) : key,
+      keyFile ? h("p", { class: "note small" }, "In Google Cloud: IAM → Service accounts → choose or create one with the Vertex AI User role → Keys → Add key → JSON. The file is kept on this computer; only a signed sign-in request goes to Google.") : null,
       status,
       h("div", { class: "row" }, h("button", { type: "button", class: "plain", onclick: close }, "Cancel"), go),
     );

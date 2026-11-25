@@ -5,7 +5,7 @@ import type { Model } from "../core/index.ts";
 import { apiKey, getConfig, summaries } from "./store.ts";
 import type { Config } from "./store.ts";
 import { ATTRIBUTION, OPENROUTER_ID, openrouterCatalogNow, openrouterModelInfo } from "./openrouter.ts";
-import { isLocalRef, knownPricesNow, serviceOf } from "./gateway.ts";
+import { isLocalRef, keySource, knownPricesNow, serviceOf } from "./gateway.ts";
 import { audit } from "./audit.ts";
 
 export function splitRef(ref: string): { providerId: string; model: string } {
@@ -34,6 +34,7 @@ export function resolveOne(cfg: Config = getConfig(), ref = cfg.model): Model {
     providerName: provider.name,
     baseUrl: provider.baseUrl,
     apiKey: provider.apiKey || undefined,
+    getKey: keySource(provider),
     model,
     prices: listed?.prices ?? provider.prices ?? known?.prices,
     contextTokens,
