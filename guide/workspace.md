@@ -31,6 +31,8 @@ The general Talqava assistant you chat with, which works for you directly, may r
 
 **History.** Every version of a page is kept, up to the last 100. Your own typing within a couple of minutes counts as one version. You can look at any version and put it back.
 
+**Tables hold records.** A page can carry tables under its text: a customer list, a stock count, a tracker. Each column holds one kind of value: **Text**, **Number**, **Date**, **Choice** (pick one from a list you set) or **Person** (you, or a position on your chart). A table follows its page: agents who can see the page can read the table, and an agent's change to a row waits for you, exactly like a change to the page, unless the page is set to take agents' changes straight away. On a protected page it always waits.
+
 **Agents can add pages too.** An agent can save its result as a new page, but only inside a page it is allowed to see. A new page made this way follows that page's **Who can see it** setting. You can also save a finished task's report as a page yourself (see below).
 
 ## Which one should I use?
@@ -98,6 +100,21 @@ A simple rule: if you would write it yourself and want it followed, make it a pa
 3. Say what to do with it, for example "Follow this procedure for this week's orders". Leave it empty and the agent is simply asked to follow the page.
 4. Press **Give the task**.
 
+### Keep a table of records on a page
+
+1. Open a page and scroll below its text. Press **+ Add a table**. It starts with a few example columns.
+2. Press **Columns** to name the columns, choose each one's type and, for a **Choice** column, type its choices separated by commas. Press **Save columns**.
+3. Press **+ Add a row**, then type straight into the cells. Each change saves as you leave the cell. A value that does not fit its column (letters in a **Number** column, say) is refused with a message.
+4. To delete a row, press **×** at its end. To delete the whole table, press **Delete**; export it first if you may need it.
+
+When an agent asks to add or change a row, it appears on the table under **Waiting for you** and in your **Inbox**. Press **Accept** or **Decline**.
+
+### Bring in or take out a table as a CSV file
+
+1. To make a new table from a file, press **Import a CSV as a new table** under the page's text and pick the file. The first line becomes the column names, and each column's type is worked out from its values.
+2. To add rows to a table you already have, press **Import CSV** on that table. Columns are matched by name; columns the table does not have are ignored. If a value does not fit its column, nothing is imported and the message says which line.
+3. To take a table out, press **Export CSV**. It opens in any spreadsheet.
+
 ### Save a task's report as a page
 
 1. Open a finished task.
@@ -122,6 +139,8 @@ A simple rule: if you would write it yourself and want it followed, make it a pa
 
 - **"This page changed while you were editing it."** The page was changed somewhere else while you typed. Press **Reload**. Your text is still in the editor until you do, so copy anything you need first.
 - **"The page changed in the same places since the agent read it."** You and the agent changed the same lines. The app asks whether to use the agent's version. Choose OK to use it (your newer text stays in **History**), or Cancel to keep yours.
+- **"… takes a number / a date / one of …"** A value did not fit its column in a table. Type a value of that kind, or change the column's type under **Columns**.
+- **"Line 3: … Nothing was imported."** One value in the CSV file does not fit its column. Fix that line in the file, or change the column's type, and import again.
 - **"That page is too long."** Split it into several pages inside one parent page.
 - **"A page cannot go inside itself."** You tried to drop a page into one of its own sub-pages. Drop it somewhere else.
 - **"There is no such page, or it is not one you may see."** The page was deleted. Look under **Deleted**.

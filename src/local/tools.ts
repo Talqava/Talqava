@@ -29,6 +29,7 @@ import { assignableBy, groupModelOf, memberOf, oneLine, orgs, reportsOf, request
 import { orgMemoryPrompt, teamMemoryTool } from "./orgmemory.ts";
 import { libraryPrompt, libraryTool, GENERAL_AGENT } from "./library.ts";
 import { workspacePrompt, workspaceTool } from "./workspace.ts";
+import { tableTool } from "./tables.ts";
 import { goalsPrompt } from "./goals.ts";
 import { structureOf } from "./structures.ts";
 import { WORKSPACE, conversations, getConfig, memory, skills, spaces } from "./store.ts";
@@ -510,6 +511,7 @@ function teamworkTools(org: ReturnType<typeof orgs.active>, botId: string): Tool
     teamMemory,
     libraryForAgents,
     workspaceForAgents,
+    tablesForAgents,
     ...(leads ? [proposeTool] : []),
   ];
 }
@@ -518,6 +520,8 @@ function teamworkTools(org: ReturnType<typeof orgs.active>, botId: string): Tool
 const libraryForAgents = libraryTool((conversationId) => agentOf(conversationId)?.id ?? GENERAL_AGENT);
 /** The organization's workspace of pages, for whoever is running in a conversation. */
 const workspaceForAgents = workspaceTool((conversationId) => agentOf(conversationId)?.id ?? GENERAL_AGENT);
+/** The workspace's tables (customer lists, trackers), for whoever is running in a conversation. */
+const tablesForAgents = tableTool((conversationId) => agentOf(conversationId)?.id ?? GENERAL_AGENT);
 
 /**
  * Which model an agent's run uses, and how hard it thinks. An agent with a
@@ -714,7 +718,7 @@ export function localRunSpec(jobs: JobBook) {
       const why = question ? "" : whyPrompt(quest);
       // Whoever may hand work to someone gets assign_task; every member can ask a colleague and use the shared memory.
       // Every agent on a task, and on the parts handed on from it, shares the task's board.
-      const teamwork = !onChart ? [boardTool] : question ? [teamMemory, libraryForAgents, workspaceForAgents, boardTool] : [...teamworkTools(org, bot.id), boardTool];
+      const teamwork = !onChart ? [boardTool] : question ? [teamMemory, libraryForAgents, workspaceForAgents, tablesForAgents, boardTool] : [...teamworkTools(org, bot.id), boardTool];
       const shared = question ? "" : boardPrompt(org, quest.id);
       if (question) {
         // Answering a colleague is a small job, so it is run as one: a short prompt with only who the agent is and
@@ -788,7 +792,7 @@ export function localRunSpec(jobs: JobBook) {
     }
 
     const model = resolveModel(cfg);
-    const tools = [...(await localTools(jobs)), ...(orgs.active().members.length ? [assignTool, askTool, teamMemory] : []), libraryForAgents, workspaceForAgents];
+    const tools = [...(await localTools(jobs)), ...(orgs.active().members.length ? [assignTool, askTool, teamMemory] : []), libraryForAgents, workspaceForAgents, tablesForAgents];
     const claude = model.kind === "anthropic";
     const linked = await connectors(true);
     return {
