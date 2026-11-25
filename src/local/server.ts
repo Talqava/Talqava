@@ -44,6 +44,8 @@ import { accessGraph, accessGraphs } from "./access.ts";
 import { loadModelList } from "./modelprices.ts";
 import { COLUMN_TYPES, peopleOf, tables } from "./tables.ts";
 import { sheets } from "./sheets.ts";
+import { listOfficeTemplates, useOfficeTemplate } from "./office-templates.ts";
+import { pageTool } from "../core/tools/page.ts";
 import { describeGuardrails, guardrails, guardrailsFrom } from "./guardrails.ts";
 import { securityOverview, securityReport } from "./securitycenter.ts";
 import { finishSso, setSso, sso, ssoPublic, startSso } from "./sso.ts";
@@ -1032,7 +1034,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       } catch {
         kits = [];
       }
-      return send(res, 200, { bots, teams: loadTeams(), packs, kits, connectors: listCatalog(), problems: market.problems, updates: bots.filter((b) => b.install.state === "update").length });
+      return send(res, 200, { bots, teams: loadTeams(), packs, kits, connectors: listCatalog(), officeTemplates: listOfficeTemplates(), problems: market.problems, updates: bots.filter((b) => b.install.state === "update").length });
     }
     const plainly = <T>(fn: () => T): T => {
       try {
@@ -1336,6 +1338,23 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     // Sheets: a new one (from a CSV file, or empty) and one sheet out as CSV. Everything else is the pages routes.
     if (route === "POST workspace" && area === "sheets" && !id) return send(res, 200, await attempt(() => sheets.create(org, null, { title: body.title, folder: body.folder, csv: body.csv })));
     if (route === "GET workspace" && area === "sheets" && id && sub === "csv") return send(res, 200, await attempt(() => sheets.csv(org, id, url.searchParams.get("sheet") ?? undefined)));
+    // Office templates, reminders that are due, and saving a web page as a note.
+    if (route === "GET workspace" && area === "office-templates") return send(res, 200, listOfficeTemplates());
+    if (route === "POST workspace" && area === "office-templates" && id) return send(res, 200, await attempt(() => useOfficeTemplate(org, id)));
+    if (route === "GET workspace" && area === "reminders") return send(res, 200, await attempt(() => workspace.reminders(org)));
+    if (route === "POST workspace" && area === "clip") {
+      return send(res, 200, await attempt(async () => {
+        let address: URL;
+        try {
+          address = new URL(String(body.url ?? "").trim());
+        } catch {
+          throw new Error("Give the page's full address, starting with https://.");
+        }
+        const text = String(await pageTool().run({ url: address.href }, { signal: AbortSignal.timeout(30_000) } as never));
+        const title = (/^#\s+(.+)$/m.exec(text)?.[1] ?? /^(.{3,80})$/m.exec(text)?.[1] ?? address.hostname).trim().slice(0, 100);
+        return workspace.create(org, null, { kind: "note", title, folder: "Saved from the web", markdown: `Saved from [${address.hostname}](${address.href}) on ${new Date().toISOString().slice(0, 10)}.\n\n${text.slice(0, 200_000)}` });
+      }));
+    }
     if (route === "GET workspace" && area === "office") return send(res, 200, { ...workspace.office(org), tree: workspace.tree(org), deleted: workspace.deleted(org), suggestions: workspace.suggestions(org) });
     if (route === "GET workspace" && !area) return send(res, 200, { tree: workspace.tree(org).filter((p) => p.kind === "page"), templates: workspace.templates(), deleted: workspace.deleted(org), suggestions: workspace.suggestions(org) });
     if (route === "GET workspace" && area === "search") return send(res, 200, workspace.search(org, null, url.searchParams.get("q") ?? "", 20));

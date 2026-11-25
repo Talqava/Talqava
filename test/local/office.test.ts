@@ -87,3 +87,37 @@ test("a note can become a document or a Workspace page, keeping its text, histor
   // Anything unknown is a page.
   assert.equal(workspace.create(org, null, { kind: "spreadsheet", title: "X" }).kind, "page");
 });
+
+test("templates make real files; pinning and reminders work; every sheet template calculates without errors", async () => {
+  const { listOfficeTemplates, useOfficeTemplate, OFFICE_TEMPLATES } = await import("../../src/local/office-templates.ts");
+  const { parseFile, compute, isError, extent } = await import("../../public/sheet-engine.js");
+  const list = listOfficeTemplates();
+  assert.ok(list.length >= 6 && list.every((t) => t.name && t.summary && ["doc", "sheet", "note"].includes(t.kind)));
+  assert.equal(new Set(list.map((t) => t.id)).size, list.length);
+  for (const t of OFFICE_TEMPLATES) {
+    assert.doesNotMatch(t.text, /lorem ipsum/i);
+    if (t.kind !== "sheet") continue;
+    const file = parseFile(t.text);
+    const value = compute(file);
+    const { rows, cols } = extent(file.sheets[0]);
+    for (let r = 0; r <= rows; r++) for (let c = 0; c <= cols; c++) assert.equal(isError(value(0, c, r)), false, `${t.name} ${c},${r}`);
+  }
+  const doc = useOfficeTemplate(org, "proposal");
+  assert.deepEqual([doc.kind, doc.title, doc.folder], ["doc", "Proposal", "Customers"]);
+  assert.match(doc.markdown, /\[YOUR PRICE\]/);
+  assert.equal(useOfficeTemplate(org, "cash-forecast").kind, "sheet");
+  assert.equal(useOfficeTemplate(org, "meeting-notes").access.private, true, "a note from a template is private like any note");
+  assert.throws(() => useOfficeTemplate(org, "nope"), /no such template/);
+
+  // Pinned files come first; a reminder shows once its time has come and goes when cleared.
+  const a = workspace.create(org, null, { kind: "note", title: "Pin me" });
+  workspace.create(org, null, { kind: "note", title: "Newer" });
+  workspace.update(org, a.id, { pinned: true });
+  assert.equal(workspace.office(org).files[0].title, "Pin me");
+  assert.throws(() => workspace.update(org, a.id, { remindAt: "next tuesday-ish" }), /date and time/);
+  workspace.update(org, a.id, { remindAt: new Date(Date.now() + 3600_000).toISOString() });
+  assert.equal(workspace.reminders(org).some((r) => r.id === a.id), false, "not due yet");
+  assert.equal(workspace.reminders(org, new Date(Date.now() + 7200_000)).some((r) => r.id === a.id), true);
+  workspace.update(org, a.id, { remindAt: null });
+  assert.equal(workspace.reminders(org, new Date(Date.now() + 7200_000)).some((r) => r.id === a.id), false);
+});

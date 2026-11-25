@@ -11,6 +11,8 @@ Office is where you and your agents write things that are not procedures: letter
 - **Notes.** On the left: **+ Note**, **Search notes**, your **Notebooks**, your **Tags**, and the notes themselves, newest first.
 - **An open document or note.** The same editor as a Workspace page: a title, a small toolbar, and the text. A document is shown as a sheet of paper. On the right is a panel with who can see it, how agents may change it, its **Folder** or **Notebook**, **Turn it into**, and **Download**.
 
+- **Office home.** One place to start a document, sheet or note, ask an agent to make one, see what is **Waiting for you**, find recent files, **search** every file including the words inside, and **start from a template**.
+
 ## Key ideas
 
 **Documents and notes follow the same rules as Workspace pages.** You choose who can see each one, an agent's change waits for you unless you let it through, **Protected** means agents never change it directly, and every version is kept in **History**. See [Workspace](workspace.md) for how each of these works.
@@ -85,6 +87,26 @@ Under the grid, press **+ Add a sheet**, **Rename** or **Remove this sheet**. Cl
 1. Open **Notes** and press **+ Note**.
 2. Type a title and the note. Use the checklist button in the toolbar for things to do.
 3. In the panel, type a **Notebook** such as Meetings, and **Tags** separated by commas.
+
+### Start from a template
+
+1. Open **Office home** and scroll to **Start from a template**: a proposal, a quote, a payment reminder letter, meeting notes, a monthly budget and a cash forecast.
+2. Press **Use this template**. A new file opens with the parts to fill in marked in [SQUARE BRACKETS].
+3. Delete the file if you do not want it. The same templates are in the **Marketplace** under **Office templates**.
+
+### Keep a note or document at the top
+
+1. Open it and tick **Pinned** in the panel. Pinned files come first in their list.
+
+### Be reminded of a note or document
+
+1. Open it. Under **Remind me**, pick a date and time.
+2. When the time comes, a reminder appears in your **Inbox**. **Open it** or **Done** clears it.
+
+### Save a web page as a note
+
+1. Open **Notes** and press **Save a web page as a note**.
+2. Paste the page's address. Its text is saved as a private note in the notebook **Saved from the web**, with the address at the top.
 
 ### Find a note
 
