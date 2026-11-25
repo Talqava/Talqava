@@ -1564,10 +1564,18 @@ function inboxItems() {
   for (const q of quests) {
     const recent = Date.now() - new Date(q.updatedAt).getTime() < RECENT;
     if (q.approvals?.length) needs.push({ kind: "approval", q, approval: q.approvals[0] });
+    else if (q.status === "asking" && q.plan?.status === "proposed") needs.push({ kind: "plan", q });
+    else if (q.status === "asking") needs.push({ kind: "asking", q });
     else if (q.branch && !q.outcome && !isLive(q) && q.status !== "failed" && q.changedFiles !== 0) needs.push({ kind: "review", q });
     else if (q.check && !q.check.passed && q.status === "done" && recent) needs.push({ kind: "check", q });
     else if (q.status === "failed" && recent) needs.push({ kind: "failed", q });
     else if (q.status === "budget" && recent) needs.push({ kind: "budget", q });
+  }
+  // Finished work from the Tasks board waits for Accept or Send back; a task whose code changes are under review is listed once.
+  for (const t of state.workItems ?? []) {
+    if (t.status !== "review" || !t.quest) continue;
+    const q = quests.find((x) => x.id === t.quest);
+    if (q && !needs.some((n) => n.q === q)) needs.push({ kind: "taskreview", q, t });
   }
   for (const c of state.convs ?? []) if (c.needsApproval) needs.push({ kind: "chat", c });
   for (const bot of state.crew?.bots ?? []) if (bot.month?.state === "stopped") needs.push({ kind: "monthly", bot });
@@ -1642,7 +1650,7 @@ async function loadPageSuggestions() {
 async function loadMail() {
   loadPageSuggestions();
   try {
-    state.mail = await api("GET", "inbox");
+    [state.mail, state.workItems] = await Promise.all([api("GET", "inbox"), api("GET", "work").then((w) => w.items).catch(() => state.workItems ?? [])]);
   } catch {
     state.mail ??= { messages: {}, names: {} };
   }
@@ -1654,19 +1662,27 @@ const MONTH_START = () => `${new Date().toISOString().slice(0, 7)}-01T00:00:00.0
 function mailMessages() {
   const out = [];
   const own = ownTasks();
+  const needs = inboxItems().needs;
+  // A plan to approve, a question before starting, or finished work to review is shown as that, with its buttons, instead of as the task's ordinary message.
+  const ACTION = new Set(["plan", "asking", "taskreview"]);
+  const actionFor = new Set(needs.filter((n) => n.q && ACTION.has(n.kind)).map((n) => n.q));
   for (const q of own) {
+    if (actionFor.has(q)) continue;
     const live = isLive(q);
     const failed = q.status === "failed" || q.status === "budget" || (q.check && !q.check.passed) || (!live && q.chain?.stopped > 0);
     const label = q.approvals?.length || q.status === "asking" ? "needs" : failed ? "failed" : live ? "working" : "done";
     const snippet = q.status === "failed" && q.note ? q.note : q.said || (live ? "Working on it now." : "Finished without a written report.");
     out.push({ id: `task:${q.id}`, kind: "task", q, bot: q.bot, subject: q.title, snippet, at: q.updatedAt, activityAt: live && !q.approvals?.length ? q.createdAt : q.updatedAt, label });
   }
-  for (const n of inboxItems().needs) {
-    if (n.q && own.includes(n.q)) continue;
+  for (const n of needs) {
+    if (n.q && own.includes(n.q) && !ACTION.has(n.kind)) continue;
     // A part of a task the person assigned reports inside that task's message; only a part waiting for approval (or for a review of its changes) writes on its own.
     if (n.q?.parent && n.kind !== "approval" && n.kind !== "review") continue;
     const q = n.q;
     if (n.kind === "approval") out.push({ id: `need:approval:${q.id}:${n.approval.id}`, kind: "need", need: n, q, bot: q.bot, subject: `Approval needed: ${NAMES[n.approval.name] || n.approval.name} for “${q.title}”`, snippet: n.approval.name === "bash" ? n.approval.input.command : JSON.stringify(n.approval.input), at: q.updatedAt, activityAt: q.updatedAt, label: "needs" });
+    else if (n.kind === "plan") out.push({ id: `need:plan:${q.id}:${q.plan.version}`, kind: "need", need: n, q, bot: q.bot, subject: `Plan to approve: ${q.title}`, snippet: q.plan.summary ?? "", at: q.plan.at ?? q.updatedAt, activityAt: q.updatedAt, label: "needs" });
+    else if (n.kind === "asking") out.push({ id: `need:asking:${q.id}`, kind: "need", need: n, q, bot: q.bot, subject: `Needs your answer before starting: ${q.title}`, snippet: q.note || "I need something from you before I start.", at: q.updatedAt, activityAt: q.updatedAt, label: "needs" });
+    else if (n.kind === "taskreview") out.push({ id: `need:taskreview:${n.t.id}:${q.updatedAt}`, kind: "need", need: n, q, bot: q.bot, subject: `To review: #${n.t.number} ${n.t.title}`, snippet: q.said ? q.said.replace(/\s+/g, " ").slice(0, 160) : "Finished. Accept it, or send it back with a comment.", at: q.updatedAt, activityAt: q.updatedAt, label: "needs" });
     else if (n.kind === "review") out.push({ id: `need:review:${q.id}`, kind: "need", need: n, q, bot: q.bot, subject: `Ready for your review: ${q.title}`, snippet: `${q.changedFiles ?? "Some"} file${q.changedFiles === 1 ? "" : "s"} changed on ${q.branch}.`, at: q.updatedAt, activityAt: q.updatedAt, label: "needs" });
     else if (n.kind === "check") out.push({ id: `need:check:${q.id}`, kind: "need", need: n, q, bot: q.bot, subject: `Did not pass its check: ${q.title}`, snippet: "The result did not pass its check. Open the task to see why.", at: q.updatedAt, activityAt: q.updatedAt, label: "failed" });
     else if (n.kind === "failed") out.push({ id: `need:failed:${q.id}`, kind: "need", need: n, q, bot: q.bot, subject: `Could not finish: ${q.title}`, snippet: q.note || "The task failed.", at: q.updatedAt, activityAt: q.updatedAt, label: "failed" });
@@ -1938,7 +1954,7 @@ function readMail(m) {
   const from = h("div", { class: "readfrom", style: m.bot ? botStyle(m.bot) : "" }, m.bot ? keycap(m.bot, 44, isLive(q ?? {}) ? "working" : "", m.bot.type) : h("span", { class: "sysavatar big", "aria-hidden": "true" }, "T"), h("div", { class: "grow" }, nameBox, h("div", { class: "note small" }, `${agentRole(m.bot)}${m.bot ? ` · ${departmentOf(m.bot.id)}` : ""} · to me`)), h("span", { class: "mtime" }, new Date(m.at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })));
 
   const body = h("div", { class: "readbody" });
-  const act = (fn) => attempt(async () => (await fn(), await Promise.all([loadQuests(), refreshList(), loadCrew()]), renderInbox(), syncInboxCount()), body);
+  const act = (fn) => attempt(async () => (await fn(), await Promise.all([loadQuests(), refreshList(), loadCrew(), loadMail()]), renderInbox(), syncInboxCount()), body);
   if (m.kind === "pagechange") {
     const sg = m.suggestion;
     const decide = (decision) =>
@@ -1977,6 +1993,29 @@ function readMail(m) {
       const a = n.approval;
       const decide = (decision) => act(() => api("POST", `conversations/${q.id}/approvals/${a.id}`, { decision }));
       fill(body, h("p", {}, `I want to use ${NAMES[a.name] || a.name} for “${q.title}”. Is that all right?`), h("pre", {}, a.name === "bash" ? a.input.command : JSON.stringify(a.input, null, 2)), h("div", { class: "row" }, h("button", { class: "primary", onclick: () => decide("allow") }, "Allow once"), h("button", { class: "danger", onclick: () => decide("deny") }, "Don't allow"), h("button", { class: "plain", onclick: () => go("quest", q.id) }, "Open the task")));
+    } else if (n.kind === "plan") fill(body, planCard(q, () => act(async () => {})), h("button", { class: "plain small", onclick: () => go("quest", q.id) }, "Open the task"));
+    else if (n.kind === "asking") {
+      const answer = h("textarea", { rows: 4, placeholder: "Your answer. The task starts once you send it.", "aria-label": "Answer" });
+      fill(
+        body,
+        h("div", { class: "md readreport" }, q.said ? renderMarkdown(q.said) : h("p", {}, q.note || "I need something from you before I start.")),
+        answer,
+        h("div", { class: "row" }, h("button", { class: "primary", onclick: () => answer.value.trim() && act(() => api("POST", `conversations/${q.id}/messages`, { text: answer.value.trim() })) }, "Send and start"), h("button", { class: "plain", onclick: () => go("quest", q.id) }, "Open the task")),
+      );
+    } else if (n.kind === "taskreview") {
+      const why = h("textarea", { rows: 3, placeholder: "What should change? Sending it back wakes the agent.", "aria-label": "What should change" });
+      fill(
+        body,
+        h("div", { class: "md readreport" }, q.said ? renderMarkdown(q.said) : h("p", {}, "Finished without a written report.")),
+        why,
+        h(
+          "div",
+          { class: "row" },
+          h("button", { class: "primary", onclick: () => act(() => api("POST", `work/${n.t.id}/accept`)) }, "Accept"),
+          h("button", { onclick: () => why.value.trim() && act(() => api("POST", `work/${n.t.id}/comment`, { text: why.value.trim() })) }, "Send back with this comment"),
+          h("button", { class: "plain", onclick: () => go("quest", q.id) }, "Open the task"),
+        ),
+      );
     } else if (n.kind === "chat") fill(body, h("p", {}, `The chat “${n.c.title}” is waiting for you to approve a step.`), h("button", { class: "primary", onclick: () => go("chat", n.c.id) }, "Open the chat"));
     else if (n.kind === "monthly") fill(body, h("p", {}, `I have spent ${money(n.bot.month.spent)} of my ${money(n.bot.month.limit)} monthly budget, so I won't start new work until you raise it or the month turns.`), h("button", { class: "primary", onclick: () => go("bot", n.bot.id) }, "Raise my budget"));
     else if (n.kind === "total") fill(body, h("p", {}, "All your agents together have reached this month's budget. No agent starts new work until you raise it or the month turns."), h("button", { class: "primary", onclick: () => go("team") }, "Change the budget"));
@@ -4359,7 +4398,7 @@ async function marketBotView() {
 
 // ---------- one quest ----------
 /** A plan an agent wrote before starting: waiting for the owner, being revised, or approved. */
-function planCard(q) {
+function planCard(q, after = null) {
   const p = q?.plan;
   if (!p) return null;
   const steps = p.steps?.length ? h("ol", { class: "plansteps" }, p.steps.map((st) => h("li", {}, st.what, h("span", { class: "note small" }, ` · ${/^(you|me|myself)$/i.test(st.who) ? q.bot.name : st.who}`)))) : null;
@@ -4372,8 +4411,9 @@ function planCard(q) {
     attempt(async () => {
       await api("POST", `quests/${q.id}/plan`, { decision, comment: changes.value });
       ui.qplanKey = null;
-      refreshQuest();
-    }, ui.qnote);
+      if (after) after();
+      else refreshQuest();
+    }, ui.qnote ?? null);
   return h(
     "div",
     { class: "card plancard waiting" },
