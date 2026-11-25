@@ -2489,3 +2489,52 @@ test("the owner can pause and resume a task (with what is under it), one agent, 
     orgs.remove(org0.id);
   }
 });
+
+test("every connected service's models get prices, size and tool support from the public model list", async () => {
+  const gateway = await import("../../src/local/gateway.ts");
+  const prices = await import("../../src/local/modelprices.ts");
+  const http = await import("node:http");
+  const list = {
+    sample_spec: { litellm_provider: "one of …", mode: "one of: chat, …" },
+    "gpt-test-mini": { litellm_provider: "openai", mode: "chat", input_cost_per_token: 4e-7, output_cost_per_token: 1.6e-6, cache_read_input_token_cost: 1e-7, max_input_tokens: 1047576, supports_function_calling: true },
+    "text-embedding-test": { litellm_provider: "openai", mode: "embedding", input_cost_per_token: 1e-8 },
+    "groq/llama-test-70b-versatile": { litellm_provider: "groq", mode: "chat", input_cost_per_token: 5.9e-7, output_cost_per_token: 7.9e-7, max_input_tokens: 128000, supports_function_calling: true },
+    "groq/tiny-test": { litellm_provider: "groq", mode: "chat", input_cost_per_token: 2e-7, output_cost_per_token: 2e-7, supports_function_calling: false },
+    "fireworks_ai/accounts/fireworks/models/qwen-test": { litellm_provider: "fireworks_ai", mode: "chat", input_cost_per_token: 9e-7, output_cost_per_token: 9e-7, supports_function_calling: true },
+    "bedrock/some-model": { litellm_provider: "bedrock", mode: "chat", input_cost_per_token: 1e-6, output_cost_per_token: 1e-6 },
+  };
+  const server = http.createServer((req, res) => {
+    const json = (body: unknown) => (res.writeHead(200, { "content-type": "application/json" }), res.end(JSON.stringify(body)));
+    if (req.url === "/prices.json") return json(list);
+    if (req.url === "/v1/models") return json({ data: [{ id: "llama-test-70b-versatile" }, { id: "tiny-test" }, { id: "mystery-test" }] });
+    res.writeHead(404).end();
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const address = `http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}`;
+  process.env.TALQAVA_MODEL_PRICES = `${address}/prices.json`;
+  try {
+    // Only chat models of the services Talqava connects to are kept, under the service's own names for them.
+    const kept = prices.toKept(list);
+    assert.deepEqual(Object.keys(kept).sort(), ["fireworks_ai", "groq", "openai"]);
+    assert.ok(kept.fireworks_ai["qwen-test"]);
+    prices.forgetModelList();
+    await prices.loadModelList(true);
+    // A maker's own model: its price in dollars per million tokens, cache reads included, and how much it holds.
+    assert.deepEqual(prices.knownModel("openai", "gpt-test-mini"), { prices: { input: 0.4, output: 1.6, cacheRead: 0.1 }, contextTokens: 1047576, tools: true });
+    assert.equal(prices.knownModel("fireworks", "accounts/fireworks/models/qwen-test")?.tools, true);
+    assert.equal(prices.knownModel("anthropic", "gpt-test-mini"), undefined);
+    // A host of open models: its own prices, and which of its models can use tools.
+    const listed = await gateway.listModels({ id: "groq", kind: "openai", service: "groq", name: "Groq", baseUrl: `${address}/v1`, apiKey: "k" });
+    const byId = Object.fromEntries(listed.models.map((m) => [m.id, m]));
+    assert.deepEqual(byId["llama-test-70b-versatile"].prices, { input: 0.59, output: 0.79 });
+    assert.equal(byId["llama-test-70b-versatile"].tools, true);
+    assert.equal(byId["tiny-test"].tools, false);
+    assert.equal(byId["mystery-test"].tools, null);
+    // Receipts use the same prices.
+    assert.deepEqual(gateway.knownPricesNow({ id: "groq", kind: "openai", service: "groq", name: "Groq", baseUrl: `${address}/v1` }, "llama-test-70b-versatile", []).prices, { input: 0.59, output: 0.79 });
+  } finally {
+    delete process.env.TALQAVA_MODEL_PRICES;
+    prices.forgetModelList();
+    server.close();
+  }
+});

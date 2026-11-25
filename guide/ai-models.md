@@ -16,7 +16,7 @@ AI models is where you connect the AI services your agents think with: Claude, O
 - **Backups keep work going.** If your main service is down, busy or out of credit, the first backup answers instead, then the next. Each switch is noted in the **Audit log**.
 - **Keys stay on your computer.** A key is checked with its service before it is saved, kept on this computer, and only ever sent to that service. Agents never see it.
 - **Local models are free and private.** Programs such as Ollama or LM Studio run models on your own computer. Nothing leaves it, but they are usually slower and less capable than paid services, and you must download a model in the program before Talqava can use it.
-- **Prices are estimates.** Prices and sizes come from OpenRouter's public list of models, which needs no account. Your service's bill is the real figure.
+- **Prices are estimates.** Prices, sizes and whether a model can use tools come from two public lists of models, OpenRouter's and the LiteLLM project's, which need no account and are refreshed once a day. Your service's bill is the real figure.
 
 ## How to…
 

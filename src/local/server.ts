@@ -41,6 +41,7 @@ import { audit, readAudit, redact } from "./audit.ts";
 import { connect, disconnect, findLocal, gatewayState, listModels, setBackups, isLocalRef, memoryGb } from "./gateway.ts";
 import { board } from "./board.ts";
 import { accessGraph, accessGraphs } from "./access.ts";
+import { loadModelList } from "./modelprices.ts";
 import { finishOpenRouterSignIn, openrouterIntegration, openrouterModels, removeOpenRouter, saveOpenRouterKey, startOpenRouterSignIn, useOpenRouterModel } from "./openrouter.ts";
 import { autoSetupGit, cloneRepository, disconnectRepository, gitIntegration, githubAccounts, githubRepos, installGit, listIntegrations, pollGithubSignIn, removeGitIntegration, startGithubSignIn, testGithub } from "./integrations.ts";
 import { ASSIGN_RULES, INDUSTRIES, REQUEST_RULES, STRUCTURES, seatsFor } from "./structures.ts";
@@ -1448,6 +1449,8 @@ export function start() {
     } catch {}
   });
   jobs.start(runJob);
+  // The public list of model prices, so receipts are priced from the start (kept for a day; offline is fine).
+  void loadModelList().catch(() => {});
   // Quests that were under way when the app last closed carry on.
   quests
     .resumeAll()

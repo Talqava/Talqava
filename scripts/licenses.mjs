@@ -207,6 +207,36 @@ for (const c of all) {
 // ---- the notices ----
 const block = (c) => [`### ${c.name}${c.version ? ` ${c.version}` : ""}`, "", `Licence: ${c.license}${c.copyright ? `  \n${c.copyright}` : ""}`, "", "```text", c.text || `Licensed under ${c.license}.`, "```", c.notice ? ["", "NOTICE:", "", "```text", c.notice, "```"].join("\n") : "", ...(c.extra ?? []).map((x) => ["", `Also in this package, ${x.file}${x.kind ? ` (${x.kind})` : ""}:`, "", "```text", x.text, "```"].join("\n"))].filter((x) => x !== "").join("\n");
 const count = (list) => Object.entries(list.reduce((n, c) => ((n[c.license] = (n[c.license] ?? 0) + 1), n), {})).sort((a, b) => b[1] - a[1]).map(([l, n]) => `${n} ${l}`).join(", ");
+// Public data the app downloads while it runs (nothing of it ships in the app); credited like the components.
+const RUNTIME_DATA = [
+  {
+    name: "LiteLLM model prices and context windows (model_prices_and_context_window.json, from github.com/BerriAI/litellm)",
+    license: "MIT",
+    copyright: "Copyright (c) 2023 Berri AI",
+    text: `MIT License
+
+Copyright (c) 2023 Berri AI
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.`,
+  },
+];
+
 const notices = [
   "# Third-party notices",
   "",
@@ -223,6 +253,9 @@ const notices = [
   "## Fonts, in public/fonts",
   "",
   ...fonts().map(block).flatMap((b) => [b, ""]),
+  "## Data read while the app runs",
+  "",
+  ...RUNTIME_DATA.map(block).flatMap((b) => [b, ""]),
 ].join("\n");
 const editorNotices = [
   "Talqava page editor (public/vendor/editor.js)",

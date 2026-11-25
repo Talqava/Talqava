@@ -16,6 +16,7 @@ import { audit } from "./audit.ts";
 import { MODELS } from "./store.ts";
 import type { Prices } from "../core/index.ts";
 import os from "node:os";
+import { knownModel, loadModelList } from "./modelprices.ts";
 
 export type ServiceGroup = "popular" | "open" | "makers" | "gateways" | "local";
 
@@ -225,6 +226,9 @@ export function infoFor(service: Service | undefined, model: string, list: OpenR
     const exact = list.find((m) => m.id.toLowerCase() === `${service.priceFrom}${name}`) ?? list.find((m) => m.id.toLowerCase() === `${service.priceFrom}${name.replace(/-latest$/, "")}`);
     if (exact) return { tools: true, contextTokens: exact.contextTokens, prices: exact.prices };
   }
+  // LiteLLM's public list knows the service's own prices (a host's too), how much a model holds, and whether it calls tools.
+  const known = service?.group === "local" ? undefined : knownModel(service?.id, model);
+  if (known && (known.prices || known.tools !== undefined)) return { tools: known.tools ?? null, ...(known.contextTokens ? { contextTokens: known.contextTokens } : {}), ...(known.prices ? { prices: known.prices } : {}) };
   if (service?.group !== "local") {
     // A host's or gateway's own name for an open model, e.g. meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8: its size and tool use, not its price.
     let tail = name.split("/").pop()!.replace(/:.*$/, "");
@@ -249,7 +253,7 @@ export async function listModels(provider: ProviderConfig): Promise<{ models: Li
     if (!r.ok) return { models: [], reachable: true, note: `${provider.name} did not list its models (it answered ${r.status}). Type the model's name instead.` };
     const data = (await r.json()) as { data?: { id: string; supports_tools?: boolean }[]; models?: { name?: string; id?: string }[] };
     const rows: { id: string; supports_tools?: boolean }[] = (data.data ?? data.models?.map((m) => ({ id: String(m.id ?? m.name ?? "") })) ?? []).filter((m) => m.id && !NOT_CHAT.test(m.id));
-    const list = await catalog();
+    const [list] = await Promise.all([catalog(), loadModelList()]);
     const local = service?.group === "local" || (provider.id === LEGACY_LOCAL && !provider.service);
     // Ollama says what each of its models is; other runners are judged by the model's name.
     const ollama = local && (service?.id ?? "ollama") === "ollama" ? await ollamaDetails(String(provider.baseUrl)) : new Map<string, { bytes?: number; tools?: boolean }>();
