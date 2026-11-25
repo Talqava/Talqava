@@ -35,6 +35,7 @@ Talqava sends information off your computer only to services you choose to use, 
 | Connect GitHub or a repository | Requests about the repositories you choose, signed with your GitHub sign-in | GitHub |
 | Connect a service from the connector catalogue (Stripe, Airtable, monday.com, Intercom, Linear, GitHub) | The key you paste, and what an agent sends to that connector's tools | Only that service's own connector address |
 | Send the audit record to a monitoring system (Security) | Every audit entry: who did what, when, and what it cost. Never keys or passwords. | Only the address you give |
+| Connect a WordPress site (Integrations) | Your user name and application password, and the posts and pages an agent reads, writes or changes | Only your own site |
 | Add a connector (MCP server) | What an agent sends to that connector's tools | That connector's service |
 | Store a key for another service | The requests an agent makes to that service, with your key | That service only |
 | Use OpenRouter | The name "Talqava" and the address talqava.com, as OpenRouter asks apps to identify themselves. Nothing about you. | OpenRouter |

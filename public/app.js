@@ -3684,6 +3684,8 @@ INTEGRATION_MARKS["ai-models"] = `<svg viewBox="0 0 48 48" width="44" height="44
 INTEGRATION_MARKS["api-keys"] = `<svg viewBox="0 0 48 48" width="44" height="44" aria-hidden="true"><rect x="3" y="3" width="42" height="42" rx="11" fill="var(--accent)" fill-opacity="0.11" stroke="var(--accent)" stroke-opacity="0.5" stroke-width="1.25"/><g fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="24" r="6"/><path d="M24 24h13M32 24v5M36 24v4"/></g></svg>`;
 // A chart line: our own drawing for "costs sent elsewhere", not Langfuse's logo.
 INTEGRATION_MARKS.langfuse = `<svg viewBox="0 0 48 48" width="44" height="44" aria-hidden="true"><rect x="3" y="3" width="42" height="42" rx="11" fill="var(--accent)" fill-opacity="0.11" stroke="var(--accent)" stroke-width="1.5"/><path d="M13 33l7-8 6 5 9-12" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="35" cy="18" r="2.4" fill="var(--accent)"/></svg>`;
+// A website tile of our own (a browser window), not WordPress's logo.
+INTEGRATION_MARKS.wordpress = `<svg viewBox="0 0 48 48" width="44" height="44" aria-hidden="true"><rect x="3" y="3" width="42" height="42" rx="11" fill="var(--accent)" fill-opacity="0.11" stroke="var(--accent)" stroke-opacity="0.5" stroke-width="1.25"/><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="12" y="14" width="24" height="20" rx="3"/><path d="M12 20h24M16 25h10M16 29h7"/></g></svg>`;
 const integrationMark = (id) => {
   const node = h("span", { class: "imark" });
   node.innerHTML = INTEGRATION_MARKS[id] ?? "";
@@ -3879,6 +3881,72 @@ function connectorCatalog(cat, done) {
   ];
 }
 
+/** Integrations › WordPress: connect a site, choose what agents may do there, and set up a blog post that writes itself. */
+async function wordpressPage(col, again) {
+  const back = h("button", { class: "plain back", onclick: () => ((ui.integration = null), again()) }, "← All integrations");
+  let d;
+  try {
+    d = await api("GET", "integrations/wordpress");
+  } catch (err) {
+    return fill(col, back, h("div", { class: "banner error" }, err.message));
+  }
+  if (state.view !== "integrations" || ui.integration !== "wordpress") return;
+  const org = activeOrg();
+  const act = (fn, done) => attempt(async () => ((r) => (done && toast(typeof done === "function" ? done(r) : done), again()))(await fn()), col);
+  const url = h("input", { type: "url", placeholder: "Your site's address, e.g. https://example.com", "aria-label": "Site address" });
+  const user = h("input", { placeholder: "Your WordPress user name", autocomplete: "off", "aria-label": "WordPress user name" });
+  const pass = h("input", { type: "password", autocomplete: "off", placeholder: "Application password (looks like abcd efgh ijkl mnop qrst uvwx)", "aria-label": "Application password" });
+  const siteCard = (site) => {
+    const posts = h("div", { class: "wstasks" }, h("p", { class: "note small" }, "Loading recent posts…"));
+    api("GET", `integrations/wordpress/${site.id}/posts`)
+      .then((list) => fill(posts, list.length ? list.map((p) => h("div", { class: "row wppost" }, h("span", { class: "grow" }, p.title), h("span", { class: `chip ${p.status === "publish" ? "on" : ""}` }, p.status === "publish" ? "Public" : p.status === "future" ? "Scheduled" : "Draft"), h("a", { class: "note small", href: p.link, target: "_blank", rel: "noopener" }, "Open"))) : h("p", { class: "note small" }, "No posts yet.")))
+      .catch((err) => fill(posts, h("p", { class: "note small bad" }, err.message)));
+    const rule = h("select", { "aria-label": "What agents may do", onchange: (e) => (e.target.value !== "auto" || confirm(`Let agents publish on ${site.name} without asking?\n\nWhatever an agent writes goes live on your website straight away. Choose this only when you trust the routine and check the site regularly.`) ? act(() => api("PATCH", `integrations/wordpress/${site.id}`, { publish: e.target.value }), "Saved.") : again()) }, d.rules.map((r) => h("option", { value: r.id, selected: site.publish === r.id }, r.words)));
+    const who = h("select", { "aria-label": "Agent" }, org.members.map((m) => h("option", { value: m.bot }, m.title)));
+    const about = h("textarea", { rows: 2, placeholder: "What your blog is about and what to write on, e.g. Practical baking tips for home bakers; one recipe idea or technique each day.", "aria-label": "What the blog is about" });
+    const hour = h("select", { "aria-label": "Time" }, [6, 7, 8, 9, 10, 12, 15, 18].map((n) => h("option", { value: n, selected: n === 9 }, `${n > 12 ? n - 12 : n}:00 ${n >= 12 ? "pm" : "am"}`)));
+    const days = h("select", { "aria-label": "Days" }, h("option", { value: "every" }, "Every day"), h("option", { value: "weekdays" }, "Monday to Friday"));
+    return h(
+      "div",
+      { class: "card form" },
+      h("div", { class: "row" }, h("div", { class: "grow" }, h("b", {}, site.name), h("div", { class: "note small" }, `${site.url.replace(/^https?:\/\//, "")} · signed in as ${site.user}`)), h("span", { class: "chip on" }, "Connected")),
+      h("label", {}, "What agents may do on this site", rule),
+      h("p", { class: "note small" }, "With drafts only, nothing an agent writes is public until you publish it in WordPress. Agents never delete posts or pages, and WordPress keeps earlier versions under Revisions."),
+      h("div", { class: "label" }, "Recent posts"),
+      posts,
+      org.members.length
+        ? h(
+            "form",
+            { class: "form wpdaily", onsubmit: (e) => (e.preventDefault(), act(() => api("POST", `integrations/wordpress/${site.id}/daily`, { owner: who.value, about: about.value, hour: Number(hour.value), days: days.value }), "The routine is set up. You can change or pause it under Routines.")) },
+            h("b", {}, "Have an agent write a blog post on a schedule"),
+            about,
+            h("div", { class: "row wrap" }, who, days, hour, h("button", { class: "primary" }, "Set up the routine")),
+            h("p", { class: "note small" }, site.publish === "drafts" ? "Each post is saved as a draft for you to read and publish. Each run costs what the AI model charges; see it under Routines." : site.publish === "ask" ? "Each post waits for your approval before it goes public." : "Each post is published without asking."),
+          )
+        : h("p", { class: "note small" }, "Add agents under Organization to have one write posts on a schedule."),
+      h("div", { class: "row" }, h("button", { class: "plain danger", onclick: () => confirm(`Disconnect ${site.name}? Agents can no longer read or write it. Nothing on the site is changed.`) && act(() => api("DELETE", `integrations/wordpress/${site.id}`), "Disconnected.") }, "Disconnect")),
+    );
+  };
+  fill(
+    col,
+    back,
+    h("div", { class: "ihero" }, integrationMark("wordpress"), h("div", { class: "grow" }, h("div", { class: "row" }, h("h1", {}, "WordPress"), h("span", { class: `chip ${d.sites.length ? "on" : ""}` }, d.sites.length ? "Connected" : "Not connected")), h("p", { class: "lead" }, "Let your agents write blog posts and update the pages of your WordPress website. You decide whether they only write drafts, ask before publishing, or publish by themselves."))),
+    d.sites.map(siteCard),
+    h(
+      "form",
+      { class: "card form", onsubmit: (e) => (e.preventDefault(), act(() => api("POST", "integrations/wordpress/connect", { url: url.value, user: user.value, password: pass.value }), (s) => `${s.name} is connected. Agents write drafts only until you change that.`)) },
+      h("b", {}, d.sites.length ? "Connect another site" : "Connect your site"),
+      h("ol", {}, h("li", {}, "Sign in to your WordPress site and open ", h("b", {}, "Users › Profile"), "."), h("li", {}, "Scroll to ", h("b", {}, "Application Passwords"), ", type the name Talqava and press ", h("b", {}, "Add New Application Password"), "."), h("li", {}, "Copy the password it shows and paste it below. It is not your normal password, works only for this, and you can revoke it in WordPress at any time.")),
+      url,
+      user,
+      pass,
+      h("p", { class: "note small" }, "Talqava checks it with your site before saving. It is kept on this computer and sent only to your site. Use an account with the Author or Editor role: that limits what an agent could ever do."),
+      h("div", {}, h("button", { class: "primary" }, "Check and connect")),
+    ),
+    h("p", { class: "note small" }, "Agents with the “connected services” power can use a connected site. To give work by hand, ask in a task: “Write a post about … for our blog” or “Update the Opening hours page on our website”."),
+  );
+}
+
 /** Under Integrations › MCP: connectors added by hand, including ones that run as a program on this computer. */
 function connectorsByHand(col, again) {
   const c = state.config;
@@ -3929,6 +3997,7 @@ async function integrationsView() {
   if (ui.integration === "ai-models") return aiModelsPage(col, again);
   if (ui.integration === "api-keys") return apiKeysPage(col, again);
   if (ui.integration === "langfuse") return langfusePage(col, again);
+  if (ui.integration === "wordpress") return wordpressPage(col, again);
   if (ui.integration === "mcp" && git) return (fill(col, ...mcpIntegrationPage(git, act, col, again)), connectorsByHand(col, again));
   if (ui.integration === "openrouter" && git) {
     if (ui.orWaiting && !git.connected) waitForSignIn();

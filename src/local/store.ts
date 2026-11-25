@@ -110,6 +110,8 @@ export interface Config {
   planFirst?: "leads" | "all" | "never";
   /** The leads' daily check-in arrives in the Inbox each day (built from the tasks, at no cost). Default on. */
   checkIn?: boolean;
+  /** WordPress sites agents may write for (see wordpress.ts). Each password is an application password, sent only to its site. */
+  wordpress?: { id: string; name: string; url: string; user: string; password: string; publish: string }[];
   /** Encrypted backups: a key made from the owner's passphrase, where they go, and when the last one was made and tested (see backup.ts). */
   backup?: { salt?: string; key?: string; folder?: string; nightly?: boolean; lastAt?: string; lastFiles?: number; lastTestedAt?: string };
   /** Single sign-on through the company's identity provider (see sso.ts). */
