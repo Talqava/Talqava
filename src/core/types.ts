@@ -190,6 +190,11 @@ export interface RunSpec {
    * from it). Asked before every model call, so the run stops before a step that would likely go over.
    */
   remaining?: () => number;
+  /**
+   * Tools whose calls always ask a person when they would change something, whatever the approval mode and whatever
+   * was allowed "always" earlier. "*" means every tool. Set by organization-wide guardrails.
+   */
+  alwaysAsk?: string[];
   /** The exits every run has besides its budget (see RunLimits). */
   limits?: RunLimits;
   /**

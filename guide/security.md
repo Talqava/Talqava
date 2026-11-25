@@ -37,6 +37,8 @@ These limits are enforced by the app itself. A person who tries something their 
 
 **The audit log names people.** Once people are set up, each entry in the **Audit log** says who did it and their role.
 
+**Agent guardrails are rules above every agent.** Under **Agent guardrails** you set rules for the whole installation: whether changes always ask a person, whether agents may run commands, use connected services or the web, which sites are approved, and the most a task may spend or run. An agent's own settings can be stricter than these, never looser. They work whether or not people and sign-in are turned on, and apply to tasks that start after you change them.
+
 ## How to…
 
 ### Turn on people and sign-in
@@ -78,6 +80,27 @@ These limits are enforced by the app itself. A person who tries something their 
 1. Under **Rules for everyone**, press **See who is signed in**.
 2. Press **Sign everyone else out** if a computer was lost or you are unsure. You stay signed in.
 
+### Hold agents to approved websites
+
+1. Under **Agent guardrails**, set **The web** to **Only the sites approved below**.
+2. Type one site on each line, such as `example.com`, and press **Save the list**. A site covers its pages and sub-sites.
+3. An agent that tries another site is refused, told not to look for a way round, and the attempt appears under **Refused by these rules**.
+
+### Make every change ask a person
+
+1. Under **Agent guardrails**, set **When an agent wants to change something** to **Always ask a person first**.
+2. From then on, no agent runs changes without asking, even one you had set to run without asking, and "always allow" no longer skips the question.
+
+### Cap what a task may spend or how long it may run
+
+1. Under **Agent guardrails**, type an amount in **Most one task may spend** or a number of minutes in **Longest one task may run**.
+2. Leave a box empty for no extra cap. An agent with a lower budget of its own keeps it.
+
+### Stop every agent at once
+
+1. Under **Agent guardrails**, press **Stop everything** and confirm.
+2. Every agent on your chart pauses. Resume them from **Tasks**.
+
 ## Tips
 
 - Give each person the lowest role that lets them do their job. Most people are Members.
@@ -87,6 +110,8 @@ These limits are enforced by the app itself. A person who tries something their 
 ## What is not built yet
 
 - Signing in with your company account (single sign-on).
+- Approved sites hold page reading, including redirects, and the AI service's own web search. Calls to web services with saved keys and the built-in browser are checked at the address the agent gives; a redirect or a link clicked inside the browser is not checked yet.
+- Rules by kind of action (send, pay, delete) with named approvers, and a list of approved connectors and Marketplace items.
 - Limiting a manager or member to their own groups: a manager can change the whole chart.
 - Handing the Owner role to someone else.
 - Using your Talqava team from the Claude app while sign-in is on.

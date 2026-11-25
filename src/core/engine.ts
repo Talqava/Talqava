@@ -181,14 +181,15 @@ export class Engine {
   /** Asks the user (through the page) whether a tool call may run. */
   #askApproval(conversation: Conversation, run: Run, spec: RunSpec, call: ToolCall): Promise<Decision> {
     const cautious = readOutsideContent(conversation, spec, call.id);
-    if (!cautious && (spec.approvalMode === "auto" || conversation.allowed.includes(call.name))) return Promise.resolve("allow");
+    const strict = Boolean(spec.alwaysAsk?.includes("*") || spec.alwaysAsk?.includes(call.name));
+    if (!cautious && !strict && (spec.approvalMode === "auto" || conversation.allowed.includes(call.name))) return Promise.resolve("allow");
     if (run.abort.signal.aborted) return Promise.resolve("deny");
     const info: Approval = {
       id: crypto.randomBytes(8).toString("hex"),
       toolUseId: call.id,
       name: call.name,
       input: call.input,
-      ...(cautious ? { reason: "This run has read outside content (web pages or API replies), so every change asks first." } : {}),
+      ...(cautious ? { reason: "This run has read outside content (web pages or API replies), so every change asks first." } : strict ? { reason: "Your organization's rules say this always asks a person first." } : {}),
     };
     return new Promise((resolve) => {
       const finish = (decision: Decision) => {

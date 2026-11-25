@@ -110,6 +110,8 @@ export interface Config {
   planFirst?: "leads" | "all" | "never";
   /** The leads' daily check-in arrives in the Inbox each day (built from the tasks, at no cost). Default on. */
   checkIn?: boolean;
+  /** Rules above every agent's own settings (see guardrails.ts). None means today's behaviour. */
+  guardrails?: { changes?: string; commands?: string; connectors?: string; web?: string; sites?: string[]; maxTaskSpend?: number; maxMinutes?: number };
   /** A stuck task tries once with a stronger model (the team's model or a backup) before stopping. Default on. */
   moveUp?: boolean;
   /** "mask": email addresses, phone numbers, card numbers and SSNs are hidden from AI services (not from models on this computer). */
@@ -194,6 +196,7 @@ export function publicConfig() {
     assistantSeesGroups: cfg.assistantSeesGroups !== false,
     planFirst: cfg.planFirst ?? "leads",
     moveUp: cfg.moveUp !== false,
+    guardrails: cfg.guardrails ?? {},
     checkIn: cfg.checkIn !== false,
     privacy: cfg.privacy ?? "off",
     budget: cfg.budget,

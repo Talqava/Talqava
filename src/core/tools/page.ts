@@ -63,6 +63,9 @@ export function htmlToText(html: string): { title: string; text: string } {
   return { title, text };
 }
 
+/** Set by the installation's guardrails: which hosts may be opened. Null means any. Checked at every redirect too. */
+export const webRules: { allowed: ((hostname: string) => boolean) | null } = { allowed: null };
+
 export function pageTool(options: { allowPrivate?: boolean } = {}): Tool {
   return defineTool<{ url: string }>({
     name: "read_page",
@@ -75,6 +78,8 @@ export function pageTool(options: { allowPrivate?: boolean } = {}): Tool {
       for (let hop = 0; ; hop++) {
         if (!["http:", "https:"].includes(url.protocol)) throw new Error("Only http and https pages can be read.");
         if (!options.allowPrivate) await assertPublic(url.hostname);
+        // An organization may hold agents to approved sites: a redirect that leaves them is not followed.
+        if (webRules.allowed && !webRules.allowed(url.hostname)) throw new Error(`${url.hostname} is not one of the sites this organization approves, so it was not opened${hop ? " (the page redirected there)" : ""}.`);
         const response = await fetch(url, {
           redirect: "manual",
           headers: { accept: "text/html,text/plain,application/json;q=0.9,*/*;q=0.5" },

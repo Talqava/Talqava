@@ -1923,3 +1923,5 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .security .stepkey { font-size: 14px; letter-spacing: 0.06em; user-select: all; }
 .security .officetable td { vertical-align: top; }
 .login input[hidden] { display: none; }
+.security .stopall { border-color: var(--critical, #b42318); }
+.security .refused { margin: 6px 0 0; padding-left: 18px; }
