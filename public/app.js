@@ -7093,7 +7093,7 @@ async function refreshTasks(full = false) {
     return ui.tasksCol && fill(ui.tasksCol, h("div", { class: "banner error" }, err.message));
   }
   if (state.view !== "tasks" || !ui.tasksCol) return;
-  const signature = JSON.stringify([data.items.map((t) => [t.id, t.status, t.detail, t.queue, t.priority, t.title, t.comments, t.owner, t.subtasks.open, t.goal, t.projectId, t.pausedAt]), planned, data.pausedAgents]);
+  const signature = JSON.stringify([data.items.map((t) => [t.id, t.status, t.detail, t.queue, t.priority, t.title, t.comments, t.owner, t.subtasks.open, t.goal, t.projectId, t.pausedAt, t.attention?.words]), planned, data.pausedAgents]);
   if (!full && signature === ui.tasksSignature) return;
   ui.tasksSignature = signature;
   ui.tasks = data.items;
@@ -7116,7 +7116,7 @@ function drawBoard() {
   const twoWeeks = Date.now() - 14 * 86400_000;
   const inPlan = (t) => !f.plan || (f.plan.startsWith("goal:") ? t.goal === f.plan.slice(5) : t.projectId === f.plan.slice(8));
   // Done work older than two weeks is folded away, unless the owner asks for it or is searching (search finds any age).
-  const shown = ui.tasks.filter((t) => (!f.who || t.owner === f.who) && inPlan(t) && (!f.q || `${t.number} ${t.title} ${t.ownerName}`.toLowerCase().includes(f.q.toLowerCase())) && (t.status !== "done" || f.older || f.q || Date.parse(t.updatedAt) > twoWeeks));
+  const shown = ui.tasks.filter((t) => (!f.look || t.attention) && (!f.who || t.owner === f.who) && inPlan(t) && (!f.q || `${t.number} ${t.title} ${t.ownerName}`.toLowerCase().includes(f.q.toLowerCase())) && (t.status !== "done" || f.older || f.q || Date.parse(t.updatedAt) > twoWeeks));
   const older = ui.tasks.filter((t) => t.status === "done" && Date.parse(t.updatedAt) <= twoWeeks).length;
   const plan = h(
     "select",
@@ -7137,6 +7137,7 @@ function drawBoard() {
       h("div", { class: "taskcardtop" }, h("span", { class: "tasknum" }, `#${t.number}`), t.priority !== "normal" ? h("span", { class: `taskpri ${t.priority}` }, PRIORITY_WORDS[t.priority]) : null, t.status === "todo" && t.queue ? h("span", { class: "taskqueue" }, ordinal(t.queue)) : t.status === "paused" ? h("span", { class: "taskqueue" }, "⏸ Paused") : null),
       h("b", { class: "tasktitle" }, t.title),
       t.detail ? h("span", { class: `taskdetail ${t.status === "blocked" ? "bad" : ""}` }, t.detail) : null,
+      t.attention ? h("span", { class: "taskattn", title: t.attention.words }, t.attention.kind === "stalled" ? "⚠ May be stuck" : "⏳ Waiting a long time") : null,
       t.projectName || t.goalTitle ? h("span", { class: "taskplan", title: t.goalTitle ? `Serves the goal: ${t.goalTitle}` : "" }, t.projectName ? `◇ ${t.projectName}` : `◎ ${t.goalTitle}`) : null,
       h("div", { class: "taskmeta" }, bot ? keycap(bot, 18, t.status === "working" ? "working" : "", bot.type) : null, h("span", { class: "grow" }, t.ownerName), t.subtasks.total ? h("span", { title: "Sub-tasks still open" }, `◫ ${t.subtasks.open}/${t.subtasks.total}`) : null, t.comments ? h("span", { title: "Comments" }, `💬 ${t.comments}`) : null, t.cost >= 0.01 ? h("span", {}, money(t.cost)) : null),
     );
@@ -7145,6 +7146,7 @@ function drawBoard() {
     col,
     tasksHead(),
     h("div", { class: "row tasks-tools" }, search, who, plan, h("label", { class: "power" }, h("input", { type: "checkbox", checked: f.cancelled, onchange: (e) => ((f.cancelled = e.target.checked), drawBoard()) }), "Show cancelled"), older ? h("label", { class: "power" }, h("input", { type: "checkbox", checked: Boolean(f.older), onchange: (e) => ((f.older = e.target.checked), drawBoard()) }), `Show older done work (${older})`) : null),
+    todayStrip(f),
     pauseBar(org, f.who),
     h(
       "div",
@@ -7155,6 +7157,24 @@ function drawBoard() {
       }),
     ),
     f.cancelled ? h("div", { class: "taskcancelled" }, h("h3", {}, "Cancelled"), ui.tasks.filter((t) => t.status === "cancelled").map(card)) : null,
+  );
+}
+
+/** At a glance: what is being worked on, what needs the owner, what deserves a look, and what finished today. */
+function todayStrip(f) {
+  const tasks = ui.tasks ?? [];
+  const today = new Date().toDateString();
+  const count = (test) => tasks.filter(test).length;
+  const look = count((t) => t.attention);
+  const tile = (n, label, hint, cls = "", onclick = null) => h(onclick ? "button" : "div", { class: `todaytile ${cls} ${onclick ? "plain" : ""}`, title: hint, ...(onclick ? { onclick, "aria-pressed": String(Boolean(f.look)) } : {}) }, h("b", {}, String(n)), h("span", {}, label));
+  return h(
+    "div",
+    { class: "todaystrip", role: "group", "aria-label": "At a glance" },
+    tile(count((t) => t.status === "working"), "Working now", "Tasks an agent is doing right now"),
+    tile(count((t) => t.status === "waiting" || t.status === "blocked"), "Need you", "Waiting for your answer, or stuck"),
+    tile(look, f.look ? "Need a look (showing only these)" : "Need a look", "No progress for a while, or waiting a long time. Click to show only these.", look ? `warn ${f.look ? "on" : ""}` : "", look || f.look ? () => ((f.look = !f.look), drawBoard()) : null),
+    tile(count((t) => t.status === "review"), "To review", "Finished: accept it, or send it back"),
+    tile(count((t) => t.status === "done" && new Date(t.updatedAt).toDateString() === today), "Done today", "Accepted or finished today"),
   );
 }
 
@@ -7237,6 +7257,7 @@ async function drawTaskPanel(id) {
     h("div", { class: "taskpanelhead" }, h("span", { class: "tasknum" }, `#${t.number}`), h("span", { class: `taskstatus st-${t.status}` }, TASK_STATUS_WORDS[t.status]), h("span", { class: "grow" }), h("button", { class: "plain small", "aria-label": "Close", onclick: () => ((ui.taskOpen = null), (panel.hidden = true), drawBoard()) }, "✕")),
     title,
     t.detail ? h("div", { class: `banner ${t.status === "blocked" ? "error" : ""}` }, t.detail) : null,
+    t.attention ? h("div", { class: "banner" }, t.attention.kind === "stalled" ? "⚠ " : "⏳ ", t.attention.words) : null,
     h(
       "div",
       { class: "taskactions row wrap" },

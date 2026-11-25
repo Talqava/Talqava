@@ -113,6 +113,11 @@ Chats with Talqava itself keep working while agents are paused.
 1. Open the task's **Receipt**, then open a part.
 2. Open its steps line (for example "6 steps · 48 s thinking"). Each step shows the model that answered, how long it took and what it cost. A step answered by a backup model is marked **backup**.
 
+**See what needs a look**
+1. At the top of the Board, the strip shows **Working now**, **Need you**, **Need a look**, **To review** and **Done today**.
+2. Click **Need a look** to show only those tasks. A task needs a look when its agent has taken no step for 15 minutes while it says it is working (**⚠ May be stuck**), or when it has waited on you for more than a day (**⏳ Waiting a long time**).
+3. Open the task: its panel says what to do, such as opening the work, trying again, giving it to someone else, or accepting it as it is.
+
 **Use the task board**
 1. Open a task's page (from **Work in progress** or the task's panel) and open **Task board**.
 2. Read what the agents on the task have posted: findings, decisions, questions, blockers and hand-overs. It opens by itself when one has a question or a blocker.
@@ -192,6 +197,7 @@ Chats with Talqava itself keep working while agents are paused.
 - **"Say what should change in the plan."**: write what should change in the box before pressing **Ask for changes**.
 - **"There is no plan waiting for your approval on this task."**: the plan was already approved, or the agent is still revising it. Reload the page.
 - **"This task's board is full"**: a task's board keeps up to 60 notes; the agents put the rest in their reports.
+- **"Waits until the … has fewer unfinished tasks"**: that agent has three or more tasks that are stuck or waiting for your answer, so it finishes before starting more. Clear some of them (answer, try again, accept as it is, or cancel), or set this task's **Priority** to **Urgent** to start it now.
 - **"This task is paused. Resume it instead."**: press **Resume** on the task rather than **Try again**.
 - **"The … is paused, so it starts no new work."**: that agent is paused. Resume it from the banner on the Board, or give the task to someone else.
 - **"Its agent is no longer on your team."**: the agent was removed. Reassign the task, then click **Try again**.
