@@ -106,6 +106,8 @@ export interface Config {
   backups?: string[];
   /** When an agent writes a plan for the owner's approval before starting: tasks given to leads (the default), every task the owner gives, or never. */
   planFirst?: "leads" | "all" | "never";
+  /** "mask": email addresses, phone numbers, card numbers and SSNs are hidden from AI services (not from models on this computer). */
+  privacy?: "off" | "mask";
   /** Whether the Talqava assistant may read library documents and pages limited to some groups (never Private ones). On unless the owner turns it off. */
   assistantSeesGroups?: boolean;
   /** The last model check of each model, by ref. */
@@ -183,6 +185,7 @@ export function publicConfig() {
     backups: cfg.backups ?? [],
     assistantSeesGroups: cfg.assistantSeesGroups !== false,
     planFirst: cfg.planFirst ?? "leads",
+    privacy: cfg.privacy ?? "off",
     budget: cfg.budget,
     monthlyBudget: cfg.monthlyBudget ?? null,
     modelChecks: cfg.modelChecks,
