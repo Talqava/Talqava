@@ -45,6 +45,7 @@ import { loadModelList } from "./modelprices.ts";
 import { COLUMN_TYPES, peopleOf, tables } from "./tables.ts";
 import { sheets } from "./sheets.ts";
 import { describeGuardrails, guardrails, guardrailsFrom } from "./guardrails.ts";
+import { securityOverview, securityReport } from "./securitycenter.ts";
 import { LEVELS, LEVEL_WORDS, RECOMMENDED, WHERE, WHERE_WORDS, describePolicy, policy, policyFrom } from "./sensitivity.ts";
 import { ROLES, ROLE_WORDS, mayDo, people } from "./people.ts";
 import type { Person } from "./people.ts";
@@ -815,6 +816,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     throw new HttpError(404, "Not found.");
   }
 
+  if (route === "GET security-center") return send(res, 200, parts[1] === "report" ? { name: `talqava-security-report-${new Date().toISOString().slice(0, 10)}.md`, text: securityReport() } : securityOverview());
   if (route === "GET sensitivity") {
     const cfg = getConfig();
     return send(res, 200, { policy: policy(cfg), levels: LEVELS.map((id) => ({ id, ...LEVEL_WORDS[id] })), where: WHERE.map((id) => ({ id, words: WHERE_WORDS[id] })), recommended: RECOMMENDED, services: cfg.providers.filter((p) => p.kind === "anthropic" ? Boolean(cfg.apiKey) : true).map((p) => ({ id: p.id, name: p.name, local: isLocalRef(`${p.id}/x`) })), words: describePolicy(policy(cfg)) });
@@ -1395,6 +1397,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (route === "POST library" && parts[1] === "delete") return send(res, 200, await attempt(async () => (await library.remove(org, items(body.items)), { ok: true })));
     if (route === "POST library" && parts[1] === "restore") return send(res, 200, await attempt(() => library.restore(org, body.id)));
     if (route === "POST library" && parts[1] === "purge") return send(res, 200, await attempt(() => library.purge(org, body.all === true ? "all" : body.id)));
+    if (route === "PATCH library" && parts[1] && parts[1] !== "folder" && body.level !== undefined) return send(res, 200, await attempt(() => library.setLevel(org, Number(parts[1]), body.level)));
     if (route === "PATCH library" && parts[1] === "folder") return send(res, 200, await attempt(() => library.setFolderAccess(org, body.path, accessFrom(body))));
     if (route === "PATCH library" && parts[1]) return send(res, 200, await attempt(() => library.setAccess(org, Number(parts[1]), body.mode ? accessFrom(body) : body.folderDecides === true ? null : { everyone: body.everyone === true, departments: body.departments, agents: body.agents })));
     if (route === "DELETE library" && parts[1]) return send(res, 200, await attempt(async () => (await library.remove(org, Number(parts[1])), { ok: true })));

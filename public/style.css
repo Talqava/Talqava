@@ -1925,3 +1925,7 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .login input[hidden] { display: none; }
 .security .stopall { border-color: var(--critical, #b42318); }
 .security .refused { margin: 6px 0 0; padding-left: 18px; }
+.security .secrow { align-items: flex-start; padding: 6px 0; border-top: 1px solid var(--line); }
+.security .secrow:first-child { border-top: 0; }
+.security .chip.bad { border-color: var(--critical, #b42318); color: var(--critical, #b42318); }
+.security .chip.warn { border-color: #9a6200; color: #9a6200; }

@@ -6,6 +6,9 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
+// A data folder of this file's own, set before anything is loaded, so nothing here reads or writes the real one.
+process.env.TALQAVA_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "talqava-security-"));
+
 test("tags are stripped until none can form from the pieces", async () => {
   const { stripTags } = await import("../../src/local/library.ts");
   assert.equal(stripTags("<w:t>Hello</w:t> <b>there</b>"), "Hello there");
@@ -43,4 +46,17 @@ test("with a password set, nothing is served without signing in, and only the ri
   } finally {
     child.kill();
   }
+});
+
+test("the Security center says which protections are on and makes a report that claims no certificate", async () => {
+  const { securityOverview, securityReport } = await import("../../src/local/securitycenter.ts");
+  const o = securityOverview();
+  assert.equal(o.of, o.protections.length);
+  assert.ok(o.protections.every((p) => p.name && p.words && ["on", "partly", "off"].includes(p.state)));
+  assert.ok(o.protections.filter((p) => p.state !== "on").every((p) => p.next), "anything not fully on says what to do");
+  const report = securityReport(new Date("2026-11-26T00:00:00Z"));
+  assert.match(report, /^# Talqava security settings report/);
+  assert.match(report, /Made on 2026-11-26/);
+  assert.match(report, /not a certificate/);
+  assert.doesNotMatch(report, /SOC 2 compliant|certified/i);
 });

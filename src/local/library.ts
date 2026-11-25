@@ -5,6 +5,9 @@
 // a document is decided by the folder it is in (Everyone, or a department's
 // folder) and can be changed per document. Only the passages that match a
 // search are sent to a model, so a large library costs nothing until used.
+import { audit } from "./audit.ts";
+import { LEVEL_WORDS, levelOf, mayReceive } from "./sensitivity.ts";
+import type { Level } from "./sensitivity.ts";
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
@@ -49,6 +52,8 @@ export interface LibraryDoc {
   readable: boolean;
   passages: number;
   access: Access;
+  /** How sensitive it is: decides which AI services may receive it. */
+  level: Level;
   /** True when the person set who may use it, rather than its folder deciding. */
   accessSet: boolean;
   /** The folder whose setting it follows ("" the library itself), its own path when set on it, or null for the default. */
@@ -92,6 +97,8 @@ export function openOrgDb(orgId: string): DatabaseSync {
     create trigger if not exists passages_ai after insert on passages begin insert into passages_fts(rowid, text) values (new.id, new.text); end;
     create trigger if not exists passages_ad after delete on passages begin insert into passages_fts(passages_fts, rowid, text) values ('delete', old.id, old.text); end;
   `);
+  // How sensitive each document is (see sensitivity.ts). A file keeps its level when it is changed on disk.
+  if (!(db.prepare("pragma table_info(documents)").all() as unknown as { name: string }[]).some((c) => c.name === "level")) db.exec("alter table documents add column level text not null default 'internal'");
   databases.set(orgId, db);
   return db;
 }
@@ -266,6 +273,19 @@ interface Row {
   access: string | null;
   problem: string;
   added_at: string;
+  level?: string;
+}
+
+/**
+ * Whether a document may be handed to `botId`: by who may use it, by its sensitivity (a Restricted one is only for
+ * agents named on it), and by whether the AI service this run uses may receive that level.
+ */
+function handOver(org: Org, access: Access, botId: string | null, level: unknown): boolean {
+  if (!mayUse(org, access, botId)) return false;
+  if (botId === OWNER) return true;
+  const l = levelOf(level);
+  if (l === "restricted" && !access.agents.includes(String(botId))) return false;
+  return mayReceive(l);
 }
 
 function walk(root: string): { rel: string; full: string; size: number; modified: number }[] {
@@ -432,7 +452,7 @@ const toDoc = (org: Org, db: DatabaseSync, row: Row, settings = folderSettings(d
   const own = parseAccess(row.access);
   const { access, from } = effectiveAccess(org, row.path, own, settings);
   const passages = (db.prepare("select count(*) n from passages where document = ?").get(row.id) as { n: number }).n - 1;
-  return { id: row.id, path: row.path, name: row.name, type: row.type || "file", size: row.size, modified: row.modified, readable: row.readable === 1, passages: Math.max(0, passages), access, accessSet: Boolean(own), accessFrom: from, problem: row.problem, addedAt: row.added_at };
+  return { id: row.id, path: row.path, name: row.name, type: row.type || "file", size: row.size, modified: row.modified, readable: row.readable === 1, passages: Math.max(0, passages), access, level: levelOf(row.level), accessSet: Boolean(own), accessFrom: from, problem: row.problem, addedAt: row.added_at };
 };
 
 function cleanAccess(org: Org, access: Partial<Access>): string {
@@ -503,7 +523,7 @@ export const library = {
   list(org: Org, botId: string | null = OWNER): LibraryDoc[] {
     const db = openOrgDb(org.id);
     const settings = folderSettings(db);
-    return (db.prepare("select * from documents order by path").all() as unknown as Row[]).map((r) => toDoc(org, db, r, settings)).filter((d) => mayUse(org, d.access, botId));
+    return (db.prepare("select * from documents order by path").all() as unknown as Row[]).map((r) => toDoc(org, db, r, settings)).filter((d) => handOver(org, d.access, botId, d.level));
   },
 
   /** Every folder in the library, with what is in it and who may use it. */
@@ -559,7 +579,7 @@ export const library = {
     const perDoc = new Map<number, number>();
     for (const r of rows) {
       const doc = docs.get(r.document);
-      if (!doc || !mayUse(org, effectiveAccess(org, doc.path, parseAccess(doc.access), settings).access, botId)) continue;
+      if (!doc || !handOver(org, effectiveAccess(org, doc.path, parseAccess(doc.access), settings).access, botId, doc.level)) continue;
       // At most three passages from one document, so one long file does not crowd out the rest.
       if ((perDoc.get(r.document) ?? 0) >= 3) continue;
       perDoc.set(r.document, (perDoc.get(r.document) ?? 0) + 1);
@@ -574,7 +594,13 @@ export const library = {
   read(org: Org, botId: string | null, id: number, from = 1, budget = 6000): { name: string; text: string; from: number; to: number; parts: number } {
     const db = openOrgDb(org.id);
     const row = db.prepare("select * from documents where id = ?").get(id) as unknown as Row | undefined;
-    if (!row || !mayUse(org, effectiveAccess(org, row.path, parseAccess(row.access), folderSettings(db)).access, botId)) throw new Error("There is no such document in the library, or it is not one you may use.");
+    const rowAccess = row ? effectiveAccess(org, row.path, parseAccess(row.access), folderSettings(db)).access : null;
+    if (row && rowAccess && botId !== OWNER && mayUse(org, rowAccess, botId) && !handOver(org, rowAccess, botId, row.level)) {
+      const l = levelOf(row.level);
+      audit({ actor: "system", actorName: "Guardrails", kind: "guardrail", ok: false, action: `Kept back: the library document “${row.name}” is ${LEVEL_WORDS[l].name}`, detail: l === "restricted" && !rowAccess.agents.includes(String(botId)) ? "The agent is not named on it" : "The agent's AI service may not receive that level" });
+      throw new Error(`“${row.name}” is marked ${LEVEL_WORDS[l].name}, and this organization's rules do not let you read it${l === "restricted" ? " unless you are named on it" : " on the AI service you are running on"}. Do not look for its content another way. Say in your report that you could not read it.`);
+    }
+    if (!row || !rowAccess || !handOver(org, rowAccess, botId, row.level)) throw new Error("There is no such document in the library, or it is not one you may use.");
     const parts = db.prepare("select seq, text from passages where document = ? and seq >= ? order by seq").all(id, Math.max(1, from)) as unknown as { seq: number; text: string }[];
     const total = (db.prepare("select count(*) n from passages where document = ?").get(id) as { n: number }).n - 1;
     let text = "";
@@ -601,6 +627,16 @@ export const library = {
     const row = db.prepare("select * from documents where id = ?").get(id) as unknown as Row | undefined;
     if (!row) throw new Error("There is no such document.");
     db.prepare("update documents set access = ? where id = ?").run(access === null ? null : cleanAccess(org, access), id);
+    return toDoc(org, db, db.prepare("select * from documents where id = ?").get(id) as unknown as Row);
+  },
+
+  /** Sets how sensitive a document is. */
+  setLevel(org: Org, id: number, level: unknown): LibraryDoc {
+    const db = openOrgDb(org.id);
+    const row = db.prepare("select * from documents where id = ?").get(id) as unknown as Row | undefined;
+    if (!row) throw new Error("There is no such document.");
+    db.prepare("update documents set level = ? where id = ?").run(levelOf(level), id);
+    audit({ actor: "owner", actorName: "You", kind: "library", action: `Marked the library document “${row.name}” ${LEVEL_WORDS[levelOf(level)].name}` });
     return toDoc(org, db, db.prepare("select * from documents where id = ?").get(id) as unknown as Row);
   },
 

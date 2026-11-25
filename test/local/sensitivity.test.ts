@@ -35,7 +35,7 @@ test("each level goes only where the owner allows: any service, approved ones, t
   assert.deepEqual([...S.levelsForRun("anthropic/claude-opus-5-5")], ["public"]);
   store.saveConfig({ backups: [] });
   // What the owner types is checked.
-  assert.deepEqual(S.policyFrom({ services: { internal: "everywhere", restricted: "local" }, approved: ["a", "a", 5] }), { services: { public: "any", internal: "any", confidential: "any", restricted: "local" }, approved: ["a", "5"] });
+  assert.deepEqual(S.policyFrom({ services: { internal: "everywhere", restricted: "local" }, approved: ["a", "a", 5], memory: "top-secret" }), { services: { public: "any", internal: "any", confidential: "any", restricted: "local" }, approved: ["a", "5"], memory: "internal" });
   assert.equal(S.describePolicy().length, 4);
 });
 
@@ -83,4 +83,37 @@ test("while a run is prepared, the model chosen sets what it may receive", async
   });
   assert.deepEqual(levels, ["public", "internal"]);
   assert.deepEqual((await S.preparing(async () => 1)).levels, null);
+});
+
+test("Library documents and Memory follow the same rules", async () => {
+  const { library, syncLibrary } = await import("../../src/local/library.ts");
+  const { orgMemory, orgMemoryPrompt } = await import("../../src/local/orgmemory.ts");
+  const { orgs } = await import("../../src/local/orgs.ts");
+  const live = orgs.active();
+  await library.add(live, "payroll.txt", Buffer.from("Salaries: Ada 90000."));
+  await library.add(live, "handbook.txt", Buffer.from("We open at nine."));
+  await syncLibrary(live);
+  const payroll = library.list(live).find((d) => d.name === "payroll.txt")!;
+  assert.equal(payroll.level, "internal");
+  assert.equal(library.setLevel(live, payroll.id, "confidential").level, "confidential");
+  const cloud = [...S.levelsForRun("anthropic/claude-opus-5-5")]; // public and internal only, from the policy set above
+  const names = (levels: any) => S.withLevels(levels, () => library.list(live, "@general").map((d) => d.name).sort());
+  assert.deepEqual(names(cloud).includes("payroll.txt"), false);
+  assert.deepEqual(names(cloud).includes("handbook.txt"), true);
+  assert.equal(S.withLevels(cloud, () => library.search(live, "@general", "Salaries")).length, 0);
+  assert.throws(() => S.withLevels(cloud, () => library.read(live, "@general", payroll.id)), /“payroll.txt” is marked Confidential.*Say in your report/s);
+  assert.match(S.withLevels([...S.levelsForRun("local/llama3.1")], () => library.read(live, "@general", payroll.id)).text, /Ada 90000/);
+  assert.match(library.read(live, null, payroll.id).text, /Ada 90000/, "the owner always reads it");
+  // A changed file keeps its level.
+  await library.add(live, "payroll.txt", Buffer.from("Salaries: Ada 95000."));
+  await syncLibrary(live);
+  assert.equal(library.list(live).find((d) => d.name === "payroll.txt")!.level, "confidential");
+
+  // Memory as a whole has one level.
+  orgMemory.add({ org: live.id, shelf: "org", text: "Our biggest customer is Acme.", by: "owner" });
+  assert.match(S.withLevels(cloud, () => orgMemoryPrompt(live, null, "customer")), /Acme/);
+  store.saveConfig({ sensitivity: { ...store.getConfig().sensitivity, memory: "confidential" } });
+  assert.equal(S.withLevels(cloud, () => orgMemoryPrompt(live, null, "customer")), "");
+  assert.equal(S.withLevels(cloud, () => orgMemory.search(live, null, "Acme")).length, 0);
+  assert.match(orgMemoryPrompt(live, null, "customer"), /Acme/, "outside a run, nothing is held back");
 });
