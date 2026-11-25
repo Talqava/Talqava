@@ -1,0 +1,60 @@
+# Builds the Windows installer and the Linux AppImage, and checks that the packaged app's own server starts on
+# each. It runs when asked for (Actions → Desktop builds → Run workflow) and on pull requests that change the
+# desktop app's files. The installers are kept for a week as downloads on the run's page, for people to try.
+# They are not signed, and passing here does not mean a person has tried the app on that system.
+name: Desktop builds
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "desktop/**"
+      - ".github/workflows/desktop.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows installer
+            os: windows-latest
+            script: dist:win
+            files: |
+              desktop/dist/*.exe
+          - name: Linux AppImage
+            os: ubuntu-latest
+            script: dist:linux
+            files: |
+              desktop/dist/*.AppImage
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - run: npm ci
+        working-directory: desktop
+      - run: npm run ${{ matrix.script }}
+        working-directory: desktop
+        env:
+          # Nothing is signed or published from here.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: The packaged server starts
+        run: node smoke.mjs
+        working-directory: desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+          retention-days: 7

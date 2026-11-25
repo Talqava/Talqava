@@ -148,6 +148,8 @@ npm run dist:test
 
 The app is written to `desktop/dist/mac-arm64/Talqava.app`. Copy it to your Applications folder to use it. It keeps its data in `~/Library/Application Support/`. The app is not signed yet, so the first time, right-click it and choose **Open**.
 
+**Windows and Linux (not yet tried by a person).** `npm run dist:win` builds a Windows installer and `npm run dist:linux` builds a Linux AppImage, each on its own kind of computer. The **Desktop builds** workflow on GitHub builds both and checks that the packaged app's server starts; the installers can be downloaded from the run's page for a week. On Windows, the agents' shell tool needs [Git for Windows](https://git-scm.com). If you try one, please [tell us how it went](https://github.com/Talqava/Talqava/issues/20).
+
 ## Run it on a server (always on)
 
 On any small Linux server with Docker:
@@ -200,7 +202,7 @@ For pages that need clicking or typing, install the optional browser (`npm insta
 | `crew` | The six starter agents, one YAML file each. |
 | `marketplace` | The 81 ready-made roles and the ready-made teams (`teams.yaml`). |
 | `quests` | The five ready-made checked tasks. |
-| `desktop` | The Electron Mac app. |
+| `desktop` | The Electron desktop app (Mac; Windows and Linux builds). |
 | `evals` | The task test suite and its saved baselines. |
 | `test` | Tests for the core and the local edition. |
 | `docs` | The architecture map ([open it in a browser](docs/architecture.html)), plans, and the [brand guide](docs/brand/README.md) with the logos. |
