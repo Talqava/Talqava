@@ -250,7 +250,7 @@ test("a run stops before a step that would go past a budget it shares with other
   await (await engine.startRun(id, "keep echoing")).done;
   // Two calls ($2), then $0.50 is left: less than the next $1 step, so it stops without overspending.
   assert.equal(mock.requests.length, 2);
-  assert.ok(events.some((e) => e.type === "notice" && /shared budget has \$0\.50 left/.test(e.text)));
+  assert.ok(events.some((e) => e.type === "notice" && /have \$0\.50 left, less than the next step/.test(e.text)));
   delete spec.remaining;
   script.length = 0;
 });

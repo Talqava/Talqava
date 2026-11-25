@@ -404,8 +404,10 @@ export const work = {
   accept(org: Org, id: string): WorkItem {
     const d = db(org.id);
     const item = this.get(org, id);
-    if (item.status !== "review" && item.status !== "blocked" && item.status !== "waiting") throw new Error("Only finished work can be accepted.");
-    d.prepare("update work_items set state = 'done', updated_at = ? where id = ?").run(now(), item.id);
+    if (!["review", "blocked", "waiting", "paused"].includes(item.status)) throw new Error("Only work that has stopped can be accepted: this task is still being done, or is already closed.");
+    // A run still waiting for an approval or an answer is stopped: the owner has taken the work as it is.
+    if (item.quest && quests.isRunning(item.quest)) quests.stop(item.quest);
+    d.prepare("update work_items set state = 'done', paused = null, updated_at = ? where id = ?").run(now(), item.id);
     audit({ actor: "owner", actorName: "You", kind: "task", action: `Accepted task #${item.number}`, detail: item.title });
     return this.get(org, id);
   },

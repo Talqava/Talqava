@@ -654,7 +654,7 @@ function stopBanner(text) {
   return h(
     "div",
     { class: "banner stopbanner" },
-    h("div", { class: "grow" }, h("b", {}, "It stopped before finishing. "), words, h("div", { class: "note small" }, "Nothing is lost. Continue to let it carry on from here, or raise the limit under Settings → Budget per run.")),
+    h("div", { class: "grow" }, h("b", {}, "It stopped before finishing. "), words, h("div", { class: "note small" }, "Nothing is lost. Continue to let it carry on from here, or raise the limit under Settings → Budgets.")),
     h("button", { class: "primary small", onclick: (e) => (e.currentTarget.closest(".stopbanner")?.remove(), (ui.input.value = "continue"), submit()) }, "Continue"),
   );
 }
@@ -1435,7 +1435,7 @@ function renderBoard() {
 /** One thing that needs the person, other than an approval: a review, a failed check, a failure, a budget reached. */
 function needRow(n) {
   if (!n.q) {
-    const words = n.kind === "chat" ? [n.c.title || "A chat", "A chat is waiting for your approval", () => go("chat", n.c.id)] : n.kind === "monthly" ? [`${n.bot.name} has reached its monthly budget`, "It starts no new work until you raise it", () => go("bot", n.bot.id)] : ["The monthly budget for all agents is used up", "No agent starts new work until you raise it", () => go("team")];
+    const words = n.kind === "chat" ? [n.c.title || "A chat", "A chat is waiting for your approval", () => go("chat", n.c.id)] : n.kind === "monthly" ? [`${n.bot.title || n.bot.name}: its own monthly budget is used up`, "It starts no new work until you raise it on its page", () => go("bot", n.bot.id)] : ["All agents: the monthly budget for all agents is used up", "No agent starts new work until you raise it in Settings", () => go("settings")];
     return h("button", { class: "needrow", onclick: words[2] }, h("span", { class: "flowmain" }, h("b", {}, words[0]), h("span", { class: "flowsub" }, words[1])), h("span", { class: "pill loud" }, "Open"));
   }
   const why = { review: "Changes ready for your review", check: "Finished, but its check failed", failed: n.q.note ? `Failed: ${n.q.note}` : "Failed", budget: "Stopped at its budget: say “continue” to keep going" }[n.kind] ?? "";
@@ -1653,15 +1653,17 @@ function updateCard(q, { compact = false } = {}) {
 // stops arrive as messages too. The person reads, saves (stars), archives and deletes them like email. Only
 // those marks are stored (on this computer); the messages are built from the tasks each time.
 
-// Agents get a person's name for the inbox, which the owner can change. The default is picked from the
-// agent's id, so it stays the same every time.
+// In the inbox an agent goes by its job title, as everywhere else in the app. The owner can give it a person's name
+// instead (Rename); the suggested names are picked from the agent's id, so a suggestion stays the same every time.
 const FIRST_NAMES = ["Maya", "Noah", "Ava", "Liam", "Zara", "Ethan", "Priya", "Lucas", "Sofia", "Omar", "Chloe", "Mateo", "Amara", "Daniel", "Leila", "Kenji", "Grace", "Ravi", "Nora", "Diego", "Hana", "Samuel", "Isla", "Arjun", "Elena", "Theo", "Yara", "Marcus", "Ines", "Jonah", "Mei", "Felix", "Aisha", "Leo", "Camila", "Owen", "Nadia", "Hugo", "Ruby", "Tariq", "Freya", "Kofi", "Lina", "Rafael", "June", "Idris", "Sana", "Elias"];
 const LAST_NAMES = ["Brooks", "Chen", "Patel", "Rivera", "Okafor", "Novak", "Kim", "Hughes", "Silva", "Moreau", "Haddad", "Larsen", "Ito", "Mensah", "Costa", "Fischer", "Reyes", "Sato", "Walsh", "Kaur", "Bennett", "Duarte", "Lindqvist", "Nakamura", "Adeyemi", "Byrne", "Castillo", "Dubois"];
 const nameHash = (text, seed) => [...text].reduce((h, c) => (Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0), seed);
 const defaultAgentName = (id) => `${FIRST_NAMES[nameHash(id, 2166136261) % FIRST_NAMES.length]} ${LAST_NAMES[nameHash(id, 374761393) % LAST_NAMES.length]}`;
-/** The name an agent goes by in the inbox: the one the owner gave it, or its default. */
-const agentName = (bot) => (bot ? state.mail?.names?.[bot.id] || defaultAgentName(bot.id) : "Talqava");
-const agentRole = (bot) => (bot ? bot.title || bot.name : "Your workspace");
+/** The name an agent goes by in the inbox: the one the owner gave it, or its job title, as everywhere else. */
+const agentRole = (bot) => (bot ? activeOrg()?.members?.find((m) => m.bot === bot.id)?.title || bot.title || bot.name : "Your workspace");
+const agentName = (bot) => (bot ? state.mail?.names?.[bot.id] || agentRole(bot) : "Talqava");
+/** "Name, Title" when the owner named the agent; just the title otherwise. */
+const agentWho = (bot) => (bot && state.mail?.names?.[bot.id] ? `${agentName(bot)} · ${agentRole(bot)}` : agentName(bot));
 
 /** Changes agents suggested to workspace pages, waiting for the owner. */
 async function loadPageSuggestions() {
@@ -1956,7 +1958,7 @@ function readMail(m) {
             class: "plain small rename",
             title: "Give this agent another name",
             onclick: () => {
-              const input = h("input", { class: "renamebox", value: agentName(m.bot), "aria-label": "Agent's name", maxlength: "40" });
+              const input = h("input", { class: "renamebox", value: state.mail?.names?.[m.bot.id] ?? "", placeholder: `A name, e.g. ${defaultAgentName(m.bot.id)}`, "aria-label": "Agent's name", maxlength: "40" });
               const save = async (value) => {
                 try {
                   state.mail = await api("PUT", `inbox/names/${encodeURIComponent(m.bot.id)}`, { name: value });
@@ -1967,14 +1969,14 @@ function readMail(m) {
                 renderInbox();
               };
               input.addEventListener("keydown", (e) => (e.key === "Enter" ? save(input.value.trim()) : e.key === "Escape" ? showName() : null));
-              fill(nameBox, input, h("button", { class: "small primary", onclick: () => save(input.value.trim()) }, "Save"), state.mail?.names?.[m.bot.id] ? h("button", { class: "plain small", title: `Back to ${defaultAgentName(m.bot.id)}`, onclick: () => save("") }, "Use default") : null);
+              fill(nameBox, input, h("button", { class: "small primary", onclick: () => save(input.value.trim()) }, "Save"), state.mail?.names?.[m.bot.id] ? h("button", { class: "plain small", title: `Back to its job title, ${agentRole(m.bot)}`, onclick: () => save("") }, "Use job title") : null);
               setTimeout(() => (input.focus(), input.select()), 0);
             },
           }, "Rename")
         : null,
     );
   showName();
-  const from = h("div", { class: "readfrom", style: m.bot ? botStyle(m.bot) : "" }, m.bot ? keycap(m.bot, 44, isLive(q ?? {}) ? "working" : "", m.bot.type) : h("span", { class: "sysavatar big", "aria-hidden": "true" }, "T"), h("div", { class: "grow" }, nameBox, h("div", { class: "note small" }, `${agentRole(m.bot)}${m.bot ? ` · ${departmentOf(m.bot.id)}` : ""} · to me`)), h("span", { class: "mtime" }, new Date(m.at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })));
+  const from = h("div", { class: "readfrom", style: m.bot ? botStyle(m.bot) : "" }, m.bot ? keycap(m.bot, 44, isLive(q ?? {}) ? "working" : "", m.bot.type) : h("span", { class: "sysavatar big", "aria-hidden": "true" }, "T"), h("div", { class: "grow" }, nameBox, h("div", { class: "note small" }, `${m.bot && state.mail?.names?.[m.bot.id] ? `${agentRole(m.bot)} · ` : ""}${m.bot ? `${departmentOf(m.bot.id)} · ` : ""}to me`)), h("span", { class: "mtime" }, new Date(m.at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })));
 
   const body = h("div", { class: "readbody" });
   const act = (fn) => attempt(async () => (await fn(), await Promise.all([loadQuests(), refreshList(), loadCrew(), loadMail()]), renderInbox(), syncInboxCount()), body);
@@ -2067,7 +2069,7 @@ function readMail(m) {
     h("div", { class: "readfacts" }, [parts, q.chain ? `${money(q.chain.cost)} for the whole task` : q.cost ? money(q.cost) : "", LABEL_WORDS[m.label]].filter(Boolean).map((x) => h("span", {}, x)), h("span", { class: "grow" }), h("button", { class: "plain small", onclick: () => ((state.openReceipt = q.id), go("quest", q.id)) }, "See the receipt"), h("button", { class: "plain small", onclick: () => go("quest", q.id) }, "Open the task")),
   );
   // Replying continues the task: the agent reads the reply and carries on.
-  const reply = h("textarea", { rows: 3, placeholder: `Reply to ${agentName(m.bot).split(" ")[0]}… (they will continue the task)`, "aria-label": "Reply" }, ui.mailDraft[q.id] ?? "");
+  const reply = h("textarea", { rows: 3, placeholder: `Reply to ${state.mail?.names?.[m.bot?.id] ? agentName(m.bot).split(" ")[0] : `the ${agentName(m.bot)}`}… (they will continue the task)`, "aria-label": "Reply" }, ui.mailDraft[q.id] ?? "");
   reply.addEventListener("input", () => (ui.mailDraft[q.id] = reply.value));
   const sendBtn = h("button", { class: "primary small" }, "Send");
   sendBtn.addEventListener("click", () => {
@@ -2098,8 +2100,8 @@ async function composeMail() {
   const to = h(
     "select",
     { "aria-label": "To" },
-    leads.length ? h("optgroup", { label: "Teams (the lead shares the work out)" }, leads.map((b) => h("option", { value: `team:${b.id}` }, `${agentName(b)}'s team · ${b.title || b.name}`))) : null,
-    h("optgroup", { label: "Agents" }, bots.map((b) => h("option", { value: b.id }, `${agentName(b)} · ${b.title || b.name}`))),
+    leads.length ? h("optgroup", { label: "Teams (the lead shares the work out)" }, leads.map((b) => h("option", { value: `team:${b.id}` }, `${agentWho(b)}'s team`))) : null,
+    h("optgroup", { label: "Agents" }, bots.map((b) => h("option", { value: b.id }, agentWho(b)))),
   );
   const subject = h("input", { placeholder: "Subject", "aria-label": "Subject" });
   const message = h("textarea", { rows: 7, placeholder: "What should they do? Say what a good result looks like.", "aria-label": "Message" });
@@ -5209,8 +5211,8 @@ function botView() {
           { class: "card" },
           h("h3", {}, "Limits"),
           h("label", { class: "field" }, "Approvals", approvals),
-          h("div", { class: "row" }, h("label", { class: "field grow" }, "Budget per task ($)", spend), h("label", { class: "field grow" }, "Steps per task", steps)),
-          h("div", { class: "row" }, h("label", { class: "field grow" }, "Budget per month ($)", monthly)),
+          h("div", { class: "row" }, h("label", { class: "field grow" }, "Budget per run ($)", spend), h("label", { class: "field grow" }, "Steps per run", steps)),
+          h("div", { class: "row" }, h("label", { class: "field grow" }, "Monthly budget ($)", monthly)),
           h("p", { class: "note small" }, existing?.month ? `Spent this month: ${money(existing.month.spent)}. At its monthly budget an agent starts no new work until you raise it or the month turns.` : "At its monthly budget an agent starts no new work until you raise it or the month turns."),
         ),
       ),
@@ -6224,7 +6226,7 @@ function settingsView() {
   const ref = () => `${provider.value}/${modelName.value.trim()}`;
   const effort = select(c.efforts.map((e) => [e, e]), c.effort);
   const savings = select([["off", "Off: every agent uses my model"], ["balanced", "Balanced: match the model to the work"], ["cheapest", "Cheapest: cheaper models wherever they can do it"]], c.savings ?? "off");
-  const checkFirst = select([["on", "Check first, and ask me if something is missing"], ["off", "Start straight away"]], c.checkFirst === false ? "off" : "on");
+  const checkFirst = select([["on", "On: check first, and ask me if something is missing"], ["off", "Off: start without checking"]], c.checkFirst === false ? "off" : "on");
   const privacy = select([["off", "Off: send conversations as they are"], ["mask", "On: hide email addresses, phone and card numbers"]], c.privacy ?? "off");
   const moveUp = select([["on", "On: try once with a stronger model I set up"], ["off", "Off: stop and leave a hand-over note"]], c.moveUp === false ? "off" : "on");
   const planFirst = select([["leads", "Tasks I give to a lead: plan first, for my approval"], ["all", "Every task I give: plan first, for my approval"], ["never", "Never: start straight away"]], c.planFirst ?? "leads");
@@ -6237,6 +6239,7 @@ function settingsView() {
   );
   const steps = h("input", { type: "number", min: 1, max: 500, step: 1, value: c.budget?.steps ?? 40 });
   const spend = h("input", { type: "number", min: 0, max: 100, step: 0.01, value: c.budget?.spend ?? "", placeholder: "No limit" });
+  const monthlyAll = h("input", { type: "number", min: 0, max: 100000, step: 1, value: c.monthlyBudget ?? "", placeholder: "No limit" });
 
   const checkBox = h("div", {});
   const showCheck = (result) => {
@@ -6277,7 +6280,7 @@ function settingsView() {
         class: "form",
         onsubmit: (e) => (
           e.preventDefault(),
-          save({ agentName: name.value, model: ref(), effort: effort.value, savings: savings.value, checkFirst: checkFirst.value === "on", planFirst: planFirst.value, privacy: privacy.value, moveUp: moveUp.value === "on", approvalMode: mode.value, budget: { steps: Number(steps.value), spend: spend.value === "" ? null : Number(spend.value) } })
+          save({ agentName: name.value, model: ref(), effort: effort.value, savings: savings.value, checkFirst: checkFirst.value === "on", planFirst: planFirst.value, privacy: privacy.value, moveUp: moveUp.value === "on", approvalMode: mode.value, budget: { steps: Number(steps.value), spend: spend.value === "" ? null : Number(spend.value) }, monthlyBudget: monthlyAll.value === "" ? null : Number(monthlyAll.value) })
         ),
       },
       h("label", {}, "Name", name),
@@ -6288,11 +6291,14 @@ function settingsView() {
       h("div", { class: "row" }, checkButton),
       checkBox,
       h("label", {}, "Effort, for Claude (higher thinks longer and costs more)", effort),
+      h("h4", {}, "Before a task starts"),
+      h("p", { class: "note small" }, "Two separate steps, in this order. Step 1 asks whether the agent has what it needs; step 2 asks whether you agree with how it will do the work."),
+      h("label", {}, "1. Missing information check", checkFirst),
+      h("p", { class: "note small" }, "The agent first checks it has what your task needs (information, a repository, documents, access). If something is missing, it asks you in your Inbox instead of spending money guessing. The check costs a few cents at most and shows on the receipt."),
+      h("label", {}, "2. Plan for your approval", planFirst),
+      h("p", { class: "note small" }, "The agent looks into the task and sends you a plan: the steps, who does each, and its cost estimate. It changes nothing and hands nothing on until you approve it, or ask for changes. A lead is an agent with people reporting to it."),
+      h("h4", {}, "Models and cost"),
       h("label", {}, "Cost saving for your team of agents", savings),
-      h("label", {}, "Before starting a task", checkFirst),
-      h("label", {}, "Plans for your approval", planFirst),
-      h("p", { class: "note small" }, "With plans on, the agent first looks into the task and sends you a plan: the steps, who does each, and its cost estimate. It changes nothing and hands nothing on until you approve it, or ask for changes. A lead is an agent with people reporting to it."),
-      h("p", { class: "note small" }, "With this on, an agent first checks it has what your task needs (information, a repository, documents, access). If something is missing, it asks you in your Inbox instead of spending money guessing. The check costs a few cents at most and shows on the receipt."),
       h("p", { class: "note small" }, "Balanced, with Claude Opus or Fable as your model: managers who plan and check keep your model, team members doing their own part use Claude Sonnet 5.5 (about half the price), and quick questions between agents use Claude Haiku 5.5 (about a fortieth). Cheapest also gives managers Sonnet. With another service, the cheaper models come from your backup models, so Talqava never uses a model you didn't choose. An agent you gave a model of its own keeps it, a stuck task can still move up, and the receipt shows which model did each step. Off uses your model for everything."),
       h("label", {}, "When a task gets stuck", moveUp),
       h("p", { class: "note small" }, "Stuck means trying the same step again and again, or every step failing. With this on, the task first carries on once with the strongest model you set up (your team's model or a backup) that costs clearly more than the one in use, within the same budget. A model on this computer never moves up to one online. The receipt shows which model did each step."),
@@ -6300,9 +6306,12 @@ function settingsView() {
       h("p", { class: "note small" }, "With this on, email addresses, phone numbers, card numbers and US Social Security numbers are replaced with placeholders such as [EMAIL 1] before anything is sent to an AI service, and put back in the answer, so an agent can still email the right person. Your chats keep the real details. It doesn't catch names, street addresses or details inside pictures, and models on this computer send nothing out, so they see everything."),
       h("label", {}, "Approvals", mode),
       h("p", { class: "note" }, "With “ask”, a scheduled job that needs approval waits until you open its chat and answer. “Run everything” is only sensible when the agent runs in Docker or on a machine with nothing you'd mind losing."),
-      h("label", {}, "Budget per run: steps (model calls)", steps),
-      h("label", {}, "Budget per run: estimated spend in US dollars", spend),
-      h("p", { class: "note" }, "A run stops before going over either limit, and you can say “continue”. Spend is estimated from list prices; your provider's bill is the real figure."),
+      h("h4", {}, "Budgets"),
+      h("label", {}, "Steps per run (model calls)", steps),
+      h("label", {}, "Budget per task, in US dollars", spend),
+      h("p", { class: "note small" }, "Budget per task: the most one task and everything handed on from it may spend together; each run of an agent stops there too. A run stops before going over either limit, and you can say “continue”. Agents and groups can have their own limits on their pages."),
+      h("label", {}, "Monthly budget for all agents together, in US dollars", monthlyAll),
+      h("p", { class: "note small" }, "When all your agents together reach it in a calendar month, none starts new work until you raise it or the month turns. Leave it empty for no limit. Spend is estimated from list prices; your provider's bill is the real figure."),
       h("div", {}, h("button", { class: "primary" }, "Save")),
     ),
   );
@@ -6825,7 +6834,7 @@ const TASK_COLUMNS = [
   ["working", "Working", "Being done now"],
   ["needs", "Needs you", "Waiting for your answer, or stuck"],
   ["review", "To review", "Finished: accept it, or send it back"],
-  ["done", "Done", "The last two weeks"],
+  ["done", "Done", "The last two weeks, unless you show older work"],
 ];
 const PRIORITY_WORDS = { urgent: "Urgent", high: "High", normal: "Normal", low: "Low" };
 const TASK_STATUS_WORDS = { todo: "To do", working: "Working", waiting: "Needs you", blocked: "Stuck", review: "To review", done: "Done", cancelled: "Cancelled", paused: "Paused" };
@@ -6896,7 +6905,9 @@ function drawBoard() {
   const f = ui.taskFilter;
   const twoWeeks = Date.now() - 14 * 86400_000;
   const inPlan = (t) => !f.plan || (f.plan.startsWith("goal:") ? t.goal === f.plan.slice(5) : t.projectId === f.plan.slice(8));
-  const shown = ui.tasks.filter((t) => (!f.who || t.owner === f.who) && inPlan(t) && (!f.q || `${t.number} ${t.title} ${t.ownerName}`.toLowerCase().includes(f.q.toLowerCase())) && (t.status !== "done" || Date.parse(t.updatedAt) > twoWeeks));
+  // Done work older than two weeks is folded away, unless the owner asks for it or is searching (search finds any age).
+  const shown = ui.tasks.filter((t) => (!f.who || t.owner === f.who) && inPlan(t) && (!f.q || `${t.number} ${t.title} ${t.ownerName}`.toLowerCase().includes(f.q.toLowerCase())) && (t.status !== "done" || f.older || f.q || Date.parse(t.updatedAt) > twoWeeks));
+  const older = ui.tasks.filter((t) => t.status === "done" && Date.parse(t.updatedAt) <= twoWeeks).length;
   const plan = h(
     "select",
     { "aria-label": "Goal or project", onchange: (e) => ((f.plan = e.target.value), drawBoard()) },
@@ -6923,7 +6934,7 @@ function drawBoard() {
   fill(
     col,
     tasksHead(),
-    h("div", { class: "row tasks-tools" }, search, who, plan, h("label", { class: "power" }, h("input", { type: "checkbox", checked: f.cancelled, onchange: (e) => ((f.cancelled = e.target.checked), drawBoard()) }), "Show cancelled")),
+    h("div", { class: "row tasks-tools" }, search, who, plan, h("label", { class: "power" }, h("input", { type: "checkbox", checked: f.cancelled, onchange: (e) => ((f.cancelled = e.target.checked), drawBoard()) }), "Show cancelled"), older ? h("label", { class: "power" }, h("input", { type: "checkbox", checked: Boolean(f.older), onchange: (e) => ((f.older = e.target.checked), drawBoard()) }), `Show older done work (${older})`) : null),
     pauseBar(org, f.who),
     h(
       "div",
@@ -7020,6 +7031,8 @@ async function drawTaskPanel(id) {
       "div",
       { class: "taskactions row wrap" },
       t.status === "review" ? h("button", { class: "primary small", onclick: () => act(() => api("POST", `work/${id}/accept`)) }, "Accept") : null,
+      // Stuck, waiting or paused work can still be good enough: the owner can take it as it is.
+      ["blocked", "waiting", "paused"].includes(t.status) ? h("button", { class: "small", title: "Close the task with the work done so far", onclick: () => confirm(`Accept task #${t.number} as it is?\n\nIt is closed with the work done so far${t.status === "waiting" ? ", and what it was waiting for is dropped" : ""}.`) && act(() => api("POST", `work/${id}/accept`)) }, "Accept as it is") : null,
       t.status === "waiting" && /plan/i.test(t.detail ?? "") && t.quest ? h("button", { class: "primary small", onclick: () => go("quest", t.quest) }, "Review its plan") : null,
       t.status === "blocked" ? h("button", { class: "primary small", onclick: () => act(() => api("POST", `work/${id}/retry`)) }, "Try again") : null,
       t.pausedAt ? h("button", { class: "primary small", onclick: () => act(() => api("POST", `work/${id}/resume`)) }, "Resume") : null,
