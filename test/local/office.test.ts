@@ -121,3 +121,30 @@ test("templates make real files; pinning and reminders work; every sheet templat
   workspace.update(org, a.id, { remindAt: null });
   assert.equal(workspace.reminders(org, new Date(Date.now() + 7200_000)).some((r) => r.id === a.id), false);
 });
+
+test("slides: a deck is slides of a title, text and notes; agents save and suggest them like pages", async () => {
+  const { parseDeck, writeDeck, workspaceTool } = await import("../../src/local/workspace.ts");
+  const text = "# Spring review\n\nWhat we learned\n\nNotes: Open with the headline number.\n\n---\n\n## What worked\n\n- Email\n- Referrals\n\n---\n\nNo title here, just text\n";
+  const slides = parseDeck(text);
+  assert.deepEqual(slides.map((s) => s.title), ["Spring review", "What worked", ""]);
+  assert.equal(slides[0].notes, "Open with the headline number.");
+  assert.equal(slides[1].body, "- Email\n- Referrals");
+  assert.deepEqual(parseDeck(writeDeck(slides)).map((s) => [s.title || "Untitled slide", s.body, s.notes]), slides.map((s) => [s.title || "Untitled slide", s.body, s.notes]));
+  assert.deepEqual(parseDeck(""), [{ title: "", body: "", notes: "" }]);
+  // A table's own dashes are not a slide break.
+  assert.equal(parseDeck("# T\n\n| a | b |\n| --- | --- |\n| 1 | 2 |").length, 1);
+
+  const deck = workspace.create(org, null, { kind: "deck", title: "Review", markdown: writeDeck(slides) });
+  assert.equal(deck.kind, "deck");
+  assert.match(workspace.office(org).files.find((f) => f.id === deck.id)!.summary, /^3 slides: Spring review · What worked/);
+  // An agent's change to the owner's slides waits, as for a document.
+  const asked = workspace.propose(org, "sales-lead", deck.id, writeDeck([...slides, { title: "Plan for summer", body: "- Try partnerships", notes: "" }]), "Added a plan slide");
+  assert.equal(asked.applied, false);
+  assert.equal(parseDeck(workspace.get(org, deck.id).markdown).length, 3);
+  workspace.decide(org, asked.suggestion!, "accept");
+  assert.equal(parseDeck(workspace.get(org, deck.id).markdown).length, 4);
+
+  const tool = workspaceTool(() => null);
+  const out = String(await tool.run({ action: "file", kind: "slides", title: "Team update", markdown: "# One\n\n- a\n\n---\n\n# Two\n\n- b" } as never, { conversation: { id: "task-7" }, signal: new AbortController().signal } as never));
+  assert.match(out, /Saved as the slides “Team update” .* 2 slides/);
+});

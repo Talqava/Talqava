@@ -342,6 +342,7 @@ const ICONS = {
   notes: "M5 4.5h10v7.5l-3.5 3.5H5zM15 12h-3.5v3.5M7.5 7.5h5M7.5 10h3",
   sheets: "M4.5 4.5h11v11h-11zM4.5 8h11M4.5 11.5h11M8.5 4.5v11M12 8v7.5",
   office: "M4 4.5h5v5H4zM11 4.5h5v5h-5zM4 11.5h5v4H4zM11 11.5h5v4h-5z",
+  slides: "M3.5 5h13v8.5h-13zM10 13.5v3M7 16.5h6M7 8.5h6",
   projects: "M3 6.5a1.5 1.5 0 0 1 1.5-1.5h3l1.5 1.5h6.5A1.5 1.5 0 0 1 17 8v6.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5z",
   guide: "M10 5.5C8.5 4.3 6.5 4 4 4v11c2.5 0 4.5.3 6 1.5 1.5-1.2 3.5-1.5 6-1.5V4c-2.5 0-4.5.3-6 1.5zM10 5.5v11",
   library: "M3.5 6A1.5 1.5 0 0 1 5 4.5h3l1.5 2H15A1.5 1.5 0 0 1 16.5 8v6A1.5 1.5 0 0 1 15 15.5H5A1.5 1.5 0 0 1 3.5 14zM7 10.5h6M7 12.8h4",
@@ -375,7 +376,7 @@ function renderRail() {
     h("div", { class: "raillabel" }, "Team"),
     h("div", { class: "railgroup" }, item("team", "Organization", v === "team", "The org chart, departments and budgets"), item("market", "Marketplace", v === "market" || v === "marketbot", "Ready-made agents and teams for every department")),
     h("div", { class: "raillabel" }, "Office"),
-    h("div", { class: "railgroup" }, item("office", "Office home", v === "office", "Start a document, sheet or note, and see what is waiting"), item("docs", "Documents", v === "docs", "Letters, proposals and reports you and your agents write together"), item("sheets", "Sheets", v === "sheets", "Budgets, forecasts and lists that calculate"), item("notes", "Notes", v === "notes", "Quick notes, meeting notes and ideas, private until you share them")),
+    h("div", { class: "railgroup" }, item("office", "Office home", v === "office", "Start a document, sheet or note, and see what is waiting"), item("docs", "Documents", v === "docs", "Letters, proposals and reports you and your agents write together"), item("sheets", "Sheets", v === "sheets", "Budgets, forecasts and lists that calculate"), item("slides", "Slides", v === "slides", "Presentations you and your agents put together"), item("notes", "Notes", v === "notes", "Quick notes, meeting notes and ideas, private until you share them")),
     h("div", { class: "raillabel" }, "Knowledge"),
     h(
       "div",
@@ -401,7 +402,7 @@ function renderRail() {
 
 function go(view, id = null) {
   ui.wsFlush?.();
-  if (!["workspace", "docs", "notes", "sheets"].includes(view)) (ui.wsEditor?.destroy(), (ui.wsEditor = null), (ui.wsFlush = null));
+  if (!["workspace", "docs", "notes", "sheets", "slides"].includes(view)) (ui.wsEditor?.destroy(), (ui.wsEditor = null), (ui.wsFlush = null));
   state.view = view;
   state.convId = view === "chat" || view === "quest" ? id : null;
   state.botId = view === "bot" ? id : null;
@@ -432,7 +433,7 @@ function renderBody() {
   state.source = null;
   ui.log = null;
   ui.body.className = "body";
-  const views = { home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView, security: securityView, office: officeView, docs: docsView, notes: notesView, sheets: sheetsView };
+  const views = { home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView, security: securityView, office: officeView, slides: slidesView, docs: docsView, notes: notesView, sheets: sheetsView };
   (views[state.view] || homeView)();
 }
 
@@ -6834,7 +6835,7 @@ async function openPage(id) {
   // A document or a note opens in Office; a page opens in the Workspace.
   let kind = "page";
   if (id) kind = await api("GET", `workspace/pages/${id}`).then((p) => p.kind).catch(() => (ui.ws.data?.tree ?? []).find((p) => p.id === id)?.kind ?? "page");
-  const host = kind === "doc" ? "docs" : kind === "note" ? "notes" : kind === "sheet" ? "sheets" : "workspace";
+  const host = kind === "doc" ? "docs" : kind === "note" ? "notes" : kind === "sheet" ? "sheets" : kind === "deck" ? "slides" : "workspace";
   ui.ws.host = host;
   ui.ws.open = id;
   if (state.view !== host) go(host);
@@ -6842,7 +6843,7 @@ async function openPage(id) {
 }
 
 /** Draws again whichever screen is showing the page editor. */
-const wsReload = () => (ui.ws?.host === "docs" ? docsView() : ui.ws?.host === "notes" ? notesView() : ui.ws?.host === "sheets" ? sheetsView() : workspaceView());
+const wsReload = () => (ui.ws?.host === "docs" ? docsView() : ui.ws?.host === "notes" ? notesView() : ui.ws?.host === "sheets" ? sheetsView() : ui.ws?.host === "slides" ? slidesView() : workspaceView());
 
 async function workspaceView() {
   ui.ws ??= { collapsed: new Set() };
@@ -7385,7 +7386,7 @@ async function officeLoad(view, side, col) {
   }
   if (state.view !== view) return null;
   ui.ws.data = data;
-  const kind = view === "docs" ? "doc" : view === "sheets" ? "sheet" : "note";
+  const kind = view === "docs" ? "doc" : view === "sheets" ? "sheet" : view === "slides" ? "deck" : "note";
   if (ui.ws.open && !data.files.some((f) => f.id === ui.ws.open && f.kind === kind)) ui.ws.open = null;
   return data;
 }
@@ -7398,6 +7399,229 @@ const officeNew = (kind, folder = "") =>
     ui.ws.open = page.id;
     wsReload();
   });
+
+/** A deck's text as slides, and back. The same form the app itself uses (see workspace.ts). */
+function parseDeck(text) {
+  const slides = String(text ?? "")
+    .split(/^\s*---\s*$/m)
+    .map((part) => {
+      const lines = part.replace(/^\n+|\s+$/g, "").split("\n");
+      const at = lines.findIndex((l) => /^notes:/i.test(l.trim()));
+      const main = at < 0 ? lines : lines.slice(0, at);
+      const notes = at < 0 ? "" : [lines[at].trim().replace(/^notes:\s*/i, ""), ...lines.slice(at + 1)].join("\n").trim();
+      const head = main.findIndex((l) => /^#{1,2}\s+/.test(l));
+      const title = head < 0 ? "" : main[head].replace(/^#{1,2}\s+/, "").trim();
+      const body = (head < 0 ? main : [...main.slice(0, head), ...main.slice(head + 1)]).join("\n").trim();
+      return { title, body, notes };
+    })
+    .filter((x) => x.title || x.body || x.notes);
+  return slides.length ? slides : [{ title: "", body: "", notes: "" }];
+}
+const writeDeck = (slides) => `${slides.map((x) => [`# ${x.title.replace(/\s+/g, " ").trim() || "Untitled slide"}`, x.body.trim(), x.notes.trim() ? `Notes: ${x.notes.trim()}` : ""].filter(Boolean).join("\n\n")).join("\n\n---\n\n")}\n`;
+/** One slide drawn at 16:9: its title and its text. */
+const slideFace = (x, n, total) => h("div", { class: "slideface" }, h("h2", {}, x.title || "Untitled slide"), h("div", { class: "md slidebody" }, renderMarkdown(x.body || "")), total ? h("span", { class: "slidenum" }, `${n} / ${total}`) : null);
+
+/** Shows a deck full screen, one slide at a time: arrows or a click move on, Escape leaves. */
+function presentDeck(slides, from = 0) {
+  let at = from;
+  const stage = h("div", { class: "present", tabindex: "0", role: "dialog", "aria-label": "Presentation" });
+  const draw = () => fill(stage, slideFace(slides[at], at + 1, slides.length), h("div", { class: "presentbar" }, h("button", { class: "plain", onclick: (e) => (e.stopPropagation(), move(-1)) }, "← Back"), h("button", { class: "plain", onclick: (e) => (e.stopPropagation(), move(1)) }, "Next →"), h("button", { class: "plain", onclick: (e) => (e.stopPropagation(), leave()) }, "Close (Esc)")));
+  const move = (by) => ((at = Math.max(0, Math.min(slides.length - 1, at + by))), draw());
+  const leave = () => (document.fullscreenElement && document.exitFullscreen().catch(() => {}), stage.remove());
+  stage.addEventListener("keydown", (e) => (["ArrowRight", " ", "PageDown", "Enter"].includes(e.key) ? (e.preventDefault(), move(1)) : ["ArrowLeft", "PageUp", "Backspace"].includes(e.key) ? (e.preventDefault(), move(-1)) : e.key === "Escape" ? leave() : null));
+  stage.addEventListener("click", () => move(1));
+  document.body.append(stage);
+  draw();
+  stage.focus();
+  stage.requestFullscreen?.().catch(() => {});
+}
+
+/** Office › Slides: presentations as a list of slides, each a title, a few points and speaker notes. */
+async function slidesView() {
+  const side = h("aside", { class: "side wsside", "aria-label": "Slides" });
+  const col = h("main", { class: "center wscenter" });
+  const data = await officeLoad("slides", side, col);
+  if (!data) return;
+  const decks = data.files.filter((f) => f.kind === "deck");
+  const org = activeOrg();
+  const open = (id) => ((ui.ws.open = id), slidesView());
+  const make = () => attempt(async () => open((await api("POST", "workspace/pages", { kind: "deck", title: "Untitled slides", markdown: "# Title of the presentation\n\nA line about what it covers\n" })).id), col);
+  fill(
+    side,
+    h("div", { class: "wssidehead" }, h("button", { class: `plain wshome ${ui.ws.open ? "" : "on"}`, onclick: () => open(null) }, "Slides"), h("button", { class: "small", onclick: make }, "+ Slides")),
+    decks.map((f) => h("button", { class: `plain wsrow officerow ${ui.ws.open === f.id ? "on" : ""}`, "aria-current": ui.ws.open === f.id ? "true" : null, onclick: () => open(f.id) }, h("span", { class: "grow" }, f.title), f.suggestions ? h("span", { class: "count", title: "Changes from an agent waiting for you" }, String(f.suggestions)) : null)),
+    decks.length ? null : h("p", { class: "note small", style: "padding: 8px 10px" }, "No slides yet."),
+  );
+  if (ui.ws.open) return renderDeck(col, ui.ws.open);
+
+  const sources = data.files.filter((f) => f.kind !== "deck" && !f.access.private);
+  const from = h("select", { "aria-label": "Make slides from" }, h("option", { value: "" }, "A subject I describe below"), sources.map((f) => h("option", { value: f.id }, `${{ doc: "Document", sheet: "Sheet", note: "Note" }[f.kind] ?? "File"}: ${f.title}`)));
+  const what = h("input", { placeholder: "e.g. A 6-slide review of the spring campaign for the team", "aria-label": "What the slides are for" });
+  const who = h("select", { "aria-label": "Agent" }, org.members.map((m) => h("option", { value: m.bot }, m.title)));
+  const ask = () =>
+    attempt(async () => {
+      const src = sources.find((f) => f.id === from.value);
+      const text = what.value.trim();
+      if (!text && !src) throw new Error("Say what the slides are for, or choose a file to make them from.");
+      const quest = await startTask({ bot: who.value, text: `Make a presentation${text ? `: ${text}` : ""}.${src ? `\n\nBuild it from “${src.title}” (${src.kind === "sheet" ? `a sheet: read it with the sheet tool, file ${src.id}` : `read it with the workspace tool, page ${src.id}`}). Use only what is in it; do not invent numbers.` : ""}\n\nSave it with the workspace tool: action "file", kind "slides", a clear title, and the slides as Markdown separated by lines of three dashes. One idea and at most five short points on each slide, with "Notes:" for what the presenter should say. Say in your report where it is.`, title: `Slides: ${text || src?.title}`.slice(0, 80) });
+      if (quest?.id) go("quest", quest.id);
+      else if (quest?.queued) openTask(quest.queued.id);
+    }, col);
+  fill(
+    col,
+    h("div", { class: "officehome" }, h("h1", {}, "Slides"), h("p", { class: "lead" }, "Presentations: each slide is a title, a few points and notes for the presenter. Write them yourself, or have an agent draft them from a document, a sheet or a note.")),
+    h("div", { class: "row wrap" }, h("button", { class: "primary", onclick: make }, "+ New slides")),
+    org.members.length ? h("form", { class: "card form officeask", onsubmit: (e) => (e.preventDefault(), ask()) }, h("b", {}, "Or ask an agent to draft them"), from, h("div", { class: "row wrap" }, what, who, h("button", {}, "Give the task")), h("p", { class: "note small" }, "Private files are not offered here: an agent cannot read them.")) : null,
+    decks.length
+      ? h("div", { class: "card officetable" }, h("table", {}, h("thead", {}, h("tr", {}, ["Name", "Slides", "Last change", "Who can read it"].map((t) => h("th", { scope: "col" }, t)))), h("tbody", {}, decks.map((f) => h("tr", {}, h("td", {}, h("button", { class: "plain link", onclick: () => open(f.id) }, f.title)), h("td", {}, f.summary.split(":")[0]), h("td", {}, `${f.updatedBy} · ${officeDay(f.updatedAt)}`), h("td", {}, officeWho(f)))))))
+      : h("p", { class: "note" }, "No slides yet. Start with + New slides, or ask an agent to draft some."),
+  );
+}
+
+/** One deck: the list of slides, the slide being worked on, and its settings. */
+async function renderDeck(col, id) {
+  let page, suggestions;
+  try {
+    [page, suggestions] = await Promise.all([api("GET", `workspace/pages/${id}`), api("GET", `workspace/suggestions?page=${encodeURIComponent(id)}`)]);
+  } catch (err) {
+    return fill(col, h("div", { class: "banner error" }, err.message));
+  }
+  if (state.view !== "slides" || ui.ws.open !== id) return;
+  const org = activeOrg();
+  let slides = parseDeck(page.markdown);
+  let at = Math.min(ui.ws.slide?.[id] ?? 0, slides.length - 1);
+  let rev = page.rev;
+  let timer = null;
+  const status = h("span", { class: "wsstatus note small" }, "Saved");
+  const save = async () => {
+    clearTimeout(timer);
+    timer = null;
+    status.textContent = "Saving…";
+    try {
+      rev = (await api("PUT", `workspace/pages/${id}`, { markdown: writeDeck(slides), baseRev: rev })).rev;
+      status.textContent = "Saved";
+    } catch (err) {
+      status.textContent = "Not saved";
+      toast(err.message, { label: "Reload", run: () => slidesView() });
+    }
+  };
+  const changed = () => ((status.textContent = "Editing…"), clearTimeout(timer), (timer = setTimeout(save, 700)));
+  ui.wsFlush = () => timer && save();
+
+  const title = h("input", { class: "wstitlebox", value: page.title, maxlength: 120, "aria-label": "Name of these slides" });
+  title.addEventListener("change", () => attempt(async () => (await api("PATCH", `workspace/pages/${id}`, { title: title.value.trim() || "Untitled slides" }), ui.ws.refreshSide?.()), col));
+  const rail = h("div", { class: "sliderail", role: "list", "aria-label": "Slides" });
+  const face = h("div", { class: "slidestage" });
+  const sTitle = h("input", { placeholder: "Slide title", maxlength: 140, "aria-label": "Slide title" });
+  const sBody = h("textarea", { rows: 7, placeholder: "A few short points, one on each line starting with “- ”.\nYou can also write a small table or a sentence.", "aria-label": "Slide text" });
+  const sNotes = h("textarea", { rows: 3, placeholder: "What the presenter should say (not shown on the slide)", "aria-label": "Speaker notes" });
+  const drawFace = () => fill(face, slideFace(slides[at], at + 1, slides.length));
+  const pick = (i) => {
+    at = Math.max(0, Math.min(slides.length - 1, i));
+    (ui.ws.slide ??= {})[id] = at;
+    sTitle.value = slides[at].title;
+    sBody.value = slides[at].body;
+    sNotes.value = slides[at].notes;
+    drawRail();
+    drawFace();
+  };
+  const drawRail = () =>
+    fill(
+      rail,
+      slides.map((x, i) => h("button", { class: `slidethumb ${i === at ? "on" : ""}`, role: "listitem", "aria-current": i === at ? "true" : null, onclick: () => pick(i) }, h("span", { class: "note small" }, String(i + 1)), h("span", { class: "thumbface" }, h("b", {}, x.title || "Untitled slide"), h("span", {}, x.body.replace(/[#*_`>-]/g, "").slice(0, 60))))),
+      h("button", { class: "small", onclick: () => (slides.splice(at + 1, 0, { title: "", body: "", notes: "" }), changed(), pick(at + 1), sTitle.focus()) }, "+ Slide"),
+    );
+  for (const [input, key] of [[sTitle, "title"], [sBody, "body"], [sNotes, "notes"]]) input.addEventListener("input", () => ((slides[at][key] = input.value), drawFace(), key !== "notes" && drawRail(), changed()));
+  const move = (by) => {
+    const to = at + by;
+    if (to < 0 || to >= slides.length) return;
+    [slides[at], slides[to]] = [slides[to], slides[at]];
+    changed();
+    pick(to);
+  };
+  const remove = () => (slides.length > 1 && confirm(`Delete slide ${at + 1}${slides[at].title ? ` “${slides[at].title}”` : ""}?`) ? (slides.splice(at, 1), changed(), pick(Math.min(at, slides.length - 1))) : null);
+  const printDeck = () => {
+    // Slides print one to a page, sideways; the page rule is added only while they print, so documents stay upright.
+    const sheet = h("div", { class: "deckprint" }, h("style", {}, "@page { size: landscape; margin: 10mm; }"), slides.map((x, i) => slideFace(x, i + 1, slides.length)));
+    document.body.append(sheet);
+    document.body.classList.add("printingdeck");
+    const done = () => (document.body.classList.remove("printingdeck"), sheet.remove(), window.removeEventListener("afterprint", done));
+    window.addEventListener("afterprint", done);
+    window.print();
+  };
+
+  // ----- what an agent wants to change -----
+  const decide = (sg, decision) =>
+    attempt(async () => {
+      try {
+        await api("POST", `workspace/suggestions/${sg.id}`, { decision });
+      } catch (err) {
+        if (err.status !== 409 || !confirm(`${err.message}\n\nUse the agent's version of the slides? Yours stays in History.`)) throw err;
+        await api("POST", `workspace/suggestions/${sg.id}`, { decision, replace: true });
+      }
+      loadPageSuggestions();
+      slidesView();
+    }, col);
+  const waiting = suggestions.length
+    ? h(
+        "div",
+        { class: "card form" },
+        h("b", {}, `Waiting for you · ${suggestions.length}`),
+        suggestions.map((sg) => {
+          const next = parseDeck(sg.markdown);
+          const titles = new Set(slides.map((x) => x.title));
+          const added = next.filter((x) => !titles.has(x.title)).map((x) => x.title || "Untitled slide");
+          return h("div", { class: "reviewline" }, h("div", { class: "grow" }, h("b", {}, sg.authorName), h("div", { class: "note small" }, `${sg.note || "A change to these slides."} It would make ${next.length} slide${next.length === 1 ? "" : "s"} (now ${slides.length})${added.length ? `; new or renamed: ${added.slice(0, 5).join(", ")}` : ""}.`)), h("div", { class: "row wrap" }, h("button", { class: "small", onclick: () => presentDeck(next) }, "Look at them"), h("button", { class: "small primary", onclick: () => decide(sg, "accept") }, "Accept"), h("button", { class: "small", onclick: () => decide(sg, "decline") }, "Decline")));
+        }),
+      )
+    : null;
+
+  // ----- settings -----
+  const patch = (body) => attempt(async () => void Object.assign(page, await api("PATCH", `workspace/pages/${id}`, body)), col);
+  const whoSel = h("select", { "aria-label": "Who can see it" }, [["everyone", "Every agent"], ["private", "Private: no agent sees it"]].map(([v, t]) => h("option", { value: v, selected: (page.access.private ? "private" : "everyone") === v }, t)));
+  whoSel.addEventListener("change", () => patch({ access: whoSel.value === "private" ? { private: true } : { everyone: true } }));
+  const edit = h("select", { "aria-label": "When agents want to change it" }, [["suggest", "They suggest; I accept or decline"], ["direct", "They change it straight away"]].map(([v, t]) => h("option", { value: v, selected: page.edit === v }, t)));
+  edit.addEventListener("change", () => patch({ edit: edit.value }));
+  const giveTo = h("select", { "aria-label": "Agent" }, org.members.map((m) => h("option", { value: m.bot }, m.title)));
+  const giveWhat = h("textarea", { rows: 2, placeholder: "e.g. Tighten every slide to three points and add speaker notes.", "aria-label": "What to do" });
+  const give = () =>
+    attempt(async () => {
+      const what = giveWhat.value.trim() || "Improve these slides.";
+      const quest = await startTask({ bot: giveTo.value, text: `${what}\n\nThe slides are “${page.title}” (page ${id}). Read them with the workspace tool, then suggest the whole new text with action "suggest": slides separated by lines of three dashes, each "# Title", a few short points, and "Notes:" for the presenter.`, title: what.slice(0, 80) });
+      if (quest?.id) go("quest", quest.id);
+      else if (quest?.queued) openTask(quest.queued.id);
+    }, col);
+  const aside = h(
+    "aside",
+    { class: "wspanel" },
+    h("div", { class: "label" }, "Who can see it"),
+    whoSel,
+    h("div", { class: "label" }, "When agents want to change it"),
+    edit,
+    levelPicker(page, id),
+    org.members.length ? [h("div", { class: "label" }, "Give these slides to an agent"), giveTo, giveWhat, h("button", { class: "small", onclick: give }, "Give the task")] : null,
+    h("div", { class: "row wrap wspanelend" }, h("button", { class: "small", onclick: () => pageHistory(page) }, "History"), h("button", { class: "small danger", onclick: () => confirm(`Delete “${page.title}”? You can restore it from Deleted in the Workspace for 30 days.`) && attempt(async () => (await api("DELETE", `workspace/pages/${id}`), (ui.ws.open = null), slidesView()), col) }, "Delete")),
+  );
+  ui.ws.refreshSide = () => slidesView();
+  fill(
+    col,
+    h(
+      "div",
+      { class: "wspage deckpage" },
+      h(
+        "article",
+        { class: "wsdoc" },
+        h("nav", { class: "wstrail note small" }, h("button", { class: "plain link", onclick: () => ((ui.ws.open = null), slidesView()) }, "Slides")),
+        h("div", { class: "wshead" }, title),
+        h("div", { class: "row wrap decktools" }, h("button", { class: "primary", onclick: () => presentDeck(slides, at) }, "Present"), h("button", { onclick: () => move(-1) }, "Move earlier"), h("button", { onclick: () => move(1) }, "Move later"), h("button", { class: "danger", onclick: remove }, "Delete slide"), h("button", { onclick: printDeck }, "Print or save as PDF"), status),
+        waiting,
+        h("div", { class: "deckwork" }, rail, h("div", { class: "deckmain" }, face, h("label", {}, "Slide title", sTitle), h("label", {}, "On the slide", sBody), h("label", {}, "Speaker notes", sNotes))),
+      ),
+      aside,
+    ),
+  );
+  pick(at);
+}
 
 /** A card for a ready-made Office file: preview its summary, make a file from it. */
 function officeTemplateCard(t) {
@@ -7426,10 +7650,10 @@ async function officeView() {
   }
   if (state.view !== "office") return;
   const org = activeOrg();
-  const KIND = { doc: ["Document", "Letters, proposals, policies", "docs"], sheet: ["Sheet", "Budgets, forecasts, lists that calculate", "sheets"], note: ["Note", "Quick thoughts, meetings, saved pages", "notes"] };
+  const KIND = { doc: ["Document", "Letters, proposals, policies", "docs"], sheet: ["Sheet", "Budgets, forecasts, lists that calculate", "sheets"], deck: ["Slides", "Pitches, reviews, training", "slides"], note: ["Note", "Quick thoughts, meetings, saved pages", "notes"] };
   const start = (kind) =>
     attempt(async () => {
-      const page = kind === "sheet" ? await api("POST", "workspace/sheets", { title: "Untitled sheet" }) : await api("POST", "workspace/pages", { kind, title: "Untitled" });
+      const page = kind === "sheet" ? await api("POST", "workspace/sheets", { title: "Untitled sheet" }) : await api("POST", "workspace/pages", { kind, title: kind === "deck" ? "Untitled slides" : "Untitled", ...(kind === "deck" ? { markdown: "# Title of the presentation\n\nA line about what it covers\n" } : {}) });
       ui.ws ??= { collapsed: new Set() };
       ui.ws.focusTitle = true;
       openPage(page.id);
@@ -8564,7 +8788,7 @@ async function drawTables(box, pageId) {
 }
 
 /** Which guide explains each page. */
-const GUIDES_BY_VIEW = { chat: "chat", inbox: "inbox", tasks: "tasks", projects: "projects", project: "projects", home: "work-in-progress", quest: "work-in-progress", bot: "work-in-progress", jobs: "schedules", team: "organization", market: "marketplace", marketbot: "marketplace", workspace: "workspace", office: "office", docs: "office", notes: "office", security: "security", sheets: "office", library: "library", memory: "memory", skills: "skills", audit: "audit-log", integrations: "integrations", settings: "settings" };
+const GUIDES_BY_VIEW = { chat: "chat", inbox: "inbox", tasks: "tasks", projects: "projects", project: "projects", home: "work-in-progress", quest: "work-in-progress", bot: "work-in-progress", jobs: "schedules", team: "organization", market: "marketplace", marketbot: "marketplace", workspace: "workspace", office: "office", slides: "office", docs: "office", notes: "office", security: "security", sheets: "office", library: "library", memory: "memory", skills: "skills", audit: "audit-log", integrations: "integrations", settings: "settings" };
 const guideFor = (view) => (view === "integrations" && ui.integration === "ai-models" ? "ai-models" : GUIDES_BY_VIEW[view] ?? null);
 
 /** Shows a user guide in a reader beside the page. Links between guides open in the reader; the list of guides is on the left. */

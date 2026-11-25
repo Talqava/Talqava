@@ -88,6 +88,16 @@ Under the grid, press **+ Add a sheet**, **Rename** or **Remove this sheet**. Cl
 2. Type a title and the note. Use the checklist button in the toolbar for things to do.
 3. In the panel, type a **Notebook** such as Meetings, and **Tags** separated by commas.
 
+### Make a presentation
+
+1. Open **Slides** and press **+ New slides**.
+2. Each slide has a **Slide title**, the text **On the slide** (a few short points, one on each line starting with `- `), and **Speaker notes** that only you see.
+3. Press **+ Slide** to add one after the current slide. **Move earlier**, **Move later** and **Delete slide** rearrange them.
+4. Press **Present** to show them full screen. Arrow keys or a click move on; **Esc** leaves.
+5. **Print or save as PDF** puts one slide on each page.
+
+To have an agent draft slides, use **Or ask an agent to draft them** on the Slides home screen: choose a document, sheet or note to build from, or describe the subject. An agent's change to slides you already have waits for you: **Look at them**, then **Accept** or **Decline**.
+
 ### Start from a template
 
 1. Open **Office home** and scroll to **Start from a template**: a proposal, a quote, a payment reminder letter, meeting notes, a monthly budget and a cash forecast.
@@ -132,6 +142,12 @@ To make it a task, choose an agent under **Give this note to an agent** and pres
 
 1. Open the document or note.
 2. Under **Download**, press **For Word** to get a file that opens in Microsoft Word and similar programs, or **Print or save as PDF**.
+
+## What is not built yet
+
+- Slides: a chart linked to a sheet, pictures, layouts other than a title with text, and saving as a PowerPoint file.
+- Opening and saving Word, Excel and PowerPoint files (documents download as a simple file Word opens; sheets go in and out as CSV).
+- Notes: voice memos written out, and searching the words in photos.
 
 ## Tips
 
