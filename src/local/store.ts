@@ -83,7 +83,7 @@ export interface ProviderConfig {
   /** Which service in the list of AI services this is (e.g. "openai", "gemini"), when it was connected from that list. */
   service?: string;
   /** Where the key goes, for services that do not use "Authorization: Bearer" (Azure). */
-  keyHeader?: "bearer" | "api-key";
+  keyHeader?: "bearer" | "api-key" | "x-portkey-api-key";
 }
 
 export const DEFAULT_PROVIDERS: ProviderConfig[] = [
@@ -126,6 +126,8 @@ export interface Config {
   checkFirst?: boolean;
   /** The Client ID of the GitHub app that "Connect GitHub" signs in through. Not a secret. */
   githubClientId?: string;
+  /** Langfuse, when the owner connected it: where to send each model call's cost and tokens (see langfuse.ts). */
+  langfuse?: { host: string; publicKey: string; secretKey: string };
   sessionSecret: string;
 }
 

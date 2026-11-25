@@ -41,7 +41,7 @@ export interface Service {
   /** What a key looks like, to catch a key pasted into the wrong service. */
   keyPrefix?: string;
   needsKey: boolean;
-  keyHeader?: "bearer" | "api-key";
+  keyHeader?: "bearer" | "api-key" | "x-portkey-api-key";
   tokenLimit?: "max_tokens" | "max_completion_tokens";
   /** This service's models on OpenRouter's list start with this, e.g. "openai/". Their prices are the same. */
   priceFrom?: string;
@@ -75,6 +75,7 @@ export const SERVICES: Service[] = [
   { id: "azure", name: "Microsoft Azure OpenAI", about: "OpenAI's models on your company's Azure account. Give your resource's name and key.", group: "gateways", kind: "openai", baseUrl: "https://{resource}.openai.azure.com/openai/v1", addressHint: "Your Azure resource name (the first part of its address), or its full address", keyUrl: "https://portal.azure.com", needsKey: true, keyHeader: "api-key", tokenLimit: "max_completion_tokens", priceFrom: "openai/" },
   { id: "bedrock", name: "Amazon Bedrock", about: "Claude, GPT-OSS, Llama, Mistral, Qwen, DeepSeek and more on your company's AWS account. Give a Bedrock API key and your region.", group: "gateways", kind: "openai", baseUrl: "https://bedrock-mantle.{resource}.api.aws/v1", resource: "aws-region", addressHint: "Your AWS region, e.g. us-east-1", keyUrl: "https://console.aws.amazon.com/bedrock/home#/api-keys", needsKey: true },
   { id: "vertex", name: "Google Vertex AI", about: "Google's Gemini models on your company's Google Cloud account. Give the service account's key file, and the region if it isn't global.", group: "gateways", kind: "openai", baseUrl: "https://aiplatform.googleapis.com/v1/projects/{project}/locations/global/endpoints/openapi", addressHint: "Region, if not global (e.g. us-central1)", keyUrl: "https://console.cloud.google.com/iam-admin/serviceaccounts", needsKey: true, serviceAccount: true },
+  { id: "portkey", name: "Portkey", about: "Your Portkey gateway: the models in your Portkey Model Catalog, with Portkey's own routing, caching and limits. Paste your Portkey API key.", group: "gateways", kind: "openai", baseUrl: "https://api.portkey.ai/v1", keyUrl: "https://app.portkey.ai/api-keys", needsKey: true, keyHeader: "x-portkey-api-key" },
   { id: "litellm", name: "LiteLLM gateway", about: "Your company's own LiteLLM gateway, which can reach Amazon Bedrock, Google Vertex and others.", group: "gateways", kind: "openai", baseUrl: "", addressHint: "The gateway's address, e.g. http://localhost:4000", needsKey: true },
   { id: "custom", name: "Another service", about: "Any other service or gateway that offers the common chat completions format (Portkey, vLLM on a server, and many more).", group: "gateways", kind: "openai", baseUrl: "", addressHint: "Its address, usually ending in /v1", needsKey: false },
   // On this computer: free, private, nothing leaves the computer.
@@ -151,7 +152,7 @@ export function addressFor(service: Service, typed?: unknown): string {
 function headersFor(service: Service | undefined, key: string | undefined): Record<string, string> {
   if (!key) return {};
   if (service?.kind === "anthropic") return { "x-api-key": key, "anthropic-version": "2023-06-01" };
-  return service?.keyHeader === "api-key" ? { "api-key": key } : { authorization: `Bearer ${key}` };
+  return service?.keyHeader === "api-key" ? { "api-key": key } : service?.keyHeader === "x-portkey-api-key" ? { "x-portkey-api-key": key } : { authorization: `Bearer ${key}` };
 }
 
 // ---------- models ----------

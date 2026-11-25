@@ -212,6 +212,10 @@ export interface StepInfo {
   backup?: boolean;
   ms: number;
   cost?: number;
+  /** Tokens sent (not counting those read from the service's cache), read from its cache, and written back. */
+  input?: number;
+  cacheRead?: number;
+  output?: number;
 }
 
 export interface RunLimits {

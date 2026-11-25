@@ -29,7 +29,7 @@ export interface OpenAICompatibleOptions {
   /** Extra headers sent with every request, e.g. a service's app attribution. */
   headers?: Record<string, string>;
   /** Where the key goes. Most services want "Authorization: Bearer <key>"; Azure wants "api-key: <key>". */
-  keyHeader?: "bearer" | "api-key";
+  keyHeader?: "bearer" | "api-key" | "x-portkey-api-key";
   /** What the reply-length limit is called. OpenAI's newer models want max_completion_tokens; most others max_tokens. */
   tokenLimit?: "max_tokens" | "max_completion_tokens";
   /** For tests: replaces the global fetch. */
@@ -240,7 +240,8 @@ const sleep = (ms: number, signal: AbortSignal) =>
 
 function keyHeaders(apiKey: string | undefined, keyHeader: OpenAICompatibleOptions["keyHeader"]): Record<string, string> {
   if (!apiKey) return {};
-  return keyHeader === "api-key" ? { "api-key": apiKey } : { authorization: `Bearer ${apiKey}` };
+  // Most services take "Authorization: Bearer"; Azure takes "api-key"; Portkey its own "x-portkey-api-key".
+  return keyHeader === "api-key" ? { "api-key": apiKey } : keyHeader === "x-portkey-api-key" ? { "x-portkey-api-key": apiKey } : { authorization: `Bearer ${apiKey}` };
 }
 
 /** Learned per service and model: what a service refused once is not sent again. */
