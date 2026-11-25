@@ -6,6 +6,7 @@ import { describeGuardrails, guardrails } from "./guardrails.ts";
 import { LEVELS, LEVEL_WORDS, WHERE_WORDS, policy } from "./sensitivity.ts";
 import { verifyAudit } from "./audit.ts";
 import { isLocalRef } from "./gateway.ts";
+import { backupStatus } from "./backup.ts";
 import { REVIEW_EVERY_DAYS, reviews } from "./auditfeed.ts";
 import { orgs } from "./orgs.ts";
 
@@ -88,6 +89,13 @@ export function securityOverview(): { protections: Protection[]; attention: { le
       words: `${g.maxTaskSpend !== undefined ? `No task may spend more than $${g.maxTaskSpend}.` : "No organization-wide cap on a task."} ${cfg.monthlyBudget ? `All agents together may spend $${cfg.monthlyBudget} a month.` : "No monthly limit for all agents together."}`,
       next: g.maxTaskSpend === undefined ? "Set “Most one task may spend” under “Agent guardrails”." : cfg.monthlyBudget ? undefined : "Set a monthly limit under Settings.",
     },
+    ((b) => ({
+      id: "stored",
+      name: "Stored data is encrypted and backed up",
+      state: (b.disk.state === "on" && b.ready && b.lastTestedAt ? "on" : b.disk.state === "on" || b.ready ? "partly" : "off") as Protection["state"],
+      words: `${b.disk.words} ${b.ready ? (b.lastAt ? `The last encrypted backup was made on ${b.lastAt.slice(0, 10)}${b.lastTestedAt ? `, and a restore was last tested on ${b.lastTestedAt.slice(0, 10)}` : ", and a restore has never been tested"}.` : "Backups are set up; none has been made yet.") : "No encrypted backups are set up."}`,
+      next: b.disk.state === "on" && b.ready && b.lastTestedAt ? undefined : !b.ready ? "Set up backups under “Backups and stored data”." : !b.lastTestedAt ? "Press “Test a restore” under “Backups and stored data”." : "Turn on your computer's disk encryption.",
+    }))(backupStatus()),
     {
       id: "audit",
       name: "The record of who did what is intact",

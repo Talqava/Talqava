@@ -110,6 +110,8 @@ export interface Config {
   planFirst?: "leads" | "all" | "never";
   /** The leads' daily check-in arrives in the Inbox each day (built from the tasks, at no cost). Default on. */
   checkIn?: boolean;
+  /** Encrypted backups: a key made from the owner's passphrase, where they go, and when the last one was made and tested (see backup.ts). */
+  backup?: { salt?: string; key?: string; folder?: string; nightly?: boolean; lastAt?: string; lastFiles?: number; lastTestedAt?: string };
   /** Single sign-on through the company's identity provider (see sso.ts). */
   sso?: { issuer: string; clientId: string; clientSecret?: string; domains?: string[]; addPeople?: boolean; role?: string; only?: boolean };
   /** How long chats and finished task records are kept, and whether a legal hold stops every deletion (see retention.ts). */

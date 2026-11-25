@@ -8295,6 +8295,7 @@ async function securityView() {
       sensitivitySection(true),
       guardrailsSection(true),
       securityOpsSection(true),
+      backupSection(true),
     );
   }
 
@@ -8406,7 +8407,55 @@ async function securityView() {
     sensitivitySection(admin),
     guardrailsSection(admin),
     securityOpsSection(admin),
+    admin || me?.role === "auditor" ? backupSection(admin) : null,
   );
+}
+
+/** Security › Backups and stored data: whether the disk is encrypted, encrypted backups, and testing a restore. */
+function backupSection(canEdit) {
+  const box = h("section", { class: "isec" }, h("h2", {}, "Backups and stored data"));
+  const draw = async () => {
+    let b;
+    try {
+      b = await api("GET", "security-ops/backup");
+    } catch (err) {
+      return fill(box, h("h2", {}, "Backups and stored data"), h("div", { class: "banner error" }, err.message));
+    }
+    const act = (fn, done) => attempt(async () => ((r) => (done && toast(typeof done === "function" ? done(r) : done), draw()))(await fn()), box);
+    const pass = h("input", { type: "password", autocomplete: "new-password", placeholder: b.ready ? "A new passphrase (to replace the one in use)" : "A passphrase for your backups, at least 12 characters", "aria-label": "Backup passphrase" });
+    const where = h("input", { value: b.folder, placeholder: "The folder backups are kept in", "aria-label": "Backup folder" });
+    const ask = (what) => prompt(`${what}\n\nType your backup passphrase:`);
+    const size = (n) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} KB`);
+    fill(
+      box,
+      h("h2", {}, "Backups and stored data"),
+      h("div", { class: "card form" }, h("div", { class: "row" }, h("b", { class: "grow" }, "This computer's disk"), h("span", { class: `chip ${b.disk.state === "on" ? "on" : b.disk.state === "off" ? "bad" : ""}` }, b.disk.state === "on" ? "Encrypted" : b.disk.state === "off" ? "Not encrypted" : "Could not check")), h("p", { class: "note" }, b.disk.words), h("p", { class: "note small" }, "Talqava relies on your computer's disk encryption for what is stored here, and encrypts every backup itself.")),
+      h(
+        "div",
+        { class: "card form" },
+        h("div", { class: "row" }, h("b", { class: "grow" }, "Encrypted backups"), h("span", { class: `chip ${b.ready ? "on" : ""}` }, b.ready ? (b.nightly ? "Every night" : "By hand") : "Not set up")),
+        h("p", { class: "note" }, "One file with your settings, chats, tasks, pages, documents, memory, Library files and audit record, encrypted with a passphrase only you know. Keep the folder somewhere that is copied off this computer. Working copies of repositories are left out; they can be made again."),
+        canEdit ? [pass, where, h("div", { class: "row wrap" }, h("button", { class: b.ready ? "" : "primary", onclick: () => act(() => api("PUT", "security-ops/backup", { ...(pass.value ? { passphrase: pass.value } : {}), folder: where.value }), b.ready ? "Saved." : "Backups are set up. Write the passphrase down somewhere safe: without it a backup cannot be opened.") }, b.ready ? "Save" : "Set up backups"), b.ready ? h("label", { class: "power" }, h("input", { type: "checkbox", checked: b.nightly, onchange: (e) => act(() => api("PUT", "security-ops/backup", { nightly: e.target.checked })) }), "Make one every night") : null)] : null,
+        b.ready
+          ? [
+              h("p", { class: "note small" }, `${b.lastAt ? `Last backup ${when(b.lastAt)} (${b.lastFiles} files).` : "No backup made yet."} ${b.lastTestedAt ? `A restore was last tested ${when(b.lastTestedAt)}.` : "A restore has never been tested."} The newest ${b.keep} are kept.`),
+              canEdit
+                ? h(
+                    "div",
+                    { class: "row wrap" },
+                    h("button", { class: "primary", onclick: () => act(() => api("POST", "security-ops/backup/now"), (r) => `Backup made: ${r.files} files, ${size(r.bytes)}.${r.skipped.length ? ` ${r.skipped.length} very large files were left out.` : ""}`) }, "Back up now"),
+                    h("button", { onclick: () => ((p) => p && act(() => api("POST", "security-ops/backup/test", { passphrase: p }), (r) => `It works: ${r.files} files were read back from ${r.name}. Nothing was changed.`))(ask("Test a restore: Talqava opens the newest backup and reads every file back, without changing anything.")) }, "Test a restore"),
+                    h("button", { class: "plain", onclick: () => ((p) => p && act(() => api("POST", "security-ops/backup/restore", { passphrase: p }), (r) => `${r.files} files were written to ${r.folder}. Your current data was not touched.`))(ask("Restore the newest backup into a new folder next to Talqava's data folder. Your current data is not touched; the Security guide says how to switch to the restored copy.")) }, "Restore into a new folder"),
+                  )
+                : null,
+              b.backups.length ? h("ul", { class: "refused" }, b.backups.map((x) => h("li", {}, x.name, h("span", { class: "note small" }, ` · ${size(x.bytes)}`)))) : null,
+            ]
+          : null,
+      ),
+    );
+  };
+  draw();
+  return box;
 }
 
 /** Security › Single sign-on: people sign in through the company's identity provider. */
