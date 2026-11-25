@@ -349,7 +349,9 @@ export const tables = {
     const row = input.row ? String(input.row) : null;
     if (row && !d.prepare("select 1 from ws_rows where id = ? and tbl = ?").get(row, t.id)) throw new Error("This table has no such row. Read the table to see its rows and their ids.");
     const author = authorOf(who)!;
-    if (who === OWNER || (page.edit === "direct" && !page.protected)) {
+    const may = workspace.level(org, t.page, who);
+    if (who !== OWNER && (may === "read" || may === "comment")) throw new Error(`You may read the table “${t.name}” but not change it. If it needs changing, say so in your report.`);
+    if (who === OWNER || may === "edit") {
       const made = row ? (patchRow(d, t.id, row, values, author), row) : insertRow(d, t.id, values, author);
       if (who !== OWNER) {
         workspace.used(org, input.task, t.page, "changed");

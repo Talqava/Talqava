@@ -166,3 +166,59 @@ test("a file can belong to a project, and an agent working in that project is to
   assert.doesNotMatch(projectFilesPrompt(org, "sales-lead", "proj-1"), /Launch plan/);
   assert.equal(workspace.update(org, sheet.id, { project: null }).project, null);
 });
+
+test("levels for each group and agent: no access, read, comment, suggest, edit; the most specific wins", async () => {
+  const { tables } = await import("../../src/local/tables.ts");
+  const doc = workspace.create(org, null, { kind: "doc", title: "Contract", markdown: "Terms." });
+  // Without levels, the simple settings decide: whoever may see it may suggest.
+  assert.equal(workspace.level(org, doc.id, "sales-lead"), "suggest");
+  assert.equal(workspace.level(org, doc.id, null), "edit");
+
+  workspace.update(org, doc.id, { levels: { everyone: "read", departments: { Sales: "edit", Nonsense: "fly" }, agents: { bookkeeper: "comment" } } });
+  assert.deepEqual(workspace.get(org, doc.id).levels, { everyone: "read", departments: { Sales: "edit" }, agents: { bookkeeper: "comment" } });
+  assert.equal(workspace.level(org, doc.id, "sales-lead"), "edit", "its group's level");
+  assert.equal(workspace.level(org, doc.id, "bookkeeper"), "comment", "its own level beats its group's and everyone's");
+  assert.equal(workspace.level(org, doc.id, "@general"), "read", "the level for every agent");
+
+  // Edit: applied at once. Comment: may comment, may not change. Read: may do neither.
+  assert.equal(workspace.propose(org, "sales-lead", doc.id, "Terms. And more.", "added").applied, true);
+  assert.throws(() => workspace.propose(org, "bookkeeper", doc.id, "Sneaky.", "x"), /You may read and comment on “Contract”, but not change it/);
+  const c = workspace.comment(org, "bookkeeper", doc.id, "Clause 2 has the wrong amount.", "task-3");
+  assert.deepEqual([c.authorName, c.text, c.resolved], ["Bookkeeper", "Clause 2 has the wrong amount.", false]);
+  assert.throws(() => workspace.comment(org, "@general", doc.id, "hello"), /read “Contract” but not comment/);
+  assert.throws(() => workspace.propose(org, "@general", doc.id, "x", "x"), /You may read “Contract”, but not change it/);
+  assert.equal(workspace.get(org, doc.id).comments, 1);
+  workspace.comment(org, null, doc.id, "Thanks, fixed.");
+  workspace.resolveComment(org, c.id);
+  assert.deepEqual(workspace.comments(org, doc.id).map((x) => x.authorName), ["You"]);
+  assert.equal(workspace.comments(org, doc.id, true).length, 2);
+
+  // No access: not there at all. Protected caps everyone at suggest.
+  workspace.update(org, doc.id, { levels: { departments: { Sales: "edit" }, agents: {} } });
+  assert.equal(workspace.level(org, doc.id, "bookkeeper"), "none");
+  assert.throws(() => workspace.get(org, doc.id, "bookkeeper"), /no such page/);
+  assert.equal(workspace.tree(org, "bookkeeper").some((p) => p.id === doc.id), false);
+  workspace.update(org, doc.id, { protected: true });
+  assert.equal(workspace.level(org, doc.id, "sales-lead"), "suggest");
+  assert.equal(workspace.propose(org, "sales-lead", doc.id, "Terms, changed.", "x").applied, false);
+  workspace.update(org, doc.id, { protected: false });
+
+  // Tables on the page follow the same level.
+  const t = tables.create(org, doc.id, { name: "Fees", columns: [{ name: "Item", type: "text" }] });
+  assert.equal(tables.setRow(org, "sales-lead", t.id, { values: { Item: "Setup" } }).applied, true);
+  workspace.update(org, doc.id, { levels: { departments: { Sales: "read" }, agents: {} } });
+  assert.throws(() => tables.setRow(org, "sales-lead", t.id, { values: { Item: "More" } }), /may read the table “Fees” but not change it/);
+  assert.equal(tables.get(org, t.id, "sales-lead").rows.length, 1);
+
+  // A Restricted file needs the agent named, with levels as without. Private beats every level.
+  workspace.update(org, doc.id, { level: "restricted", levels: { departments: { Sales: "edit" }, agents: {} } });
+  assert.throws(() => workspace.get(org, doc.id, "sales-lead"), /unless you are named on it/);
+  workspace.update(org, doc.id, { levels: { departments: {}, agents: { "sales-lead": "read" } } });
+  assert.equal(workspace.get(org, doc.id, "sales-lead").title, "Contract");
+  workspace.update(org, doc.id, { level: "internal", access: { private: true } });
+  assert.equal(workspace.level(org, doc.id, "sales-lead"), "none");
+  // Clearing the levels goes back to the simple settings.
+  workspace.update(org, doc.id, { access: { everyone: true }, levels: null });
+  assert.equal(workspace.get(org, doc.id).levels, null);
+  assert.equal(workspace.level(org, doc.id, "bookkeeper"), "suggest");
+});

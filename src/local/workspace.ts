@@ -24,6 +24,28 @@ export type Who = string | null;
 export const PAGE_KINDS = ["page", "doc", "note", "sheet", "deck"] as const;
 export type PageKind = (typeof PAGE_KINDS)[number];
 
+/** What a group or an agent may do with one file: nothing, read it, comment on it, suggest changes, or change it. */
+export const ACCESS_LEVELS = ["none", "read", "comment", "suggest", "edit"] as const;
+export type AccessLevel = (typeof ACCESS_LEVELS)[number];
+/** Levels set one by one: for every agent, for a group, for a named agent. The most specific one that is set wins. */
+export interface Levels {
+  everyone?: AccessLevel;
+  departments: Record<string, AccessLevel>;
+  agents: Record<string, AccessLevel>;
+}
+
+/** A note left on a file, by the owner or by an agent that may comment. */
+export interface PageComment {
+  id: string;
+  page: string;
+  author: string;
+  authorName: string;
+  text: string;
+  task: string | null;
+  createdAt: string;
+  resolved: boolean;
+}
+
 export interface PageInfo {
   id: string;
   /** "page" in the Workspace; "doc" and "note" in Office. */
@@ -56,6 +78,10 @@ export interface PageInfo {
   updatedBy: string;
   createdAt: string;
   updatedAt: string;
+  /** Levels set for each group and agent, or null when the simpler settings above decide. */
+  levels: Levels | null;
+  /** Comments not yet resolved. */
+  comments: number;
   /** Suggestions from agents waiting for the owner. */
   suggestions: number;
   /** The first words of the page, for lists and for agents. */
@@ -135,6 +161,8 @@ function db(orgId: string): DatabaseSync {
   if (!have.has("level")) d.exec("alter table pages add column level text not null default 'internal'");
   if (!have.has("pinned")) d.exec("alter table pages add column pinned integer not null default 0");
   if (!have.has("project")) d.exec("alter table pages add column project text");
+  if (!have.has("levels")) d.exec("alter table pages add column levels text");
+  d.exec("create table if not exists page_comments (id text primary key, page text not null, author text not null, text text not null, task text, created_at text not null, resolved integer not null default 0); create index if not exists page_comments_page on page_comments(page, resolved);");
   if (!have.has("remind_at")) d.exec("alter table pages add column remind_at text");
   ready.add(d);
   return d;
@@ -154,6 +182,7 @@ interface Row {
   title: string;
   icon: string;
   access: string | null;
+  levels?: string | null;
   edit: string;
   protected: number;
   template: string | null;
@@ -181,12 +210,53 @@ function accessOf(byId: Map<string, Row>, row: Row): { access: Access; set: bool
  * Whether `who` may be handed a page: by who may see it, by its sensitivity (a Restricted page is only for agents named
  * on it), and by whether the AI service this run uses may receive that level.
  */
-function seen(org: Org, byId: Map<string, Row>, row: Row, who: Who): boolean {
+const RANK: Record<AccessLevel, number> = { none: 0, read: 1, comment: 2, suggest: 3, edit: 4 };
+const asLevel = (v: unknown): AccessLevel | undefined => (ACCESS_LEVELS.includes(v as AccessLevel) ? (v as AccessLevel) : undefined);
+/** Levels as stored or as given, tidied; null when there are none. */
+function levelsOf(input: unknown): Levels | null {
+  let raw: unknown = input;
+  if (typeof input === "string") {
+    try {
+      raw = JSON.parse(input);
+    } catch {
+      return null;
+    }
+  }
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as { everyone?: unknown; departments?: Record<string, unknown>; agents?: Record<string, unknown> };
+  const pick = (m: Record<string, unknown> | undefined) => Object.fromEntries(Object.entries(m ?? {}).flatMap(([k, v]) => ((l) => (l ? [[String(k).slice(0, 80), l]] : []))(asLevel(v))).slice(0, 200)) as Record<string, AccessLevel>;
+  const out: Levels = { departments: pick(r.departments), agents: pick(r.agents) };
+  const everyone = asLevel(r.everyone);
+  if (everyone) out.everyone = everyone;
+  return out;
+}
+
+/**
+ * What `who` may do with a page. With levels set on it, the most specific one wins: the agent's own, then its
+ * group's, then the one for every agent, else nothing. Without levels, whoever may see it may suggest changes, or
+ * change it directly when the page takes agents' edits. A protected page is never changed directly, and a private
+ * one is for the owner alone.
+ */
+function levelFor(org: Org, byId: Map<string, Row>, row: Row, who: Who): AccessLevel {
+  if (who === OWNER) return "edit";
   const { access } = accessOf(byId, row);
-  if (!mayUse(org, access, who)) return false;
+  if (access.private) return "none";
+  const levels = levelsOf(row.levels);
+  let level: AccessLevel;
+  if (levels) {
+    const me = who === GENERAL_AGENT ? undefined : memberOf(org, String(who));
+    level = levels.agents[String(who)] ?? (me ? levels.departments[me.department] : undefined) ?? levels.everyone ?? "none";
+  } else level = mayUse(org, access, who) ? (row.edit === "direct" ? "edit" : "suggest") : "none";
+  return row.protected && RANK[level] > RANK.suggest ? "suggest" : level;
+}
+/** Whether an agent is named on the page itself (which a Restricted page requires). */
+const namedOn = (byId: Map<string, Row>, row: Row, who: Who) => ((levels) => (levels ? RANK[levels.agents[String(who)] ?? "none"] > 0 : accessOf(byId, row).access.agents.includes(String(who))))(levelsOf(row.levels));
+
+function seen(org: Org, byId: Map<string, Row>, row: Row, who: Who): boolean {
+  if (levelFor(org, byId, row, who) === "none") return false;
   if (who === OWNER) return true;
   const level = levelOf(row.level);
-  if (level === "restricted" && !access.agents.includes(String(who))) return false;
+  if (level === "restricted" && !namedOn(byId, row, who)) return false;
   return mayReceive(level);
 }
 
@@ -355,6 +425,8 @@ function info(org: Org, d: DatabaseSync, row: Row, byId: Map<string, Row>, open:
     updatedBy: nameOf(org, row.updated_by),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    levels: levelsOf(row.levels),
+    comments: (d.prepare("select count(*) n from page_comments where page = ? and resolved = 0").get(row.id) as { n: number }).n,
     suggestions: open.get(row.id) ?? 0,
     summary: row.kind === "sheet" ? sheetSummary(content(d, row.id).markdown) : row.kind === "deck" ? ((slides) => `${slides.length} slide${slides.length === 1 ? "" : "s"}: ${slides.map((x) => x.title).filter(Boolean).slice(0, 6).join(" · ")}`)(parseDeck(content(d, row.id).markdown)) : summaryOf(content(d, row.id).markdown),
   };
@@ -369,10 +441,10 @@ function visible(org: Org, d: DatabaseSync, id: string, who: Who): { row: Row; b
   const all = rows(d);
   const byId = new Map(all.map((r) => [r.id, r]));
   const row = byId.get(String(id));
-  if (row && who !== OWNER && mayUse(org, accessOf(byId, row).access, who) && !seen(org, byId, row, who)) {
+  if (row && who !== OWNER && levelFor(org, byId, row, who) !== "none" && !seen(org, byId, row, who)) {
     // The agent may know of the page but not be given it: say why, so it reports that instead of guessing.
     const level = levelOf(row.level);
-    audit({ actor: "system", actorName: "Guardrails", kind: "guardrail", ok: false, action: `Kept back: “${row.title}” is ${LEVEL_WORDS[level].name}`, detail: level === "restricted" && !accessOf(byId, row).access.agents.includes(String(who)) ? `${nameOf(org, String(who))} is not named on it` : `${nameOf(org, String(who))}'s AI service may not receive that level` });
+    audit({ actor: "system", actorName: "Guardrails", kind: "guardrail", ok: false, action: `Kept back: “${row.title}” is ${LEVEL_WORDS[level].name}`, detail: level === "restricted" && !namedOn(byId, row, who) ? `${nameOf(org, String(who))} is not named on it` : `${nameOf(org, String(who))}'s AI service may not receive that level` });
     throw new Error(`“${row.title}” is marked ${LEVEL_WORDS[level].name}, and this organization's rules do not let you read it${level === "restricted" ? " unless you are named on it" : " on the AI service you are running on"}. Do not look for its content another way. Say in your report that you could not read it.`);
   }
   if (!row || !seen(org, byId, row, who)) throw new Error("There is no such page, or it is not one you may see.");
@@ -456,6 +528,45 @@ export const workspace = {
     return all.filter((r) => seen(org, byId, r, who)).map((r) => info(org, d, r, byId, open));
   },
 
+  /** What `who` may do with a page: "none", "read", "comment", "suggest" or "edit". */
+  level(org: Org, id: string, who: Who): AccessLevel {
+    const d = db(org.id);
+    const all = rows(d);
+    const row = all.find((r) => r.id === String(id));
+    return row ? levelFor(org, new Map(all.map((r) => [r.id, r])), row, who) : "none";
+  },
+
+  /** Leaves a comment on a page. The owner always may; an agent needs at least the comment level. */
+  comment(org: Org, who: Who, id: string, text: unknown, task: string | null = null): PageComment {
+    const d = db(org.id);
+    const { row, byId } = visible(org, d, id, who);
+    if (who !== OWNER && RANK[levelFor(org, byId, row, who)] < RANK.comment) throw new Error(`You may read “${row.title}” but not comment on it. Put what you noticed in your report.`);
+    const body = String(text ?? "").replace(/\s+\n/g, "\n").trim().slice(0, 2000);
+    if (!body) throw new Error("Write the comment.");
+    if ((d.prepare("select count(*) n from page_comments where page = ? and resolved = 0").get(row.id) as { n: number }).n >= 200) throw new Error("This file already has 200 open comments.");
+    const author = authorOf(who);
+    const cid = newId();
+    d.prepare("insert into page_comments (id, page, author, text, task, created_at) values (?, ?, ?, ?, ?, ?)").run(cid, row.id, author, body, task, now());
+    if (who !== OWNER) {
+      this.used(org, task, row.id, "suggested");
+      audit({ actor: author, actorName: nameOf(org, author), kind: "workspace", task: task ?? undefined, action: `Commented on “${row.title}”`, detail: body.slice(0, 300) });
+    }
+    return this.comments(org, row.id, true).find((c) => c.id === cid)!;
+  },
+
+  /** A page's comments, oldest first; open ones only unless asked for all. */
+  comments(org: Org, id: string, all = false): PageComment[] {
+    const d = db(org.id);
+    return (d.prepare(`select * from page_comments where page = ? ${all ? "" : "and resolved = 0"} order by created_at`).all(String(id)) as unknown as { id: string; page: string; author: string; text: string; task: string | null; created_at: string; resolved: number }[]).map((c) => ({ id: c.id, page: c.page, author: c.author, authorName: nameOf(org, c.author), text: c.text, task: c.task, createdAt: c.created_at, resolved: Boolean(c.resolved) }));
+  },
+
+  /** Marks a comment dealt with. */
+  resolveComment(org: Org, comment: string): { resolved: true } {
+    const d = db(org.id);
+    if (!Number(d.prepare("update page_comments set resolved = 1 where id = ?").run(String(comment)).changes)) throw new Error("There is no such comment.");
+    return { resolved: true };
+  },
+
   /** The owner's reminders that are due: notes and documents whose reminder time has come. */
   reminders(org: Org, now = new Date()): { id: string; title: string; kind: PageKind; remindAt: string }[] {
     return this.tree(org)
@@ -532,7 +643,7 @@ export const workspace = {
   },
 
   /** The owner changes a page's title, icon, place, who may see it, or how agents may change it. */
-  update(org: Org, id: string, patch: { title?: unknown; icon?: unknown; parent?: unknown; position?: unknown; access?: unknown; edit?: unknown; protected?: unknown; kind?: unknown; folder?: unknown; tags?: unknown; level?: unknown; pinned?: unknown; remindAt?: unknown; project?: unknown }): Page {
+  update(org: Org, id: string, patch: { title?: unknown; icon?: unknown; parent?: unknown; position?: unknown; access?: unknown; edit?: unknown; protected?: unknown; kind?: unknown; folder?: unknown; tags?: unknown; level?: unknown; pinned?: unknown; remindAt?: unknown; project?: unknown; levels?: unknown }): Page {
     const d = db(org.id);
     const { row, byId } = visible(org, d, id, OWNER);
     if (patch.title !== undefined) {
@@ -561,6 +672,11 @@ export const workspace = {
     if (patch.protected !== undefined) d.prepare("update pages set protected = ? where id = ?").run(patch.protected ? 1 : 0, row.id);
     if (patch.folder !== undefined) d.prepare("update pages set folder = ? where id = ?").run(cleanFolder(patch.folder), row.id);
     if (patch.pinned !== undefined) d.prepare("update pages set pinned = ? where id = ?").run(patch.pinned ? 1 : 0, row.id);
+    if (patch.levels !== undefined) {
+      const levels = patch.levels === null ? null : levelsOf(patch.levels);
+      d.prepare("update pages set levels = ? where id = ?").run(levels ? JSON.stringify(levels) : null, row.id);
+      audit({ actor: "owner", actorName: "You", kind: "workspace", action: levels ? `Set who may do what with “${row.title}”` : `Went back to the simple settings for “${row.title}”`, detail: levels ? [levels.everyone ? `every agent: ${levels.everyone}` : "", ...Object.entries(levels.departments).map(([k, v]) => `${k}: ${v}`), ...Object.entries(levels.agents).map(([k, v]) => `${nameOf(org, k)}: ${v}`)].filter(Boolean).join(", ").slice(0, 300) : undefined });
+    }
     if (patch.project !== undefined) d.prepare("update pages set project = ? where id = ?").run(patch.project ? String(patch.project).slice(0, 64) : null, row.id);
     if (patch.remindAt !== undefined) {
       const at = patch.remindAt ? new Date(String(patch.remindAt)) : null;
@@ -730,7 +846,9 @@ export const workspace = {
     const current = content(d, row.id);
     if (md === current.markdown) throw new Error("That is the page as it already is.");
     const author = authorOf(who);
-    if (row.edit === "direct" && !row.protected) {
+    const may = levelFor(org, new Map(rows(d).map((r) => [r.id, r])), row, who);
+    if (RANK[may] < RANK.suggest) throw new Error(`You may ${may === "comment" ? "read and comment on" : "read"} “${row.title}”, but not change it. ${may === "comment" ? "Leave a comment with what should change" : "If it needs changing, say so in your report"}.`);
+    if (may === "edit") {
       write(d, row, md, author, task);
       this.used(org, task, row.id, "changed");
       audit({ actor: author, actorName: nameOf(org, author), kind: "workspace", task: task ?? undefined, action: `Changed the page “${row.title}”`, detail: String(note ?? "").slice(0, 300) });
@@ -890,7 +1008,7 @@ export function projectFilesPrompt(org: Org, who: Who, project: string | null | 
 
 /** The tool agents use for the workspace. `who` says which agent is calling, and `task` which task it is working on. */
 export function workspaceTool(who: (conversationId: string) => string | null): Tool {
-  return defineTool<{ action: "search" | "read" | "list" | "suggest" | "file"; kind?: string; folder?: string; query?: string; page?: string; section?: string; part?: number; markdown?: string; note?: string; title?: string; parent?: string }>({
+  return defineTool<{ action: "search" | "read" | "list" | "suggest" | "file" | "comment"; kind?: string; folder?: string; query?: string; page?: string; section?: string; part?: number; markdown?: string; note?: string; title?: string; parent?: string }>({
     name: "workspace",
     description:
       "The organization's workspace: pages the owner keeps (procedures, checklists, decisions, notes). " +
@@ -899,15 +1017,16 @@ export function workspaceTool(who: (conversationId: string) => string | null): T
       "\"file\" saves your result as a new page under a page you may read (give a title and the Markdown), or, with kind \"document\", as an Office document the owner can open, edit and download (letters, proposals, reports; a folder is optional). " +
       "Documents the owner keeps in Office are listed, searched, read and suggested on in the same way as pages. " +
       "For kind \"slides\", write the Markdown as slides separated by a line of three dashes (---): each slide starts with \"# Title\", then a few short bullet points or a small table, then optionally \"Notes: …\" with what the presenter should say. Keep each slide to one idea and at most five bullets. Existing slides are read and suggested on like pages, in the same form. " +
+      "\"comment\" leaves a short note on a page or file for the owner (put it in note): use it where you may read but not change something, or to point something out without rewriting. " +
       "Read a page before suggesting a change to it.",
     properties: {
-      action: { type: "string", enum: ["search", "read", "list", "suggest", "file"] },
+      action: { type: "string", enum: ["search", "read", "list", "suggest", "file", "comment"] },
       query: { type: "string", description: "For search: a few words about what you are looking for." },
       page: { type: "string", description: "For read and suggest: the page's id, as given by search or list." },
       section: { type: "string", description: "For read: only the section under this heading." },
       part: { type: "number", description: "For read: which part of a long page or section (1 is the start)." },
       markdown: { type: "string", description: "For suggest: the page's whole new text. For file: the new page's text." },
-      note: { type: "string", description: "For suggest: one line on what you changed and why, for the owner." },
+      note: { type: "string", description: "For suggest: one line on what you changed and why, for the owner. For comment: the comment itself." },
       title: { type: "string", description: "For file: the new page's title." },
       parent: { type: "string", description: "For file: the id of the page to put it under." },
       kind: { type: "string", enum: ["page", "document", "slides"], description: "For file: \"document\" saves an Office document instead of a workspace page; \"slides\" saves a presentation." },
@@ -929,6 +1048,10 @@ export function workspaceTool(who: (conversationId: string) => string | null): T
         const r = workspace.read(org, agent, String(input.page ?? ""), String(input.section ?? ""), Number(input.part) || 1);
         workspace.used(org, task, String(input.page), "read");
         return `${r.title}${r.parts > 1 ? ` · part ${r.part} of ${r.parts}${r.part < r.parts ? ` (read on with part: ${r.part + 1})` : ""}` : ""}${r.sections.length && !input.section ? `\nSections: ${r.sections.join("; ")}` : ""}\n\n${r.text || "(This page is empty.)"}`;
+      }
+      if (input.action === "comment") {
+        const c = workspace.comment(org, agent, String(input.page ?? ""), input.note ?? input.markdown, task);
+        return `Your comment is on the file for the owner to read (${c.text.length} characters). Say so in your report.`;
       }
       if (input.action === "suggest") {
         const r = workspace.propose(org, agent, String(input.page ?? ""), input.markdown, input.note, task);

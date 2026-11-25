@@ -2009,3 +2009,10 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
   .body.three > *, .body.wsbody > *, .body.two > * { overflow-y: visible; }
   .body.three > .side, .body.wsbody > .side { border-right: 0; border-bottom: 1px solid var(--line); max-height: 38vh; overflow-y: auto; }
 }
+
+/* Levels for each group and agent, and comments on a file. */
+.levelsdialog .levelrows { display: grid; gap: 8px; margin: 10px 0; }
+.levelsdialog .levelrows label { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 10px; align-items: center; }
+.levelsdialog .levelwords { padding-left: 18px; margin: 6px 0; }
+.commentrow { padding: 8px 0; border-top: 1px solid var(--line); }
+.commentrow p { margin: 2px 0 4px; white-space: pre-wrap; }

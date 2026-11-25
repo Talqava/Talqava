@@ -147,6 +147,26 @@ To make it a task, choose an agent under **Give this note to an agent** and pres
 
 What is kept: text, headings, lists, tables, bold and italic; cell values, formulas and sheet names. What is not: fonts, colours, page layout, pictures, charts, merged cells and comments. A formula that uses a function Sheets does not have shows **#NAME?** after import. Older .doc and .xls files need saving as .docx or .xlsx first.
 
+### Give groups and agents different levels
+
+By default one setting covers everyone who can see a file. To let some read, some comment and some edit:
+
+1. Open the file. In its side panel, under **Levels**, press **Set a level for each group**.
+2. Choose a level for **Every agent**, then for each group, and under **Agents by name** for single agents:
+   - **No access**: cannot find or read it.
+   - **Read**: reads it; changes nothing.
+   - **Comment**: reads it and leaves notes for you.
+   - **Suggest**: its changes wait for you to accept.
+   - **Edit**: changes it straight away; every version is kept.
+3. Press **Save levels**. The most specific level wins: an agent's own, then its group's, then the one for every agent.
+
+A **Protected** file never goes above **Suggest**, and a **Private** file is for you alone, whatever the levels say. **Back to the simple settings** removes the levels. This works the same on pages, documents, sheets, slides and notes, and tables follow their page.
+
+### Read and answer comments
+
+1. Open the file. **Comments** in its side panel lists notes from you and from agents that may comment.
+2. Type in **Leave a comment** and press **Add comment**, or press **Resolve** on one that is dealt with.
+
 ### Put a file in a project
 
 1. Open the document, sheet, slides or note. In its side panel, choose a project under **Project**.

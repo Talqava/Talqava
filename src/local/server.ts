@@ -1462,6 +1462,9 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       if (route === "GET workspace" && id && sub === "revisions" && !extra) return send(res, 200, await attempt(() => workspace.revisions(org, id)));
       if (route === "GET workspace" && id && sub === "revisions" && extra) return send(res, 200, await attempt(() => workspace.revision(org, id, Number(extra))));
       if (route === "POST workspace" && id && sub === "revisions" && extra) return send(res, 200, await attempt(() => workspace.restoreRevision(org, id, Number(extra))));
+      if (route === "GET workspace" && id && sub === "comments") return send(res, 200, await attempt(() => workspace.comments(org, id, url.searchParams.get("all") === "1")));
+      if (route === "POST workspace" && id && sub === "comments" && !extra) return send(res, 200, await attempt(() => workspace.comment(org, null, id, body.text)));
+      if (route === "POST workspace" && id && sub === "comments" && extra) return send(res, 200, await attempt(() => workspace.resolveComment(org, extra)));
       if (route === "GET workspace" && id && sub === "backlinks") return send(res, 200, await attempt(() => workspace.backlinks(org, id)));
       if (route === "GET workspace" && id && sub === "tasks") {
         return send(res, 200, await attempt(() => {

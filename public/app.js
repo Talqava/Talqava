@@ -8857,7 +8857,49 @@ function levelPicker(page, id) {
   const say = () => (note.textContent = `${words[sel.value]} Which AI services may receive each level is set under Security.`);
   sel.addEventListener("change", () => attempt(async () => (await api("PATCH", `workspace/pages/${id}`, { level: sel.value }), (page.level = sel.value), say(), toast(`Marked ${LEVEL_NAMES[sel.value]}.`))));
   say();
-  return [h("div", { class: "label" }, "Sensitivity"), sel, note, projectPicker(page, id), page.kind === "sheet" || page.kind === "deck" ? linksBox(id) : null];
+  return [levelsEditor(page, id), h("div", { class: "label" }, "Sensitivity"), sel, note, projectPicker(page, id), commentsBox(page, id), page.kind === "sheet" || page.kind === "deck" ? linksBox(id) : null];
+}
+
+const ACCESS_WORDS = { none: "No access", read: "Read", comment: "Comment", suggest: "Suggest", edit: "Edit" };
+/** In a file's panel: a level for each group and agent, when the simple settings are not enough. */
+function levelsEditor(page, id) {
+  const org = activeOrg();
+  const groups = [...new Set((org.members ?? []).map((m) => m.department))];
+  const lv = page.levels;
+  const summary = lv ? [lv.everyone ? `Every agent: ${ACCESS_WORDS[lv.everyone]}` : "Every other agent: No access", ...Object.entries(lv.departments).map(([g, l]) => `${g}: ${ACCESS_WORDS[l]}`), ...Object.entries(lv.agents).map(([a, l]) => `${org.members?.find((m) => m.bot === a)?.title ?? a}: ${ACCESS_WORDS[l]}`)].join(" · ") : "";
+  const open = () => {
+    const dialog = h("dialog", { class: "aidialog levelsdialog" });
+    const close = () => (dialog.close(), dialog.remove());
+    const choice = (value, unset) => h("select", {}, unset ? h("option", { value: "", selected: !value }, unset) : null, Object.entries(ACCESS_WORDS).map(([v, t]) => h("option", { value: v, selected: value === v }, t)));
+    const everyone = choice(lv?.everyone ?? (lv ? "none" : page.access.everyone ? (page.edit === "direct" ? "edit" : "suggest") : "none"));
+    const byGroup = groups.map((g) => [g, choice(lv?.departments[g] ?? (!lv && page.access.departments.includes(g) ? (page.edit === "direct" ? "edit" : "suggest") : ""), "Same as every agent")]);
+    const byAgent = (org.members ?? []).map((m) => [m, choice(lv?.agents[m.bot] ?? (!lv && page.access.agents.includes(m.bot) ? (page.edit === "direct" ? "edit" : "suggest") : ""), "Same as its group")]);
+    const save = (levels) => attempt(async () => (await api("PATCH", `workspace/pages/${id}`, { levels }), close(), toast(levels ? "Levels saved." : "Back to the simple settings."), wsReload()), dialog);
+    fill(
+      dialog,
+      h("h3", {}, `Who can do what with “${page.title}”`),
+      h("p", { class: "note" }, "Each group and agent gets one level. The most specific one wins: an agent's own, then its group's, then the one for every agent."),
+      h("ul", { class: "note small levelwords" }, h("li", {}, h("b", {}, "No access: "), "cannot find or read it."), h("li", {}, h("b", {}, "Read: "), "reads it; changes nothing."), h("li", {}, h("b", {}, "Comment: "), "reads it and leaves notes for you."), h("li", {}, h("b", {}, "Suggest: "), "its changes wait for you to accept."), h("li", {}, h("b", {}, "Edit: "), "changes it straight away; every version is kept.")),
+      h("div", { class: "levelrows" }, h("label", {}, h("b", {}, "Every agent"), everyone), h("div", { class: "label" }, "Groups"), byGroup.map(([g, sel]) => h("label", {}, g, sel)), h("details", {}, h("summary", {}, "Agents by name"), byAgent.map(([m, sel]) => h("label", {}, m.title, sel)))),
+      page.protected ? h("p", { class: "note small" }, "This file is Protected, so nobody goes above Suggest whatever is chosen here.") : null,
+      h("div", { class: "row wrap" }, h("button", { class: "primary", onclick: () => save({ everyone: everyone.value, departments: Object.fromEntries(byGroup.filter(([, sel]) => sel.value).map(([g, sel]) => [g, sel.value])), agents: Object.fromEntries(byAgent.filter(([, sel]) => sel.value).map(([m, sel]) => [m.bot, sel.value])) }) }, "Save levels"), lv ? h("button", { onclick: () => save(null) }, "Back to the simple settings") : null, h("button", { class: "plain", onclick: close }, "Cancel")),
+    );
+    document.body.append(dialog);
+    dialog.showModal();
+  };
+  return [h("div", { class: "label" }, "Levels"), lv ? h("p", { class: "note small" }, `${summary}. These levels are in force; the two choices above are not used.`) : h("p", { class: "note small" }, "One setting for everyone who can see it. For different groups to read, comment, suggest or edit:"), h("button", { class: "small", onclick: open }, lv ? "Change the levels" : "Set a level for each group")];
+}
+
+/** In a file's panel: comments from you and from agents that may comment. */
+function commentsBox(page, id) {
+  const list = h("div", { class: "wstasks" });
+  const text = h("textarea", { rows: 2, placeholder: "Leave a comment", "aria-label": "Leave a comment" });
+  const draw = () =>
+    api("GET", `workspace/pages/${id}/comments`)
+      .then((all) => fill(list, all.length ? all.map((c) => h("div", { class: "commentrow" }, h("div", {}, h("b", {}, c.authorName), h("span", { class: "note small" }, ` · ${when(c.createdAt)}`)), h("p", {}, c.text), h("button", { class: "plain small", onclick: () => attempt(async () => (await api("POST", `workspace/pages/${id}/comments/${c.id}`), draw())) }, "Resolve"))) : h("p", { class: "note small" }, "No comments.")))
+      .catch(() => {});
+  draw();
+  return [h("div", { class: "label" }, `Comments${page.comments ? ` · ${page.comments}` : ""}`), list, text, h("button", { class: "small", onclick: () => text.value.trim() && attempt(async () => (await api("POST", `workspace/pages/${id}/comments`, { text: text.value }), (text.value = ""), draw())) }, "Add comment")];
 }
 
 /** In a file's panel: the project it belongs to. */
