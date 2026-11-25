@@ -1376,6 +1376,20 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
 
   if (route === "GET skills") return send(res, 200, skills.list());
   if (route === "DELETE skills") return send(res, 200, await attempt(() => skills.remove(decodeURIComponent(parts[1]))));
+  // The owner writes or changes a skill by hand. Renaming replaces the old one.
+  if (route === "PUT skills") {
+    return send(res, 200, await attempt(() => {
+      const description = String(body.description ?? "").trim();
+      const content = String(body.content ?? "").trim();
+      if (!description) throw new Error("Say in one line when the skill is for.");
+      if (content.length < 10) throw new Error("Write the steps of the skill.");
+      if (content.length > 20_000) throw new Error("A skill is at most 20,000 characters.");
+      const saved = skills.save({ name: String(body.name ?? ""), description: description.slice(0, 300), content });
+      const was = parts[1] ? decodeURIComponent(parts[1]) : "";
+      if (was && was !== saved.name) skills.remove(was);
+      return saved;
+    }));
+  }
 
   if (route === "GET jobs") {
     const all = await jobs.list();

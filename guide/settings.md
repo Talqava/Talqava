@@ -7,7 +7,7 @@ Settings is where you choose how careful, how thrifty and how independent your a
 The page is one long column, in this order:
 
 - **Look**: light or dark appearance, and an accent colour.
-- **Agent**: your agent's name, the team's model, **Check this model**, effort, cost saving, checking before starting, approvals and the budget per run. Press **Save** after changing anything here.
+- **Agent**: your agent's name, which model your team uses (with **Check this model**), effort, cost saving, the two steps before a task starts, approvals and budgets. Press **Save** after changing anything here.
 - **Connections**: a link to **Integrations**, where AI models, repositories, connectors and API keys now live.
 - **About and legal**, with where your files and data are kept on this computer.
 
@@ -15,7 +15,7 @@ If no AI service is connected yet, a banner at the top links to **Integrations â
 
 ## Key ideas
 
-- **The team's model** is chosen here or under **Integrations â†’ AI models**; both change the same setting. Connect the service first under **AI models**.
+- **The team's model** is chosen in one place: **Integrations â†’ AI models**. Settings shows it, with a button that takes you there, and **Check this model** to test it.
 - **Approvals protect you.** With **ask**, an agent stops before it runs a command, changes a file or writes to another service, and waits for your yes.
 - **Budgets stop spending.** Every task stops before it goes over its step limit or its dollar limit. Monthly budgets for each agent and group are set on the Organization page and on each agent's page.
 
@@ -23,7 +23,7 @@ If no AI service is connected yet, a banner at the top links to **Integrations â
 
 ### Test a model before relying on it
 
-1. In the **Agent** section, choose the model under **Model comes from** and **Model**.
+1. Choose the model under **Integrations â†’ AI models** (Settings has a button that takes you there).
 2. Press **Check this model**. It runs three short tests in under a minute and costs a few cents at most.
 3. Read the result: **follows instructions**, **uses tools**, **chains steps**, and **Good for**.
 
