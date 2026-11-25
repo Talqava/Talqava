@@ -54,4 +54,4 @@ These terms are governed by the laws of the State of Delaware and applicable Uni
 
 ## 10. Contact
 
-Questions about these terms: contact us through [talqava.com](https://talqava.com).
+Questions about these terms: contact us at [talqava.com/contact](https://talqava.com/contact).
