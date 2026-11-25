@@ -7324,12 +7324,7 @@ function officePanel(page, id, surface, patch, col) {
   remind.addEventListener("change", () => patch({ remindAt: remind.value ? new Date(remind.value).toISOString() : null }));
   const html = () => (surface.querySelector(".ProseMirror") ?? surface).innerHTML;
   const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-  const forWord = () => {
-    const doc = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(page.title)}</title><style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.4}table{border-collapse:collapse}td,th{border:1px solid #999;padding:4px 8px}</style></head><body><h1>${esc(page.title)}</h1>${html()}</body></html>`;
-    const a = h("a", { href: URL.createObjectURL(new Blob(["﻿", doc], { type: "application/msword" })), download: `${page.title.replace(/[^\w -]+/g, "").trim() || "document"}.doc` });
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  };
+  const forWord = () => downloadFrom(`workspace/pages/${id}/docx`, `${page.title}.docx`, col);
   const print = () => {
     document.body.classList.add("printing");
     const done = () => (document.body.classList.remove("printing"), window.removeEventListener("afterprint", done));
@@ -7362,7 +7357,7 @@ function officePanel(page, id, surface, patch, col) {
       isNote ? h("button", { class: "small", onclick: remember }, "Something to remember") : null,
     ),
     h("div", { class: "label" }, "Download"),
-    h("div", { class: "officeturn" }, h("button", { class: "small", onclick: forWord }, "For Word"), h("button", { class: "small", onclick: print }, "Print or save as PDF")),
+    h("div", { class: "officeturn" }, h("button", { class: "small", onclick: forWord }, "Word file (.docx)"), h("button", { class: "small", onclick: print }, "Print or save as PDF")),
   ];
 }
 
@@ -7623,6 +7618,36 @@ async function renderDeck(col, id) {
   pick(at);
 }
 
+/** Saves a file the app makes (a Word or Excel file) to the person's computer. */
+async function downloadFrom(path, name, box) {
+  await attempt(async () => {
+    ui.wsFlush?.();
+    const res = await fetch(`/api/${path}`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "The file could not be made.");
+    const a = h("a", { href: URL.createObjectURL(await res.blob()), download: name.replace(/[\\/:*?"<>|]+/g, " ") });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }, box);
+}
+
+/** Brings a Word or Excel file in as a document or a sheet, and opens it. */
+function importOfficeFile(accept, box) {
+  const input = h("input", { type: "file", accept });
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    attempt(async () => {
+      if (file.size > 30_000_000) throw new Error("That file is larger than 30 MB.");
+      const res = await fetch(`/api/workspace/import-file?name=${encodeURIComponent(file.name)}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: file });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "That file could not be brought in.");
+      toast("Brought in. Text, headings, lists and tables are kept; fonts, colours and pictures are not.");
+      openPage(data.id);
+    }, box);
+  });
+  input.click();
+}
+
 /** A card for a ready-made Office file: preview its summary, make a file from it. */
 function officeTemplateCard(t) {
   const kind = { doc: "Document", sheet: "Sheet", note: "Note" }[t.kind];
@@ -7780,7 +7805,7 @@ async function docsView() {
   fill(
     col,
     h("div", { class: "officehome" }, h("h1", {}, "Documents"), h("p", { class: "lead" }, "Letters, proposals and reports. You write them, or an agent does; an agent's changes to your document wait for you to accept, unless you let them through.")),
-    h("div", { class: "row wrap" }, h("button", { class: "primary", onclick: () => officeNew("doc") }, "+ New document"), q),
+    h("div", { class: "row wrap" }, h("button", { class: "primary", onclick: () => officeNew("doc") }, "+ New document"), h("button", { onclick: () => importOfficeFile(".docx", col) }, "Import a Word file"), q),
     org.members.length ? h("form", { class: "card form officeask", onsubmit: (e) => (e.preventDefault(), ask()) }, h("b", {}, "Or ask an agent to write it"), h("div", { class: "row wrap" }, what, who, h("button", {}, "Give the task")), h("p", { class: "note small" }, "The agent's document appears here when the task is done. It follows your Workspace pages, such as your price list.")) : null,
     waiting.length ? h("section", {}, h("div", { class: "label" }, `Waiting for you · ${waiting.length}`), waiting.map((f) => h("button", { class: "plain card officewait", onclick: () => ((ui.ws.open = f.id), docsView()) }, h("b", {}, f.title), h("span", { class: "note small" }, ` · ${f.suggestions} suggested change${f.suggestions === 1 ? "" : "s"} to review`)))) : null,
     table,
@@ -7837,7 +7862,7 @@ async function sheetsView() {
   fill(
     col,
     h("div", { class: "officehome" }, h("h1", {}, "Sheets"), h("p", { class: "lead" }, "Budgets, forecasts and lists that calculate. Type numbers and formulas; agents read the results, and their changes to your cells wait for you unless you let them through.")),
-    h("div", { class: "row wrap" }, h("button", { class: "primary", onclick: () => make({ title: "Untitled" }) }, "+ New sheet"), h("button", { onclick: fromCsv }, "Import a CSV file")),
+    h("div", { class: "row wrap" }, h("button", { class: "primary", onclick: () => make({ title: "Untitled" }) }, "+ New sheet"), h("button", { onclick: fromCsv }, "Import a CSV file"), h("button", { onclick: () => importOfficeFile(".xlsx", col) }, "Import an Excel file")),
     org.members.length ? h("form", { class: "card form officeask", onsubmit: (e) => (e.preventDefault(), ask()) }, h("b", {}, "Or ask an agent to build it"), h("div", { class: "row wrap" }, what, who, h("button", {}, "Give the task")), h("p", { class: "note small" }, "The agent's sheet appears here when the task is done.")) : null,
     waiting.length ? h("section", {}, h("div", { class: "label" }, `Waiting for you · ${waiting.length}`), waiting.map((f) => h("button", { class: "plain card officewait", onclick: () => ((ui.ws.open = f.id), sheetsView()) }, h("b", {}, f.title), h("span", { class: "note small" }, " · an agent's changes to review")))) : null,
     files.length
@@ -8073,6 +8098,7 @@ async function renderSheet(col, id) {
     h("button", { class: "small", onclick: () => ((mem.rows += 10), drawGrid()) }, "+ Rows"),
     h("button", { class: "small", onclick: () => ((mem.cols += 4), drawGrid()) }, "+ Columns"),
     h("button", { class: "small", onclick: exportCsv }, "Export CSV"),
+    h("button", { class: "small", onclick: () => downloadFrom(`workspace/pages/${id}/xlsx`, `${page.title}.xlsx`, col) }, "Excel file (.xlsx)"),
     status,
   );
 
