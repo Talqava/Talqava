@@ -1100,6 +1100,7 @@ const mood = (q) =>
 /** How a quest stands: a glyph and a word or two, and whether it needs attention. */
 function standing(q) {
   if (q.status === "waiting") return ["◌ Waiting on you", "loud"];
+  if (q.status === "asking" && q.plan?.status === "proposed") return ["◌ Plan to approve", "loud"];
   if (q.status === "asking") return ["? Needs your answer", "loud"];
   if (q.status === "running") return q.template?.tries ? [`● Fixing · try ${q.template.tries} of ${q.template.maxTries}`, "loud"] : ["● Working", "loud"];
   if (q.checking) return ["◌ Checking the result", "loud"];
@@ -4357,6 +4358,35 @@ async function marketBotView() {
 }
 
 // ---------- one quest ----------
+/** A plan an agent wrote before starting: waiting for the owner, being revised, or approved. */
+function planCard(q) {
+  const p = q?.plan;
+  if (!p) return null;
+  const steps = p.steps?.length ? h("ol", { class: "plansteps" }, p.steps.map((st) => h("li", {}, st.what, h("span", { class: "note small" }, ` · ${/^(you|me|myself)$/i.test(st.who) ? q.bot.name : st.who}`)))) : null;
+  const estimate = p.estimate != null ? h("p", { class: "note small" }, `Its estimate to carry it out: about ${money(p.estimate)}.`) : null;
+  if (p.status === "drafting") return h("div", { class: "card plancard" }, h("b", {}, "Writing its plan"), h("p", { class: "note small" }, "This is a task for a lead, so it plans first and waits for your approval before starting the work."));
+  if (p.status === "changes") return h("div", { class: "card plancard" }, h("b", {}, "Revising its plan"), h("p", { class: "note small" }, `You asked: ${p.feedback}`));
+  if (p.status === "approved") return h("details", { class: "card plancard" }, h("summary", {}, h("b", {}, "Approved plan"), h("span", { class: "note small" }, ` · version ${p.version}`)), h("p", {}, p.summary), steps, estimate);
+  const changes = h("textarea", { rows: 2, placeholder: "What should change? For example: “Do the cafés in the north first, and keep it under $2.”", "aria-label": "Changes to the plan" });
+  const decide = (decision) =>
+    attempt(async () => {
+      await api("POST", `quests/${q.id}/plan`, { decision, comment: changes.value });
+      ui.qplanKey = null;
+      refreshQuest();
+    }, ui.qnote);
+  return h(
+    "div",
+    { class: "card plancard waiting" },
+    h("div", { class: "row" }, h("b", { class: "grow" }, `Plan for your approval${p.version > 1 ? ` (version ${p.version})` : ""}`), h("span", { class: "tag" }, "Waiting on you")),
+    h("p", {}, p.summary),
+    steps,
+    estimate,
+    h("p", { class: "note small" }, "Nothing has been started or handed on yet. Approve it to let the agent carry it out, or say what should change and it will revise the plan."),
+    changes,
+    h("div", { class: "row" }, h("button", { class: "primary", onclick: () => decide("approve") }, "Approve the plan"), h("button", { onclick: () => decide("changes") }, "Ask for changes")),
+  );
+}
+
 /** What a stopped run left for whoever carries on: why, what it did and changed, and where to pick up. */
 function handoverCard(q) {
   return q?.handover && !isLive(q) && q.status !== "done"
@@ -4431,6 +4461,7 @@ function questView() {
   ui.receiptPanel = h("div", { class: "tabpanel pad", hidden: true });
   ui.convoPanel = h("div", { class: "tabpanel" }, conversationPane());
   ui.qnote = h("div", { class: "qnote" });
+  ui.qplanKey = null;
   ui.qboardView = taskBoard();
   ui.qboard = h("div", { class: "qnote" }, ui.qboardView.node);
   fill(ui.qcenter, ui.tabs, ui.qnote, ui.qboard, ui.changesPanel, ui.receiptPanel, ui.convoPanel);
@@ -4454,7 +4485,9 @@ async function refreshQuest(first = false) {
   if (state.view !== "quest" || state.convId !== id) return;
   const changed = !state.quest || state.quest.id !== q.id || state.quest.status !== q.status || state.quest.outcome !== q.outcome;
   state.quest = q;
-  if (ui.qnote) fill(ui.qnote, handoverCard(q));
+  // The plan card is drawn again only when the plan changes, so a refresh never wipes what the owner is typing in it.
+  const planKey = q.plan ? `${q.plan.status}:${q.plan.version}:${q.handover?.at ?? ""}` : "";
+  if (ui.qnote && (planKey !== ui.qplanKey || !q.plan)) (fill(ui.qnote, planCard(q), handoverCard(q)), (ui.qplanKey = planKey));
   ui.qboardView?.show(q.board);
   const [label, tone] = standing(q);
   const where = q.branch ? ["on branch ", h("code", {}, q.branch), " · your own branch is untouched"] : q.project ? [`in ${basename(q.project)}`] : ["in the workspace folder"];
@@ -6093,6 +6126,7 @@ function settingsView() {
   const effort = select(c.efforts.map((e) => [e, e]), c.effort);
   const savings = select([["off", "Off: every agent uses my model"], ["balanced", "On: match the model to the work"]], c.savings ?? "off");
   const checkFirst = select([["on", "Check first, and ask me if something is missing"], ["off", "Start straight away"]], c.checkFirst === false ? "off" : "on");
+  const planFirst = select([["leads", "Tasks I give to a lead: plan first, for my approval"], ["all", "Every task I give: plan first, for my approval"], ["never", "Never: start straight away"]], c.planFirst ?? "leads");
   const mode = select(
     [
       ["ask", "Ask me before commands, file changes and API writes"],
@@ -6142,7 +6176,7 @@ function settingsView() {
         class: "form",
         onsubmit: (e) => (
           e.preventDefault(),
-          save({ agentName: name.value, model: ref(), effort: effort.value, savings: savings.value, checkFirst: checkFirst.value === "on", approvalMode: mode.value, budget: { steps: Number(steps.value), spend: spend.value === "" ? null : Number(spend.value) } })
+          save({ agentName: name.value, model: ref(), effort: effort.value, savings: savings.value, checkFirst: checkFirst.value === "on", planFirst: planFirst.value, approvalMode: mode.value, budget: { steps: Number(steps.value), spend: spend.value === "" ? null : Number(spend.value) } })
         ),
       },
       h("label", {}, "Name", name),
@@ -6155,6 +6189,8 @@ function settingsView() {
       h("label", {}, "Effort, for Claude (higher thinks longer and costs more)", effort),
       h("label", {}, "Cost saving for your team of agents", savings),
       h("label", {}, "Before starting a task", checkFirst),
+      h("label", {}, "Plans for your approval", planFirst),
+      h("p", { class: "note small" }, "With plans on, the agent first looks into the task and sends you a plan: the steps, who does each, and its cost estimate. It changes nothing and hands nothing on until you approve it, or ask for changes. A lead is an agent with people reporting to it."),
       h("p", { class: "note small" }, "With this on, an agent first checks it has what your task needs (information, a repository, documents, access). If something is missing, it asks you in your Inbox instead of spending money guessing. The check costs a few cents at most and shows on the receipt."),
       h("p", { class: "note small" }, "With cost saving on, and Claude Opus or Fable as your model: managers who plan and check keep your model, team members doing their own part use Claude Sonnet 5.5 (about half the price), and quick questions between agents use Claude Haiku 5.5 (about a fortieth). An agent you gave a model of its own keeps it. Off uses your model for everything."),
       h("label", {}, "Approvals", mode),
@@ -6835,6 +6871,7 @@ async function drawTaskPanel(id) {
       "div",
       { class: "taskactions row wrap" },
       t.status === "review" ? h("button", { class: "primary small", onclick: () => act(() => api("POST", `work/${id}/accept`)) }, "Accept") : null,
+      t.status === "waiting" && /plan/i.test(t.detail ?? "") && t.quest ? h("button", { class: "primary small", onclick: () => go("quest", t.quest) }, "Review its plan") : null,
       t.status === "blocked" ? h("button", { class: "primary small", onclick: () => act(() => api("POST", `work/${id}/retry`)) }, "Try again") : null,
       t.status === "waiting" && t.quest ? h("button", { class: "primary small", onclick: () => go("quest", t.quest) }, "Answer it") : null,
       t.quest ? h("button", { class: "small", onclick: () => go("quest", t.quest) }, "Open the work") : null,

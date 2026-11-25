@@ -160,6 +160,7 @@ function describeRequest(method: string, parts: string[], body: any, url: URL): 
   const words = (b: unknown) => JSON.stringify(redact(b ?? {})).slice(0, 400);
   if (area === "login") return { kind: "settings", action: "Signed in" };
   if (area === "quests" && !id && method === "POST") return null; // the route records it, knowing whether the task started
+  if (area === "quests" && id && action === "plan") return null; // the plan writes its own entry
   if (area === "quests" && id) return { kind: "task", task: id, action: action === "stop" ? "Stopped a task" : action === "board" ? "Posted to a task's board" : action === "escalate" ? "Handed a task to Claude" : action === "accept" ? "Kept a task's changes" : action === "undo" ? "Undid a task's changes" : method === "DELETE" ? "Deleted a task" : `${method} task ${action ?? ""}`.trim() };
   if (area === "conversations") {
     if (action === "messages") return { kind: "chat", task: id, action: questStore.get(id) ? "Replied to an agent" : "Sent a chat message", detail: String(body.text ?? "").slice(0, 300) };
@@ -311,6 +312,7 @@ async function updateSettings(body: any) {
   if (body.savings === "balanced" || body.savings === "off") patch.savings = body.savings;
   if (typeof body.checkFirst === "boolean") patch.checkFirst = body.checkFirst;
   if (typeof body.assistantSeesGroups === "boolean") patch.assistantSeesGroups = body.assistantSeesGroups;
+  if (["leads", "all", "never"].includes(body.planFirst)) patch.planFirst = body.planFirst;
   if (["ask", "auto"].includes(body.approvalMode)) patch.approvalMode = body.approvalMode;
   if (typeof body.apiKey === "string") patch.apiKey = body.apiKey.trim();
 
@@ -619,6 +621,7 @@ function questSummary(quest: Quest) {
     // Which exit stopped it, and what it left for whoever carries on.
     stop: quest.stop ?? null,
     handover: quest.handover ?? null,
+    plan: quest.plan ?? null,
     // What this task and everything handed on from it have cost together, and how many tasks that is.
     chain: rootOf(quest) === quest.id ? { cost: chainCost(quest.id), tasks: chainSize(quest.id), budget: chainBudget(), ...chainProgress(quest.id) } : null,
     // The agent's latest words: its report once it has finished, or what it last said while working.
@@ -913,6 +916,8 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     };
     // One task: everything about it, its journal, and the shared board of the task tree it belongs to.
     if (!action && req.method === "GET") return send(res, 200, { ...questSummary(quest), journal: journal.read(id), board: board.list(orgs.active(), rootOf(quest)) });
+    // The owner approves an agent's plan, or asks for changes; either way the agent carries on.
+    if (action === "plan" && req.method === "POST") return send(res, 200, questSummary(await attemptQuest(() => quests.decidePlan(id, body.decision, body.comment))));
     // The owner posts to that board: the agents on the task see it when they next read it or start.
     if (action === "board" && req.method === "POST") {
       try {

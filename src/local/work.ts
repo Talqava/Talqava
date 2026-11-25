@@ -145,6 +145,7 @@ function statusOf(row: Row, rows: Row[], quest: Quest | null): { status: Status;
   if (!quest) return { status: "blocked", detail: "Its run is gone." };
   if (quest.status === "running") return { status: "working", detail: "" };
   if (quest.status === "waiting") return { status: "waiting", detail: "Needs your approval for a step" };
+  if (quest.status === "asking" && quest.plan?.status === "proposed") return { status: "waiting", detail: "Its plan is waiting for your approval" };
   if (quest.status === "asking") return { status: "waiting", detail: quest.note ? `Asked: ${quest.note}` : "Asked you for what it needs" };
   if (quest.status === "failed") return { status: "blocked", detail: quest.note || "It failed." };
   if (quest.status === "budget") return { status: "blocked", detail: quest.note || "It reached its budget." };

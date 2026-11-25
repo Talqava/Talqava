@@ -1027,6 +1027,9 @@ test("a task that is waiting on its own hand-offs is not reported upward as fini
   const quests = await import("../../src/local/quests.ts");
   const org = orgs.create("Chain Co", "", "team");
   market.buildStructure(org.id, "team", "software");
+  // This is about hand-offs, so the lead starts straight away instead of planning first.
+  const planning = store.getConfig().planFirst;
+  store.saveConfig({ planFirst: "never" });
   const leadBot = (await import("../../src/local/crew.ts")).findBot("lead-developer");
   // The lead hands a part to the front-end developer, who asks a colleague a question and ends its turn to wait.
   // Then the answer comes back, the developer writes its real report, and only that reaches the lead.
@@ -1052,6 +1055,7 @@ test("a task that is waiting on its own hand-offs is not reported upward as fini
   const settled = () => all().length >= 3 && all().every((q) => q.status !== "running" && q.status !== "waiting" && (!q.parent || q.parent.delivered)) && !app.engine.isRunning(root.id);
   for (let i = 0; i < 300 && !settled(); i++) await new Promise((r) => setTimeout(r, 50));
   mock.route = undefined;
+  store.saveConfig({ planFirst: planning });
   assert.ok(settled(), `the chain finished: ${all().map((q) => `${q.bot.id}:${q.status}:${q.parent?.delivered}`).join(" ")}`);
   const texts = store.conversations.get(root.id)!.messages.filter((m) => typeof m.content === "string").map((m) => String(m.content));
   const reports = texts.filter((t) => t.startsWith("[Report from Front-End Developer"));
@@ -2330,6 +2334,71 @@ test("the access graph shows what each agent may reach, and the owner decides wh
     assert.equal(mayUse(org, { ...financeOnly, everyone: true }, GENERAL_AGENT), true);
   } finally {
     store.saveConfig({ assistantSeesGroups: before });
+    orgs.remove(org0.id);
+  }
+});
+
+test("plans for approval: a lead plans first with look-up tools only, the owner asks for changes, then approves, and the work starts", { timeout: 60_000 }, async () => {
+  const { orgs } = await import("../../src/local/orgs.ts");
+  const market = await import("../../src/local/marketplace.ts");
+  const { work } = await import("../../src/local/work.ts");
+  const quests = await import("../../src/local/quests.ts");
+  const org0 = orgs.create("Plan Co", "Sell bread to cafés.", "custom");
+  const before = store.getConfig().planFirst;
+  const wait = async (id: string) => {
+    for (let i = 0; i < 150 && quests.quests.isRunning(id); i++) await new Promise((r) => setTimeout(r, 30));
+    await new Promise((r) => setTimeout(r, 120));
+  };
+  const toolsSent = () => mock.requests.at(-1)!.body.tools.map((t: { name: string }) => t.name) as string[];
+  try {
+    market.addTeam("sales-team");
+    const org = orgs.active();
+    store.saveConfig({ planFirst: "leads" });
+    script.length = 0;
+    script.push(call("submit_plan", { summary: "List 50 cafés in the north, then have the outreach specialist draft first emails for your review.", steps: [{ what: "List 50 cafés", who: "Lead Finder" }, { what: "Draft first emails", who: "Outreach Specialist" }], estimate: 1.2 }), say("Plan sent."));
+    const item = work.create(org, { title: "Win wholesale cafés", description: "Find and approach wholesale cafés in the north.", owner: "head-of-sales", createdBy: "owner" });
+    await work.schedule();
+    const id = work.get(org, item.id).quest!;
+    await wait(id);
+    // While planning: look-up tools and submit_plan only; nothing that hands work on or changes anything.
+    const planningTools = toolsSent();
+    assert.ok(planningTools.includes("submit_plan"));
+    assert.ok(!planningTools.includes("assign_task") && !planningTools.includes("bash"));
+    assert.match(mock.requests.at(-1)!.body.system, /plan it, and wait for the owner's approval/);
+    let q = quests.questStore.get(id)!;
+    assert.equal(q.status, "asking");
+    assert.deepEqual([q.plan!.status, q.plan!.version, q.plan!.estimate, q.plan!.steps!.length], ["proposed", 1, 1.2, 2]);
+    assert.equal(work.get(org, item.id).status, "waiting");
+    assert.match(work.get(org, item.id).detail, /plan is waiting for your approval/);
+
+    // Ask for changes: the agent revises and submits again.
+    await assert.rejects(quests.quests.decidePlan(id, "changes", ""), /Say what should change/);
+    script.push(call("submit_plan", { summary: "Start with 20 cafés near the bakery, then draft emails, keeping the cost under one dollar.", steps: [{ what: "List 20 nearby cafés", who: "Lead Finder" }, { what: "Draft emails", who: "Outreach Specialist" }], estimate: 0.8 }), say("Revised."));
+    await quests.quests.decidePlan(id, "changes", "Start with the 20 cafés closest to the bakery.");
+    await wait(id);
+    assert.match(JSON.stringify(mock.requests.at(-2)!.body.messages.at(-1)), /asks for changes to your plan: Start with the 20 cafés closest/);
+    q = quests.questStore.get(id)!;
+    assert.deepEqual([q.plan!.status, q.plan!.version, q.plan!.feedback], ["proposed", 2, "Start with the 20 cafés closest to the bakery."]);
+
+    // Approve: the full tools come back, and the work starts.
+    script.push(say("Done: 20 cafés listed and emails drafted."));
+    await quests.quests.decidePlan(id, "approve", "");
+    await wait(id);
+    assert.ok(toolsSent().includes("assign_task"));
+    assert.match(JSON.stringify(mock.requests.at(-1)!.body.messages), /Your plan is approved\. Carry it out now/);
+    assert.equal(quests.questStore.get(id)!.plan!.status, "approved");
+    await assert.rejects(quests.quests.decidePlan(id, "approve", ""), /no plan waiting/);
+
+    // Plans off: a lead starts straight away.
+    store.saveConfig({ planFirst: "never" });
+    script.push(say("Straight to work."));
+    const other = work.create(org, { title: "Tidy the pipeline", description: "Tidy the sales pipeline.", owner: "head-of-sales", createdBy: "owner" });
+    await work.schedule();
+    const otherId = work.get(org, other.id).quest!;
+    await wait(otherId);
+    assert.equal(quests.questStore.get(otherId)!.plan, undefined);
+  } finally {
+    store.saveConfig({ planFirst: before });
     orgs.remove(org0.id);
   }
 });

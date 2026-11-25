@@ -57,12 +57,29 @@ export interface Quest {
   charge?: { org: string; group: string };
   /** Why the task exists, as it stood when it started: the organization's mission and the group's purpose. */
   purpose?: { org: string; mission?: string; group?: string; goal?: string };
+  /** For big work: the plan the agent writes first, and where it stands with the owner. */
+  plan?: Plan;
   /** Which exit stopped its last run, when it did not finish on its own. */
   stop?: RunStop;
   /** Written whenever a run stops before finishing, so the next run, or another agent, picks up from here. */
   handover?: Handover;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A plan an agent writes before big work, for the owner to approve or send back with changes. */
+export interface Plan {
+  /** drafting: the agent is writing it; proposed: waiting for the owner; changes: sent back; approved: being carried out. */
+  status: "drafting" | "proposed" | "changes" | "approved";
+  summary?: string;
+  steps?: { what: string; who: string }[];
+  /** The agent's estimate of what carrying it out costs, in dollars. */
+  estimate?: number | null;
+  /** How many times it was submitted. */
+  version: number;
+  /** The owner's last request for changes. */
+  feedback?: string;
+  at: string;
 }
 
 /** What a stopped run leaves for whoever carries on: why it stopped, what it did, and where it got to. */
@@ -359,6 +376,15 @@ export class QuestRunner {
     if (!item && !kind) this.onStartedOutsideQueue(quest);
     journal.append(quest.id, { type: "quest_start", bot: bot.id, title: quest.title, project: project ?? null, branch: quest.copy?.branch ?? null });
     audit({ actor: bot.id, actorName: bot.title || bot.name, kind: "task", action: parent ? `Started a task handed on by ${parent.by}` : kind ? `Received a ${kind}` : "Started a task", detail: quest.title, task: quest.id });
+    // Big work starts with a plan for the owner to approve: a task the owner gives to a lead, or to anyone if set so.
+    if (!parent && !kind && !template) {
+      const when = getConfig().planFirst ?? "leads";
+      const { assignableBy } = await import("./orgs.ts");
+      if (when === "all" || (when === "leads" && assignableBy(org, bot.id).length > 0)) {
+        quest.plan = { status: "drafting", version: 0, at: now };
+        questStore.save(quest);
+      }
+    }
     // A task the owner gave (not a hand-off or a question between agents) is checked first: does the agent have what it needs?
     if (!parent && !kind && !template && getConfig().checkFirst !== false) {
       const asked = await this.#checkFirst(quest, text, project).catch((err) => {
@@ -633,6 +659,35 @@ export class QuestRunner {
     try {
       board.post(org, rootOf(quest), quest.bot.id, "handover", `Stopped: ${handover.why} ${handover.next}`);
     } catch {}
+  }
+
+  /** The agent submitted its plan: the run ends, and the task waits for the owner's approval. */
+  planSubmitted(id: string, plan: Omit<Plan, "status" | "version" | "at">) {
+    const quest = questStore.get(id);
+    if (!quest?.plan) throw new Error("This task does not need a plan.");
+    if (quest.plan.status === "approved") throw new Error("Your plan is already approved. Carry it out.");
+    const next: Plan = { ...quest.plan, ...plan, status: "proposed", version: quest.plan.version + 1, at: new Date().toISOString() };
+    this.#ending.set(id, "asking");
+    this.#set(id, { plan: next, note: "Plan waiting for your approval" });
+    audit({ actor: quest.bot.id, actorName: quest.bot.title || quest.bot.name, kind: "task", task: id, action: `Sent a plan for approval${next.version > 1 ? ` (version ${next.version})` : ""}`, detail: next.summary });
+  }
+
+  /** The owner approves the plan, or asks for changes: either way the agent carries on. */
+  async decidePlan(id: string, decision: unknown, comment: unknown) {
+    const quest = questStore.get(id);
+    if (!quest?.plan || quest.plan.status !== "proposed") throw new Error("There is no plan waiting for your approval on this task.");
+    const said = String(comment ?? "").trim().slice(0, 4000);
+    if (decision === "approve") {
+      this.#set(id, { plan: { ...quest.plan, status: "approved", at: new Date().toISOString() }, note: undefined });
+      audit({ actor: "owner", actorName: "You", kind: "approval", task: id, action: "Approved a plan", detail: quest.plan.summary });
+      await this.resume(id, `[Your plan is approved${said ? `, with this note from the owner: ${said}` : ""}. Carry it out now, step by step, then end with a short report.]`);
+    } else if (decision === "changes") {
+      if (said.length < 3) throw new Error("Say what should change in the plan.");
+      this.#set(id, { plan: { ...quest.plan, status: "changes", feedback: said, at: new Date().toISOString() }, note: undefined });
+      audit({ actor: "owner", actorName: "You", kind: "approval", task: id, action: "Asked for changes to a plan", detail: said });
+      await this.resume(id, `[The owner asks for changes to your plan: ${said}\n\nRevise the plan and submit it again with submit_plan. Do not start the work yet.]`);
+    } else throw new Error("Approve the plan, or ask for changes.");
+    return questStore.get(id)!;
   }
 
   #set(id: string, patch: Partial<Quest>) {

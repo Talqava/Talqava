@@ -541,6 +541,35 @@ export function costModel(cfg: ReturnType<typeof getConfig>, bot: Bot, work: "ma
   return { ref: cfg.model, effort: cfg.effort };
 }
 
+/** Tools an agent may use while it is still writing its plan: reading and looking things up, nothing that changes anything. */
+const PLANNING_TOOLS = new Set(["memory", "skill", "conversation_search", "web_search", "web_fetch", "read_page", "library", "workspace", "team_memory", "board", "submit_plan"]);
+
+const PLAN_PROMPT =
+  "Before doing this task, plan it, and wait for the owner's approval. Look into what you need (read the library, the workspace, memory, the web if you may), but change nothing and hand nothing on yet. " +
+  "Then call submit_plan once with: a two- or three-sentence summary of how you will do it and what the owner gets; the steps in order, each with who does it (you, or the title of someone you would hand it to); and your estimate of what carrying it out will cost in dollars. " +
+  "Then end your turn. If the owner asks for changes, revise and submit again.";
+
+/** An agent sends its plan for the owner's approval. Its run ends, and it carries on once the owner decides. */
+export const submitPlanTool: Tool = defineTool<{ summary: string; steps: { what: string; who: string }[]; estimate?: number }>({
+  name: "submit_plan",
+  description: "Sends your plan for this task to the owner for approval, then you stop until they approve it or ask for changes. Give a short summary, the steps in order (what, and who does it), and your cost estimate in dollars.",
+  properties: {
+    summary: { type: "string", description: "Two or three sentences: how you will do it, and what the owner gets." },
+    steps: { type: "array", items: { type: "object", properties: { what: { type: "string" }, who: { type: "string", description: "You, or the title of the colleague you would hand it to." } }, required: ["what", "who"] }, description: "The steps, in order." },
+    estimate: { type: "number", description: "What carrying out the plan will cost, in US dollars." },
+  },
+  required: ["summary", "steps"],
+  run(input, { conversation }) {
+    const summary = String(input.summary ?? "").trim();
+    const steps = Array.isArray(input.steps) ? input.steps.map((s) => ({ what: String(s?.what ?? "").trim().slice(0, 300), who: String(s?.who ?? "you").trim().slice(0, 80) || "you" })).filter((s) => s.what) : [];
+    if (summary.length < 20) throw new Error("Write a short summary of how you will do the task and what the owner gets.");
+    if (!steps.length) throw new Error("List the steps, in order, each with who does it.");
+    const estimate = Number.isFinite(Number(input.estimate)) && Number(input.estimate) >= 0 ? Math.round(Number(input.estimate) * 100) / 100 : null;
+    quests.planSubmitted(conversation.id, { summary: summary.slice(0, 1200), steps: steps.slice(0, 20), estimate });
+    return "Your plan is with the owner. End your turn now: you will be told when it is approved, or what to change.";
+  },
+});
+
 /** Every task's run stops after this long, besides its budget; a question to a colleague much sooner. */
 const TASK_LIMITS = { minutes: 30 };
 const QUESTION_LIMITS = { minutes: 5 };
@@ -671,10 +700,13 @@ export function localRunSpec(jobs: JobBook) {
           remaining: () => shareLeft(quest.id),
         };
       }
+      // Big work is planned first: until the owner approves the plan, the agent can only look things up and submit it.
+      const planning = Boolean(quest.plan && quest.plan.status !== "approved");
+      const allTools = [...(await botTools(bot, root, jobs, claude)), ...teamwork, ...linked.tools];
       return {
         model,
-        system: `${localPrompt(root, bot.name, [...where, ...linked.note], conversation)}\n\n${botPrompt(bot)}${role ? `\n\n${role}` : ""}${why ? `\n\n${why}` : ""}${remembered ? `\n\n${remembered}` : ""}${shared ? `\n\n${shared}` : ""}`,
-        tools: [...(await botTools(bot, root, jobs, claude)), ...teamwork, ...linked.tools],
+        system: `${localPrompt(root, bot.name, [...where, ...linked.note], conversation)}\n\n${botPrompt(bot)}${role ? `\n\n${role}` : ""}${why ? `\n\n${why}` : ""}${remembered ? `\n\n${remembered}` : ""}${shared ? `\n\n${shared}` : ""}${planning ? `\n\n${PLAN_PROMPT}` : ""}`,
+        tools: planning ? [...allTools.filter((t) => PLANNING_TOOLS.has(t.name)), submitPlanTool] : allTools,
         hostedTools: claude && bot.powers.includes("web") ? HOSTED_WEB : [],
         // Connectors are reached from this machine (see connectors.ts), so every model can use them.
         mcpServers: [],
