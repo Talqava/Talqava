@@ -46,6 +46,7 @@ import { COLUMN_TYPES, peopleOf, tables } from "./tables.ts";
 import { sheets } from "./sheets.ts";
 import { describeGuardrails, guardrails, guardrailsFrom } from "./guardrails.ts";
 import { securityOverview, securityReport } from "./securitycenter.ts";
+import { finishSso, setSso, sso, ssoPublic, startSso } from "./sso.ts";
 import { RETENTION_CHOICES, findPerson, retention, retentionFrom, sweep } from "./retention.ts";
 import { REVIEW_EVERY_DAYS, alerts, feedStatus, reviews, setFeed, startAuditFeed } from "./auditfeed.ts";
 import { LEVELS, LEVEL_WORDS, RECOMMENDED, WHERE, WHERE_WORDS, describePolicy, policy, policyFrom } from "./sensitivity.ts";
@@ -185,7 +186,7 @@ function describeRequest(method: string, parts: string[], body: any, url: URL): 
   if (area === "security-ops") return id === "feed" ? { kind: "security", action: body.url ? "Set where the audit record is also sent" : "Stopped sending the audit record elsewhere" } : null;
   if (area === "me" && id === "confirm") return null;
   if (area === "me") return { kind: "security", action: id === "password" ? "Changed their own password" : action === "confirm" ? "Turned on their second step" : "Started setting up their second step" };
-  if (area === "people") return { kind: "security", action: id === "start" ? "Set up people" : id === "settings" ? "Changed the sign-in rules" : id === "sign-out-all" ? "Signed everyone out" : method === "POST" && !id ? `Added a person: ${String(body.name ?? "").slice(0, 60)} as ${String(body.role ?? "member")}` : method === "DELETE" ? "Removed a person" : action === "password" ? "Set a new password for a person" : action === "clear-second-step" ? "Took off a person's second step" : `Changed a person${body.role ? `: role ${String(body.role)}` : ""}` };
+  if (area === "people") return { kind: "security", action: id === "start" ? "Set up people" : id === "settings" ? "Changed the sign-in rules" : id === "sso" ? "Changed single sign-on" : id === "sign-out-all" ? "Signed everyone out" : method === "POST" && !id ? `Added a person: ${String(body.name ?? "").slice(0, 60)} as ${String(body.role ?? "member")}` : method === "DELETE" ? "Removed a person" : action === "password" ? "Set a new password for a person" : action === "clear-second-step" ? "Took off a person's second step" : `Changed a person${body.role ? `: role ${String(body.role)}` : ""}` };
   if (area === "quests" && !id && method === "POST") return null; // the route records it, knowing whether the task started
   if (area === "quests" && id && action === "plan") return null; // the plan writes its own entry
   if (area === "quests" && id) return { kind: "task", task: id, action: action === "stop" ? "Stopped a task" : action === "board" ? "Posted to a task's board" : action === "escalate" ? "Handed a task to Claude" : action === "accept" ? "Kept a task's changes" : action === "undo" ? "Undid a task's changes" : method === "DELETE" ? "Deleted a task" : `${method} task ${action ?? ""}`.trim() };
@@ -735,7 +736,38 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   const secureCookie = req.headers["x-forwarded-proto"] === "https" ? "; Secure" : "";
   const sessionCookie = (token: string, maxAge: number) => ({ "set-cookie": `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secureCookie}` });
   // How to sign in: with an email and password once people are set up, with the one password otherwise.
-  if (route === "GET login") return send(res, 200, { people: people.enabled(), password: Boolean(PASSWORD) });
+  if (route === "GET login") return send(res, 200, { people: people.enabled(), password: Boolean(PASSWORD), sso: people.enabled() && Boolean(sso()), ssoOnly: Boolean(sso()?.only) });
+  // Single sign-on: off to the company's identity provider, and back again with its signed answer.
+  if (parts[0] === "sso" && req.method === "GET" && people.enabled()) {
+    const origin = `${req.headers["x-forwarded-proto"] === "https" ? "https" : "http"}://${req.headers.host}`;
+    const page = (title: string, message: string) => {
+      const safe = message.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+      res.writeHead(400, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+      res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><body style="font-family:system-ui,sans-serif;max-width:520px;margin:15vh auto;padding:0 16px"><h1 style="font-size:20px">${title}</h1><p>${safe}</p><p><a href="/">Back to Talqava</a></p>`);
+    };
+    if (parts[1] === "start") {
+      try {
+        const to = await startSso(`${origin}/api/sso/callback`);
+        res.writeHead(302, { location: to, "cache-control": "no-store" });
+        return res.end();
+      } catch (err) {
+        return page("Could not start the sign-in", (err as Error).message);
+      }
+    }
+    if (parts[1] === "callback") {
+      try {
+        const who = await finishSso(url.searchParams.get("code"), url.searchParams.get("state"));
+        const cfg = sso()!;
+        const signed = people.signInBySso(who, String(req.headers["user-agent"] ?? ""), cfg.addPeople ? cfg.role : null, req.socket.remoteAddress);
+        audit({ actor: `person:${signed.person.id}`, actorName: signed.person.name, kind: "security", action: signed.added ? "Signed in with the company account for the first time, and was added" : "Signed in with the company account" });
+        res.writeHead(302, { location: "/", "cache-control": "no-store", ...sessionCookie(signed.token, 2592000) });
+        return res.end();
+      } catch (err) {
+        audit({ actor: "system", actorName: "Talqava", kind: "security", ok: false, action: "A sign-in was refused", detail: `Company account: ${(err as Error).message}`.slice(0, 300) });
+        return page("You were not signed in", (err as Error).message);
+      }
+    }
+  }
   if (route === "POST login" && people.enabled()) {
     let result: ReturnType<typeof people.signIn>;
     try {
@@ -824,6 +856,8 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (route === "GET people" && parts[1] === "sessions") return send(res, 200, people.sessions());
     if (route === "POST people" && parts[1] === "sign-out-all") return send(res, 200, people.signEveryoneOut(cookieOf(req)));
     if (route === "PUT people" && parts[1] === "settings") return send(res, 200, await tryIt(() => people.setSettings(body)));
+    if (route === "GET people" && parts[1] === "sso") return send(res, 200, { sso: ssoPublic(), redirect: `${req.headers["x-forwarded-proto"] === "https" ? "https" : "http"}://${req.headers.host}/api/sso/callback` });
+    if (route === "PUT people" && parts[1] === "sso") return send(res, 200, await tryIt(() => setSso(body.issuer ? body : null)));
     if (route === "POST people" && !parts[1]) return send(res, 200, await tryIt(() => people.add(body, me)));
     if (route === "PATCH people" && parts[1]) return send(res, 200, await tryIt(() => people.update(parts[1], body, me)));
     if (route === "DELETE people" && parts[1]) return send(res, 200, await tryIt(() => people.remove(parts[1], me)));
@@ -1690,6 +1724,7 @@ export function start() {
   initStore();
   getConfig();
   startAuditFeed();
+  people.passwordsOff = () => Boolean(sso()?.only);
   // Retention: once a day (and shortly after starting), records older than the owner's limit are deleted.
   const tidy = () => {
     try {

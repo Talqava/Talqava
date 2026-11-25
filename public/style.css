@@ -1931,3 +1931,4 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .security .chip.warn { border-color: #9a6200; color: #9a6200; }
 .security .reviewline { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--line); }
 .security .reviewline input { min-width: 180px; flex: 1; }
+.login .ssobutton { display: block; height: auto; text-align: center; text-decoration: none; padding: 10px 14px; border-radius: var(--r-m, 8px); background: var(--brand, #00d26a); color: #0a0a0a; font-weight: 600; }

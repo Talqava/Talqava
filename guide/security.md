@@ -101,6 +101,15 @@ A page made inside a sensitive page starts at the same level. Tables follow thei
 2. For each level, choose where it may be sent. **Use the recommended settings** sets Confidential to approved services only and Restricted to models on this computer only.
 3. Under **Approved AI services**, tick the services you trust. Check each service's terms first: that it does not train on your data, and where it processes it.
 
+### Sign in with your company account (single sign-on)
+
+1. In your identity provider (Microsoft Entra ID, Google Workspace, Okta, or another that supports OpenID Connect), register a new web application called Talqava.
+2. Under **Single sign-on** in Talqava, copy the **redirect address** shown and give it to your provider.
+3. Copy the provider's **issuer address**, **client ID** and **client secret** into Talqava and press **Turn on single sign-on**. Talqava checks the provider answers before saving.
+4. Choose who gets in: only people you have already added under **People** (their email must match), or anyone your provider signs in, who then joins with the role you pick. You can limit it to your email domains.
+5. Open Talqava in a private window and press **Sign in with your company account** to try it, while you stay signed in here.
+6. When it works, you can tick **Only single sign-on** to switch passwords off for everyone except the owner. The owner's password stays as the emergency way in.
+
 ### Limit sign-in to your networks
 
 1. Under **Rules for everyone**, type your office or VPN network ranges under **Only allow signing in from these networks**, one on each line, such as `203.0.113.0/24`.
@@ -160,7 +169,7 @@ A page made inside a sensitive page starts at the same level. Tables follow thei
 
 ## What is not built yet
 
-- Signing in with your company account (single sign-on).
+- Single sign-on has been tested against a stand-in provider only, not yet against a real one. SAML, and adding and removing people automatically from your directory (SCIM), are not built: remove a leaver under **People** as well, or they keep their role if they are ever let back in.
 - Limiting sign-in to computers your company manages, and needing two administrators for a security change.
 - Approved networks are checked against the address the connection comes from. Behind a proxy or tunnel that hides it, every connection looks the same.
 - Approved sites hold page reading, including redirects, and the AI service's own web search. Calls to web services with saved keys and the built-in browser are checked at the address the agent gives; a redirect or a link clicked inside the browser is not checked yet.

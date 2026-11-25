@@ -170,6 +170,9 @@ export function mayDo(role: Role, method: string, area: string, sub = ""): boole
 }
 
 export const people = {
+  /** Set by the app when single sign-on is the only way in (see sso.ts). */
+  passwordsOff: null as null | (() => boolean),
+
   /** True once at least one person has an account: from then on everyone signs in. */
   enabled(): boolean {
     return load().people.length > 0;
@@ -302,6 +305,8 @@ export const people = {
     if (from !== undefined && s.settings.networks?.length && !inRanges(from, s.settings.networks)) throw new Error("Signing in is only allowed from your organization's approved networks.");
     const wrong = () => new Error("That email and password do not match.");
     const p = s.people.find((x) => x.email === cleanEmail(input.email));
+    // With "only single sign-on", passwords work for the owner alone: the emergency way in.
+    if (this.passwordsOff?.() && p && p.role !== "owner") throw new Error("Sign in with your company account. Passwords are switched off for this organization.");
     // The same work is done for an unknown email, so timing does not give away who has an account.
     const typed = stretch(String(input.password ?? "").slice(0, 200), p?.salt ?? "0000000000000000");
     if (!p) throw wrong();
@@ -335,6 +340,31 @@ export const people = {
     s.sessions.push({ hash: hashToken(token), person: p.id, createdAt: p.lastSignIn, seenAt: p.lastSignIn, device: device.slice(0, 200), confirmedAt: p.lastSignIn });
     save();
     return { token, person: view(p), setUpSecondStep: s.settings.requireSecondStep && !p.totp?.on };
+  },
+
+  /**
+   * Starts a session for someone the company's identity provider vouched for. With `add`, a person signing in for the
+   * first time gets an account with that role; otherwise they must have been added already. Their password, if they
+   * never had one, is a random one nobody knows.
+   */
+  signInBySso(who: { email: string; name: string }, device = "", add: Role | null = null, from?: string): { token: string; person: Person; added: boolean } {
+    const s = load();
+    if (from !== undefined && s.settings.networks?.length && !inRanges(from, s.settings.networks)) throw new Error("Signing in is only allowed from your organization's approved networks.");
+    let p = s.people.find((x) => x.email === cleanEmail(who.email));
+    let added = false;
+    if (!p) {
+      if (!add || add === "owner") throw new Error("Your company account is fine, but you have not been added to Talqava yet. Ask an administrator to add you.");
+      p = { id: newId(), name: cleanName(who.name) || who.email, email: cleanEmail(who.email), role: add, groups: [], salt: "", key: "", failed: 0, createdAt: new Date().toISOString() };
+      setKey(p, crypto.randomBytes(32).toString("hex"));
+      s.people.push(p);
+      added = true;
+    }
+    p.lastSignIn = new Date().toISOString();
+    const token = crypto.randomBytes(32).toString("hex");
+    s.sessions = s.sessions.filter((x) => !this.expired(x)).slice(-500);
+    s.sessions.push({ hash: hashToken(token), person: p.id, createdAt: p.lastSignIn, seenAt: p.lastSignIn, device: device.slice(0, 200), confirmedAt: p.lastSignIn });
+    save();
+    return { token, person: view(p), added };
   },
 
   expired(session: { seenAt: string }): boolean {
