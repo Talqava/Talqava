@@ -7,6 +7,7 @@ import type { Tool } from "../core/index.ts";
 import { defineTool } from "../core/index.ts";
 import { getConfig, saveConfig } from "./store.ts";
 import { audit } from "./audit.ts";
+import { stripTags } from "./library.ts";
 
 export const PUBLISH_RULES = ["drafts", "ask", "auto"] as const;
 export type PublishRule = (typeof PUBLISH_RULES)[number];
@@ -57,9 +58,9 @@ async function wp<T>(site: Pick<WordPressSite, "url" | "user" | "password">, met
     throw new Error(/redirect/i.test(why) ? `${new URL(site.url).host} sent the request on to another address. Use the exact address your browser shows when you open your site (with or without www, and https).` : /ENOTFOUND|EAI_AGAIN/.test(why) ? `There is no website at ${new URL(site.url).host}. Check the spelling of the address.` : /timed? ?out|aborted/i.test(why) ? `${new URL(site.url).host} took too long to answer. Try again in a moment.` : `${new URL(site.url).host} could not be reached. Check the address and that the site is up.`);
   });
   const data = (await res.json().catch(() => null)) as { message?: string; code?: string } | null;
-  if (res.status === 401 || res.status === 403) throw new Error(`WordPress refused that: ${data?.message?.replace(/<[^>]*>/g, "") || "the user name or application password is not accepted, or this user may not do this"}.`);
+  if (res.status === 401 || res.status === 403) throw new Error(`WordPress refused that: ${(data?.message ? stripTags(data.message) : "") || "the user name or application password is not accepted, or this user may not do this"}.`);
   if (res.status === 404 && !data) throw new Error("That address does not answer as a WordPress site. Check the address, and that the site's REST API is not switched off.");
-  if (!res.ok) throw new Error(`WordPress answered ${res.status}${data?.message ? `: ${data.message.replace(/<[^>]*>/g, "").slice(0, 200)}` : "."}`);
+  if (!res.ok) throw new Error(`WordPress answered ${res.status}${data?.message ? `: ${stripTags(data.message).slice(0, 200)}` : "."}`);
   return data as T;
 }
 
@@ -161,7 +162,17 @@ export function markdownToHtml(markdown: string): string {
   }
   return out.join("\n");
 }
-const plainText = (html: string) => html.replace(/<(br|\/p|\/h\d|\/li|\/tr)[^>]*>/gi, "\n").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#8217;|&rsquo;/g, "’").replace(/&#8220;|&#8221;|&quot;/g, '"').replace(/\n{3,}/g, "\n\n").trim();
+/** Text from WordPress's HTML: tags taken out (until none is left), then entities decoded, the ampersand last. */
+const plainText = (html: string) =>
+  stripTags(html.replace(/<(br|\/p|\/h\d|\/li|\/tr)[^>]*>/gi, "\n"))
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#8217;|&rsquo;/g, "’")
+    .replace(/&#8220;|&#8221;|&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 
 interface WpItem {
   id: number;
