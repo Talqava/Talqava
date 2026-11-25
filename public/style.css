@@ -1766,3 +1766,15 @@ dialog.guidedialog::backdrop { background: var(--scrim); }
 .boardform { align-items: center; gap: 6px; flex-wrap: wrap; }
 .boardform textarea { flex: 1 1 100%; min-height: 0; order: -1; }
 .boardform select { width: auto; }
+
+/* ---------- the access graph ---------- */
+.accesspanel { display: flex; flex-direction: column; gap: 12px; }
+.acards { display: flex; flex-direction: column; gap: 10px; }
+.acard summary { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.acard[open] summary { margin-bottom: 8px; }
+.arow { display: flex; gap: 12px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13.5px; line-height: 1.45; }
+.arow .alabel { flex: 0 0 150px; color: var(--soft); font-weight: 500; }
+.arow.warnline .grow { color: var(--warn-ink, var(--warn)); }
+.arow.pickrow { align-items: flex-start; gap: 10px; color: var(--text); }
+.arow.pickrow input { margin-top: 3px; }
+@media (max-width: 640px) { .arow { flex-direction: column; gap: 2px; } .arow .alabel { flex: none; } }

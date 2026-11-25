@@ -2291,3 +2291,45 @@ test("succession and the task board: a stopped task goes to another agent with i
     orgs.remove(org0.id);
   }
 });
+
+test("the access graph shows what each agent may reach, and the owner decides whether the assistant reads group-only items", { timeout: 30_000 }, async () => {
+  const { orgs } = await import("../../src/local/orgs.ts");
+  const market = await import("../../src/local/marketplace.ts");
+  const { accessGraph, accessGraphs } = await import("../../src/local/access.ts");
+  const { GENERAL_AGENT, mayUse } = await import("../../src/local/library.ts");
+  const org0 = orgs.create("Access Co", "Keep the books.", "custom");
+  const before = store.getConfig().assistantSeesGroups;
+  try {
+    market.addTeam("finance-team");
+    const org = orgs.active();
+    const keeper = accessGraph(org, "bookkeeper");
+    assert.equal(keeper.agent.title, "Bookkeeper");
+    assert.equal(keeper.approvals, "ask");
+    assert.deepEqual(keeper.tasks, []);
+    assert.equal(keeper.escalatesTo, "Head of Finance");
+    assert.ok(keeper.powers.every((p) => typeof p.words === "string" && p.words.length > 3));
+    assert.ok(!keeper.powers.some((p) => p.id === "shell"));
+    assert.ok(keeper.budget.perTask !== null);
+    const lead = accessGraph(org, "head-of-finance");
+    assert.ok(lead.tasks.includes("Bookkeeper") && lead.tasks.length === 6);
+    assert.equal(lead.escalatesTo, "you");
+    const all = accessGraphs(org);
+    assert.equal(all.length, org.members.length + 1);
+    assert.match(all[0].agent.title, /the assistant/);
+    assert.throws(() => accessGraph(org, "nobody-here"), /no such agent/);
+
+    // Group-only items: an agent outside the group never sees them; the assistant does unless the owner turns it off.
+    const financeOnly = { everyone: false, private: false, departments: ["Finance"], agents: [] };
+    const secret = { everyone: false, private: true, departments: [], agents: [] };
+    assert.equal(mayUse(org, financeOnly, "bookkeeper"), true);
+    store.saveConfig({ assistantSeesGroups: true });
+    assert.equal(mayUse(org, financeOnly, GENERAL_AGENT), true);
+    store.saveConfig({ assistantSeesGroups: false });
+    assert.equal(mayUse(org, financeOnly, GENERAL_AGENT), false);
+    assert.equal(mayUse(org, secret, GENERAL_AGENT), false);
+    assert.equal(mayUse(org, { ...financeOnly, everyone: true }, GENERAL_AGENT), true);
+  } finally {
+    store.saveConfig({ assistantSeesGroups: before });
+    orgs.remove(org0.id);
+  }
+});

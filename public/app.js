@@ -2114,6 +2114,82 @@ function structureDiagram(id) {
   return wrap.firstChild;
 }
 
+/**
+ * The access graph: for each agent, and the assistant, what it may read, change, hand work to and ask, drawn from
+ * the rules that decide it (powers, the chart, library and workspace access, connectors, keys, approvals, budgets).
+ * Anything not shown here, the agent is refused.
+ */
+function orgAccessPanel(org) {
+  const box = h("div", { class: "accesspanel" }, h("p", { class: "note" }, "Working out what each agent can reach…"));
+  const find = h("input", { type: "search", placeholder: "Find an agent", "aria-label": "Find an agent" });
+  const list = (items, none) => (items.length ? items.join(", ") : none);
+  const row = (label, value, tone = "") => h("div", { class: `arow ${tone}` }, h("span", { class: "alabel" }, label), h("span", { class: "grow" }, value));
+  let graphs = [];
+  const draw = () => {
+    const q = find.value.trim().toLowerCase();
+    const shown = graphs.filter((g) => !q || `${g.agent.title} ${g.agent.department ?? ""}`.toLowerCase().includes(q));
+    fill(
+      cards,
+      shown.map((g, i) => {
+        const bot = state.crew?.bots.find((b) => b.id === g.agent.id);
+        const general = g.agent.id === "@general";
+        const changing = g.powers.filter((p) => p.changes).length;
+        return h(
+          "details",
+          { class: "card acard", open: graphs.length <= 4 || (i === 0 && !q) },
+          h(
+            "summary",
+            {},
+            bot ? keycap(bot, 32, "") : h("span", { class: "sysavatar", "aria-hidden": "true" }, "T"),
+            h("span", { class: "grow" }, h("b", {}, g.agent.title), g.agent.department ? h("span", { class: "note small" }, ` · ${g.agent.department}`) : null),
+            h("span", { class: `tag ${g.approvals === "ask" ? "ok" : "warnline"}` }, g.approvals === "ask" ? "Asks before changes" : "Runs without asking"),
+          ),
+          row("Can", list(g.powers.map((p) => p.words), "Only talk"), changing && g.approvals !== "ask" ? "warnline" : ""),
+          row("Hands work to", list(g.tasks, "Nobody: it does its work itself")),
+          g.requests.length ? row("Requests work from", list(g.requests, "")) : null,
+          row("Takes decisions to", g.escalatesTo === "you" ? "You" : `The ${g.escalatesTo}`),
+          row("Asks questions", g.asks ? "Anyone in the organization, up to 3 per task, never back up its own chain" : "Nobody"),
+          row("Library", `${g.library.documents} document${g.library.documents === 1 ? "" : "s"}${g.library.folders.length ? ` in ${list(g.library.folders.slice(0, 6), "")}${g.library.folders.length > 6 ? ` and ${g.library.folders.length - 6} more folders` : ""}` : ""}${g.library.hidden ? ` · ${g.library.hidden} hidden from it` : ""}`),
+          row("Workspace pages", `Reads ${g.workspace.read}${g.workspace.changeDirectly.length ? ` · changes directly: ${list(g.workspace.changeDirectly.slice(0, 5), "")}${g.workspace.changeDirectly.length > 5 ? "…" : ""}` : " · changes none directly, only suggests"}${g.workspace.hidden ? ` · ${g.workspace.hidden} hidden from it` : ""}`),
+          g.connectors.length ? row("Connected services", list(g.connectors, "")) : null,
+          g.keys.length ? row("Keys it may use", g.keys.map((k) => `${k.name} (only sent to ${k.host})`).join(", ")) : null,
+          row("Limits", [g.budget.perTask != null ? `${money(g.budget.perTask)} a task` : null, g.budget.steps != null ? `${g.budget.steps} steps` : null, g.budget.monthly != null ? `${money(g.budget.monthly)} a month` : "no monthly limit", "30 minutes a run"].filter(Boolean).join(" · ")),
+          general
+            ? h(
+                "label",
+                { class: "arow pickrow" },
+                h("input", {
+                  type: "checkbox",
+                  checked: state.config.assistantSeesGroups !== false,
+                  onchange: (e) => attempt(async () => ((state.config = await api("PUT", "settings", { assistantSeesGroups: e.target.checked })), load()), box),
+                }),
+                h("span", {}, "The assistant may read documents and pages limited to some groups. It works for you; Private items stay hidden from it either way."),
+              )
+            : null,
+          bot ? h("div", { class: "row" }, h("button", { class: "small", onclick: () => go("bot", bot.id) }, "Change its powers and limits")) : null,
+        );
+      }),
+    );
+  };
+  const cards = h("div", { class: "acards" });
+  const load = () =>
+    api("GET", `orgs/${org.id}/access`)
+      .then((g) => {
+        graphs = g;
+        fill(
+          box,
+          h("p", { class: "note" }, "What each agent can reach, all in one place: what it can do, who it can hand work to and ask, which documents and pages it can read or change, and its limits. Anything not listed here, the agent is refused. Change it on the agent's page, or with library and page access."),
+          find,
+          cards,
+        );
+        draw();
+      })
+      .catch((err) => fill(box, h("div", { class: "banner error" }, err.message)));
+  find.addEventListener("input", draw);
+  load();
+  return box;
+}
+
 async function teamView() {
   ui.body.className = "body";
   ui.log = null;
@@ -2574,7 +2650,7 @@ function renderOrg() {
       : null;
 
   const side = panel();
-  const views = [["groups", "Groups"], ["chart", "Chart"], ["list", "List"], ["memory", "Memory"]];
+  const views = [["groups", "Groups"], ["chart", "Chart"], ["list", "List"], ["access", "Access"], ["memory", "Memory"]];
   fill(
     col,
     h(
@@ -2597,7 +2673,9 @@ function renderOrg() {
     ),
     o.note ? h("div", { class: "banner" }, o.note, o.undo.length && o.noteUndoes ? h("button", { class: "plain small", onclick: () => orgUndo() }, "Undo") : null) : null,
     problems.length ? h("div", { class: "orgproblems" }, problems.map(([text, fix, fn]) => h("div", { class: "orgproblem" }, h("span", { class: "grow" }, text), h("button", { class: "small", onclick: fn }, fix)))) : null,
-    o.view === "memory"
+    o.view === "access"
+      ? orgAccessPanel(org)
+      : o.view === "memory"
       ? orgMemoryPanel(org, groups)
       : h(
           "div",

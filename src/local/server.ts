@@ -40,6 +40,7 @@ import { acceptSuggestion, suggestPositions } from "./suggest.ts";
 import { audit, readAudit, redact } from "./audit.ts";
 import { connect, disconnect, findLocal, gatewayState, listModels, setBackups } from "./gateway.ts";
 import { board } from "./board.ts";
+import { accessGraph, accessGraphs } from "./access.ts";
 import { finishOpenRouterSignIn, openrouterIntegration, openrouterModels, removeOpenRouter, saveOpenRouterKey, startOpenRouterSignIn, useOpenRouterModel } from "./openrouter.ts";
 import { autoSetupGit, cloneRepository, disconnectRepository, gitIntegration, githubAccounts, githubRepos, installGit, listIntegrations, pollGithubSignIn, removeGitIntegration, startGithubSignIn, testGithub } from "./integrations.ts";
 import { ASSIGN_RULES, INDUSTRIES, REQUEST_RULES, STRUCTURES, seatsFor } from "./structures.ts";
@@ -309,6 +310,7 @@ async function updateSettings(body: any) {
   if (EFFORTS.includes(body.effort)) patch.effort = body.effort;
   if (body.savings === "balanced" || body.savings === "off") patch.savings = body.savings;
   if (typeof body.checkFirst === "boolean") patch.checkFirst = body.checkFirst;
+  if (typeof body.assistantSeesGroups === "boolean") patch.assistantSeesGroups = body.assistantSeesGroups;
   if (["ask", "auto"].includes(body.approvalMode)) patch.approvalMode = body.approvalMode;
   if (typeof body.apiKey === "string") patch.apiKey = body.apiKey.trim();
 
@@ -1293,6 +1295,12 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (route === "POST orgs" && sub === "pack") return send(res, 200, await attempt(() => addPack(orgId, String(body.team ?? ""), { under: body.under, group: body.group })));
     // Positions the agents proposed, and the owner's answer to one.
     if (route === "GET orgs" && sub === "proposals") return send(res, 200, listProposals(orgId));
+    // The access graph: what each agent, and the assistant, may read, change, hand work to and ask.
+    if (route === "GET orgs" && sub === "access") {
+      const org = orgs.list().orgs.find((o) => o.id === orgId);
+      if (!org) throw new HttpError(404, "There is no such organization.");
+      return send(res, 200, await attempt(() => (memberId ? accessGraph(org, decodeURIComponent(memberId)) : accessGraphs(org))));
+    }
     if (route === "POST orgs" && sub === "proposals" && parts[3]) return send(res, 200, await attempt(() => decide(orgId, parts[3], body.decision, body.answer)));
     if (route === "PUT orgs" && sub === "chart") return send(res, 200, await attempt(() => orgs.replaceChart(orgId, body)));
     if (route === "POST orgs" && sub === "groups") return send(res, 200, await attempt(() => orgs.addGroup(orgId, body)));

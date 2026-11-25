@@ -104,6 +104,8 @@ export interface Config {
   monthlyBudget?: number;
   /** Backup models, in order: used when the chosen model's service is down, busy or out of credit. */
   backups?: string[];
+  /** Whether the Talqava assistant may read library documents and pages limited to some groups (never Private ones). On unless the owner turns it off. */
+  assistantSeesGroups?: boolean;
   /** The last model check of each model, by ref. */
   modelChecks: Record<string, CheckResult>;
   /** Repositories bots may work on, by their top folder. */
@@ -177,6 +179,7 @@ export function publicConfig() {
       service: p.service ?? null,
     })),
     backups: cfg.backups ?? [],
+    assistantSeesGroups: cfg.assistantSeesGroups !== false,
     budget: cfg.budget,
     monthlyBudget: cfg.monthlyBudget ?? null,
     modelChecks: cfg.modelChecks,
