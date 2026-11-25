@@ -76,3 +76,26 @@ function withBackups(cfg: Config, ref: string): Model {
     audit({ actor: "system", actorName: "Talqava", kind: "problem", ok: false, action: `Switched from ${from.label} to the backup ${to.label}`, detail: reason.slice(0, 300) }),
   );
 }
+
+/**
+ * The model a stuck task moves up to: among the models the owner chose (the team's model and its backups), the one
+ * that costs clearly more per word than the one in use, which is the best sign of a stronger model. None when the
+ * model in use is on this computer (the owner chose to keep the work private), when no stronger one is set up, or
+ * when moving up is switched off.
+ */
+export function strongerThan(cfg: Config, current: Model): Model | undefined {
+  if (cfg.moveUp === false || isLocalRef(current.ref) || !current.prices) return undefined;
+  let best: Model | undefined;
+  for (const ref of [cfg.model, ...(cfg.backups ?? [])]) {
+    if (ref === current.ref || isLocalRef(ref)) continue;
+    let candidate: Model;
+    try {
+      candidate = resolveModel(cfg, ref);
+    } catch {
+      continue;
+    }
+    const output = candidate.prices?.output ?? 0;
+    if (output >= current.prices.output * 1.5 && output > (best?.prices?.output ?? 0)) best = candidate;
+  }
+  return best;
+}

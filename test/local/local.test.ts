@@ -1133,6 +1133,18 @@ test("cost saving is the owner's switch: off uses their model for everything, on
   assert.equal(tools.costModel(on, lead, "member", "anthropic/claude-fable-5-2").ref, "anthropic/claude-fable-5-2");
   // A model that is already the cheaper kind, or from another provider, is left alone.
   assert.equal(tools.costModel({ ...on, model: "anthropic/claude-sonnet-5-5" }, lead, "member").ref, "anthropic/claude-sonnet-5-5");
+  // Cheapest: managers get the mid-size model too.
+  assert.deepEqual(tools.costModel({ ...cfg, savings: "cheapest" }, lead, "manager"), { ref: "anthropic/claude-sonnet-5-5", effort: "medium" });
+
+  // Another service: the cheaper models come only from the owner's own backups, cheapest first.
+  const svc = (id: string, input: number, output: number) => ({ id, kind: "openai" as const, name: id, baseUrl: "http://127.0.0.1:9/v1", apiKey: "k", prices: { input, output } });
+  const other = { ...cfg, model: "big/large", backups: ["mid/medium", "small/tiny", "dear/pricier"], providers: [...cfg.providers, svc("big", 2, 8), svc("mid", 0.5, 2), svc("small", 0.1, 0.4), svc("dear", 5, 20)] };
+  const balanced = { ...other, savings: "balanced" as const };
+  const cheapest = { ...other, savings: "cheapest" as const };
+  assert.deepEqual([tools.costModel(balanced, lead, "manager").ref, tools.costModel(balanced, lead, "member").ref, tools.costModel(balanced, lead, "question").ref], ["big/large", "mid/medium", "small/tiny"]);
+  assert.deepEqual([tools.costModel(cheapest, lead, "manager").ref, tools.costModel(cheapest, lead, "member").ref], ["mid/medium", "small/tiny"]);
+  // No cheaper backup set up: everything stays on the owner's model.
+  assert.equal(tools.costModel({ ...balanced, backups: ["dear/pricier"] }, lead, "member").ref, "big/large");
 });
 
 test("OpenRouter: sign in through the web, models with their prices, a model for the team, and removing it", async () => {
@@ -2629,4 +2641,15 @@ test("Google Vertex AI connects with a service account key file and signs in wit
     auth.forgetTokens();
     server.close();
   }
+});
+
+test("a stuck task moves up only to a clearly stronger model the owner set up, never from this computer to online", async () => {
+  const { resolveModel, strongerThan } = await import("../../src/local/models.ts");
+  const cfg = { ...store.getConfig(), model: "anthropic/claude-opus-5-5", backups: [], privacy: "off" as const };
+  const haiku = resolveModel(cfg, "anthropic/claude-haiku-5-5");
+  assert.equal(strongerThan(cfg, haiku)?.ref, "anthropic/claude-opus-5-5");
+  // Already the strongest, or a model on this computer, or switched off: no move.
+  assert.equal(strongerThan(cfg, resolveModel(cfg, "anthropic/claude-opus-5-5")), undefined);
+  assert.equal(strongerThan(cfg, resolveModel(cfg, "local/qwen3:4b")), undefined);
+  assert.equal(strongerThan({ ...cfg, moveUp: false }, haiku), undefined);
 });

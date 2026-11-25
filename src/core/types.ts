@@ -192,6 +192,11 @@ export interface RunSpec {
   remaining?: () => number;
   /** The exits every run has besides its budget (see RunLimits). */
   limits?: RunLimits;
+  /**
+   * A stronger model to carry on with, once, when the run would stop because it is stuck (the same step again and
+   * again, or every step failing), instead of stopping straight away.
+   */
+  stronger?: Model;
   /** Send old, large tool outputs shortened, to save cost on long runs (default on). See context.ts. */
   trimOutputs?: boolean | TrimOptions;
 }
@@ -200,6 +205,15 @@ export interface RunSpec {
  * Exits on a run's loop, besides its budget. Each stops the run cleanly (every requested step gets an answer, so the
  * run can be continued) and says why, as a "stopped" event.
  */
+/** One model call of a run: which model answered, how long it took, and what it cost (when known). */
+export interface StepInfo {
+  model: string;
+  /** True when a backup model answered instead of the one chosen. */
+  backup?: boolean;
+  ms: number;
+  cost?: number;
+}
+
 export interface RunLimits {
   /** Minutes a run may take, counted from when it started or was continued. */
   minutes?: number;
@@ -235,7 +249,7 @@ export type RunEvent =
   | Delta
   | { type: "user"; text: string; title: string }
   | { type: "reset" }
-  | { type: "assistant"; content: ContentBlock[] }
+  | { type: "assistant"; content: ContentBlock[]; step?: StepInfo }
   | { type: "tool_start"; id: string; name: string }
   | { type: "tool_result"; result: ToolResult }
   | { type: "resumed"; text: string }
@@ -245,6 +259,8 @@ export type RunEvent =
   | { type: "notice"; text: string }
   /** The run stopped at one of its exits: a budget, its time, a repeated step, or tools that kept failing. */
   | { type: "stopped"; reason: RunStop; text: string }
+  /** The run was stuck, and a stronger model took over instead of stopping. */
+  | { type: "moved_up"; from: string; to: string; reason: RunStop }
   | { type: "error"; text: string };
 
 export interface LiveState {

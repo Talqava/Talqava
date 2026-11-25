@@ -20,7 +20,7 @@ import {
   pageTool,
   setting,
 } from "../core/index.ts";
-import type { Bot, Conversation, JobBook, Power, RunSpec, Tool } from "../core/index.ts";
+import type { Bot, Conversation, JobBook, Model, Power, RunSpec, Tool } from "../core/index.ts";
 import { boardPrompt, boardTool } from "./board.ts";
 import { MAX_DEPTH, MAX_OPEN_HANDOFFS, chainBudget, chainCost, chainOf, chainOver, questStore, quests, rootOf, whyPrompt } from "./quests.ts";
 import { propose } from "./proposals.ts";
@@ -32,7 +32,8 @@ import { workspacePrompt, workspaceTool } from "./workspace.ts";
 import { goalsPrompt } from "./goals.ts";
 import { structureOf } from "./structures.ts";
 import { WORKSPACE, conversations, getConfig, memory, skills, spaces } from "./store.ts";
-import { resolveModel } from "./models.ts";
+import { resolveModel, strongerThan } from "./models.ts";
+import { isLocalRef } from "./gateway.ts";
 import { connectorTools } from "./connectors.ts";
 import { browserAvailable, browserTool } from "./browser.ts";
 
@@ -532,13 +533,52 @@ const workspaceForAgents = workspaceTool((conversationId) => agentOf(conversatio
 export function costModel(cfg: ReturnType<typeof getConfig>, bot: Bot, work: "manager" | "member" | "question", override?: string): { ref: string; effort: ReturnType<typeof getConfig>["effort"] } {
   if (override) return { ref: override, effort: cfg.effort };
   if (bot.model) return { ref: bot.model, effort: work === "question" ? "low" : cfg.effort };
+  const savings = cfg.savings ?? "off";
+  if (savings === "off") return { ref: cfg.model, effort: work === "question" ? "low" : cfg.effort };
   const slash = cfg.model.indexOf("/");
   const provider = cfg.providers.find((p) => p.id === cfg.model.slice(0, slash));
   const large = provider?.kind === "anthropic" && /opus|fable/.test(cfg.model.slice(slash + 1));
-  if ((cfg.savings ?? "off") === "off" || !large) return { ref: cfg.model, effort: work === "question" ? "low" : cfg.effort };
-  if (work === "question") return { ref: `${provider!.id}/claude-haiku-5-5`, effort: "low" };
-  if (work === "member") return { ref: `${provider!.id}/claude-sonnet-5-5`, effort: "medium" };
-  return { ref: cfg.model, effort: cfg.effort };
+  if (large) {
+    // Claude's own sizes: the small one for questions, the mid-size one for a member's part (or for everything but
+    // managing, with "cheapest"), the owner's model for those who plan and check.
+    if (work === "question") return { ref: `${provider!.id}/claude-haiku-5-5`, effort: "low" };
+    if (work === "member") return { ref: `${provider!.id}/claude-sonnet-5-5`, effort: "medium" };
+    return savings === "cheapest" ? { ref: `${provider!.id}/claude-sonnet-5-5`, effort: "medium" } : { ref: cfg.model, effort: cfg.effort };
+  }
+  // Any other service: chosen among the models the owner set up (the team's model and its backups) that cost less
+  // than the team's model, so cost saving never picks a model the owner did not choose.
+  const cheaper = cheaperChoices(cfg);
+  if (!cheaper.length) return { ref: cfg.model, effort: work === "question" ? "low" : cfg.effort };
+  if (work === "question") return { ref: cheaper[0], effort: "low" };
+  if (work === "member") return { ref: savings === "cheapest" ? cheaper[0] : cheaper[cheaper.length - 1], effort: cfg.effort };
+  return savings === "cheapest" ? { ref: cheaper[cheaper.length - 1], effort: cfg.effort } : { ref: cfg.model, effort: cfg.effort };
+}
+
+/**
+ * The owner's own backup models that cost less than the team's model, cheapest first. Only ones whose prices are
+ * known, and never a model online in place of one on this computer (the owner chose to keep the work private).
+ */
+function cheaperChoices(cfg: ReturnType<typeof getConfig>): string[] {
+  let main: Model;
+  try {
+    main = resolveModel({ ...cfg, backups: [] }, cfg.model);
+  } catch {
+    return [];
+  }
+  const local = isLocalRef(cfg.model);
+  const mainPrice = main.prices ? main.prices.input + main.prices.output : undefined;
+  if (mainPrice === undefined) return [];
+  const priced: { ref: string; price: number }[] = [];
+  for (const ref of cfg.backups ?? []) {
+    if (ref === cfg.model || (local && !isLocalRef(ref))) continue;
+    try {
+      const p = resolveModel({ ...cfg, backups: [] }, ref).prices;
+      if (p && p.input + p.output < mainPrice) priced.push({ ref, price: p.input + p.output });
+    } catch {
+      // A backup whose service was disconnected is skipped.
+    }
+  }
+  return priced.sort((a, b) => a.price - b.price).map((x) => x.ref);
 }
 
 /** Tools an agent may use while it is still writing its plan: reading and looking things up, nothing that changes anything. */
@@ -717,6 +757,8 @@ export function localRunSpec(jobs: JobBook) {
         cautionAfter: [...CAUTION_TOOLS, ...linked.names],
         // The task and what is handed on from it share one budget, checked before every step.
         remaining: () => shareLeft(quest.id),
+        // Stuck, it tries once with a stronger model the owner set up, before stopping.
+        stronger: strongerThan(cfg, model),
       };
     }
 

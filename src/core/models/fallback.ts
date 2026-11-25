@@ -55,7 +55,7 @@ export class FallbackModel implements Model {
         const reply = await model.call(model.kind === "anthropic" ? sent : { ...sent, hostedTools: [] }, watched);
         // A backup's cost is counted at the backup's own prices.
         if (i > 0 && reply.usage.cost === undefined && model.prices) reply.usage = { ...reply.usage, cost: costOf(model.prices, reply.usage) };
-        return reply;
+        return i > 0 ? { ...reply, answeredBy: reply.answeredBy ?? model.label } : reply;
       } catch (err) {
         if (request.signal.aborted || started || !worthSwitching(err) || i === this.models.length - 1) throw err;
         lastError = err;

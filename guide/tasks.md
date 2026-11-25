@@ -109,6 +109,10 @@ Chats with Talqava itself keep working while agents are paused.
 2. Read the summary, the steps and who does each, and the estimate.
 3. Press **Approve the plan** to let the agent carry it out. Or write what should change in the box and press **Ask for changes**: the agent revises the plan and sends it again, marked with its version.
 
+**See which model did each step**
+1. Open the task's **Receipt**, then open a part.
+2. Open its steps line (for example "6 steps · 48 s thinking"). Each step shows the model that answered, how long it took and what it cost. A step answered by a backup model is marked **backup**.
+
 **Use the task board**
 1. Open a task's page (from **Work in progress** or the task's panel) and open **Task board**.
 2. Read what the agents on the task have posted: findings, decisions, questions, blockers and hand-overs. It opens by itself when one has a question or a blocker.
@@ -192,6 +196,7 @@ Chats with Talqava itself keep working while agents are paused.
 - **"The … is paused, so it starts no new work."**: that agent is paused. Resume it from the banner on the Board, or give the task to someone else.
 - **"Its agent is no longer on your team."**: the agent was removed. Reassign the task, then click **Try again**.
 - **"It reached its budget."** or a monthly budget message: raise the budget (per task in Settings, per agent on the agent's page, or per group on the Organization page), then click **Try again**.
+- **"It was stuck, so … took over from …"**: the task moved up to a stronger model you set up, once, instead of stopping (see **When a task gets stuck** in Settings). The receipt shows which model did each step.
 - **"Stopped: it tried the same step … a third time"** or **"Stopped: every step failed 4 times in a row"**: the agent is stuck. Read its **Hand-over note** and the last errors, add a comment with a hint (for example where the file really is), then click **Try again**.
 - **"Stopped at its time limit"**: the task ran for over 30 minutes. Click **Try again** to let it carry on from its hand-over note, or split the task into smaller ones.
 - **"… is further up this same task … would go round in circles"**: an agent tried to send work back to the agent that gave it the work. It finishes its part and says in its report what it needs; nothing to fix.

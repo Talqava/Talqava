@@ -108,6 +108,8 @@ export interface Config {
   backups?: string[];
   /** When an agent writes a plan for the owner's approval before starting: tasks given to leads (the default), every task the owner gives, or never. */
   planFirst?: "leads" | "all" | "never";
+  /** A stuck task tries once with a stronger model (the team's model or a backup) before stopping. Default on. */
+  moveUp?: boolean;
   /** "mask": email addresses, phone numbers, card numbers and SSNs are hidden from AI services (not from models on this computer). */
   privacy?: "off" | "mask";
   /** Whether the Talqava assistant may read library documents and pages limited to some groups (never Private ones). On unless the owner turns it off. */
@@ -119,7 +121,7 @@ export interface Config {
   mcpServers: McpServer[];
   secrets: Record<string, Secret>;
   /** Cost saving for an organization's agents: "balanced" gives routine work to cheaper models, "off" uses the main model for everything. */
-  savings?: "balanced" | "off";
+  savings?: "balanced" | "cheapest" | "off";
   /** Whether an agent checks it has what a task needs, and asks the owner if not, before starting. On unless switched off. */
   checkFirst?: boolean;
   /** The Client ID of the GitHub app that "Connect GitHub" signs in through. Not a secret. */
@@ -187,6 +189,7 @@ export function publicConfig() {
     backups: cfg.backups ?? [],
     assistantSeesGroups: cfg.assistantSeesGroups !== false,
     planFirst: cfg.planFirst ?? "leads",
+    moveUp: cfg.moveUp !== false,
     privacy: cfg.privacy ?? "off",
     budget: cfg.budget,
     monthlyBudget: cfg.monthlyBudget ?? null,

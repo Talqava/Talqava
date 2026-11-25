@@ -126,3 +126,48 @@ test("models that clear old outputs on their side, and runs that turn it off, ar
     for (const r of results(model.sent.at(-1)!.messages)) assert.doesNotMatch(String(r.content), /Shortened/);
   }
 });
+
+test("every step records which model answered, how long it took and its cost; a backup is marked", async () => {
+  const { FallbackModel, ModelError } = await import("../../src/core/index.ts");
+  const down: Model = { ref: "a/down", label: "first model", kind: "openai", prices: { input: 1, output: 1 }, async call() { throw new ModelError("busy", 503); } };
+  const backup = fakeModel(0);
+  const conversations = new MemoryConversations();
+  const engine = new Engine({ conversations, resolveRun: (): RunSpec => ({ model: new FallbackModel([down, backup]), system: "t", tools: [], hostedTools: [], mcpServers: [], approvalMode: "auto" }) });
+  const { id } = await conversations.create();
+  const steps: unknown[] = [];
+  engine.subscribe(id, (e) => e.type === "assistant" && steps.push(e.step));
+  await (await engine.startRun(id, "hi")).done;
+  const [step] = steps as { model: string; backup?: boolean; ms: number; cost?: number }[];
+  assert.equal(step.model, "fake");
+  assert.equal(step.backup, true);
+  assert.ok(step.ms >= 0);
+  assert.ok((step.cost ?? 0) > 0);
+});
+
+test("a stuck run moves up once to a stronger model instead of stopping, and says so", async () => {
+  const conversations = new MemoryConversations();
+  const read = defineTool<{ n: number }>({ name: "read", description: "Reads.", properties: { n: { type: "number" } }, required: ["n"], run: () => "nothing new" });
+  // The weak model asks for the very same step again and again.
+  const weak: Model = { ref: "w/weak", label: "weak model", kind: "openai", prices: { input: 1, output: 1 }, async call() { return { content: [{ type: "tool_use", id: `c${Math.random()}`, name: "read", input: { n: 1 } }] as never, stopReason: "tool_use", usage: { input: 10, output: 10 } }; } };
+  const strong = fakeModel(0);
+  const engine = new Engine({ conversations, resolveRun: (): RunSpec => ({ model: weak, stronger: strong, system: "t", tools: [read], hostedTools: [], mcpServers: [], approvalMode: "auto", budget: { steps: 20 } }) });
+  const { id } = await conversations.create();
+  const events: { type: string; [k: string]: unknown }[] = [];
+  engine.subscribe(id, (e) => events.push(e as never));
+  await (await engine.startRun(id, "find it")).done;
+  const moved = events.find((e) => e.type === "moved_up")!;
+  assert.deepEqual([moved.from, moved.to, moved.reason], ["weak model", "fake", "repeat"]);
+  assert.ok(!events.some((e) => e.type === "stopped"));
+  const steps = events.filter((e) => e.type === "assistant").map((e) => (e.step as { model: string }).model);
+  assert.equal(steps.at(-1), "fake");
+  // The stronger model was told what happened.
+  assert.match(JSON.stringify(strong.sent[0].messages), /You were getting stuck/);
+
+  // Moving up happens once: a stronger model that is stuck too stops the run as before.
+  const engine2 = new Engine({ conversations, resolveRun: (): RunSpec => ({ model: weak, stronger: { ...weak, label: "also weak" }, system: "t", tools: [read], hostedTools: [], mcpServers: [], approvalMode: "auto", budget: { steps: 30 } }) });
+  const second = await conversations.create();
+  const stops: unknown[] = [];
+  engine2.subscribe(second.id, (e) => e.type === "stopped" && stops.push(e.reason));
+  await (await engine2.startRun(second.id, "find it")).done;
+  assert.deepEqual(stops, ["repeat"]);
+});

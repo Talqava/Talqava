@@ -244,7 +244,7 @@ export class Engine {
     const emit = (event: RunEvent) => this.#emit(conversation.id, event);
     const steps = spec.budget?.steps ?? this.#maxTurns;
     const spendLimit = spec.budget?.spend;
-    const prices = spec.model.prices;
+    let prices = spec.model.prices;
     if (spendLimit !== undefined && !prices) {
       emit({ type: "notice", text: `The cost of ${spec.model.label} is not known, so only the step budget (${steps}) applies to this run.` });
     }
@@ -277,6 +277,25 @@ export class Engine {
     const tried = new Map<string, number>();
     let failingInARow = 0;
     let wrapUpSent = false;
+    let model = spec.model;
+    let movedUp = false;
+    // Stuck: once, a stronger model carries on, told plainly what happened; after that, the run stops as usual.
+    const moveUp = (reason: RunStop): boolean => {
+      if (movedUp || !spec.stronger || run.abort.signal.aborted) return false;
+      movedUp = true;
+      const from = model.label;
+      model = spec.stronger;
+      prices = model.prices;
+      lastCall = 0;
+      tried.clear();
+      failingInARow = 0;
+      const last = conversation.messages.at(-1);
+      const note = `[You were getting stuck (${reason === "repeat" ? "the same step again and again" : "every step failing"}), so a stronger model now carries on with this run. Look at what was tried, then take a different approach rather than repeating it.]`;
+      if (last?.role === "user" && Array.isArray(last.content)) (last.content as unknown[]).push({ type: "text", text: note });
+      emit({ type: "notice", text: `It was stuck, so ${model.label} took over from ${from}.` });
+      emit({ type: "moved_up", from, to: model.label, reason });
+      return true;
+    };
 
     for (let step = 0; ; step++) {
       if (run.abort.signal.aborted) return;
@@ -309,10 +328,11 @@ export class Engine {
       }
 
       // Old, large tool outputs go shortened (the saved conversation keeps them whole).
-      const sent = spec.trimOutputs === false || spec.model.trimsOnServer ? { messages: conversation.messages, chars: 0 } : trimOldResults(conversation.messages, spec.trimOutputs === true ? {} : spec.trimOutputs);
+      const sent = spec.trimOutputs === false || model.trimsOnServer ? { messages: conversation.messages, chars: 0 } : trimOldResults(conversation.messages, spec.trimOutputs === true ? {} : spec.trimOutputs);
       let reply: ModelReply;
+      const callStarted = Date.now();
       try {
-        reply = await spec.model.call(
+        reply = await model.call(
           {
             system: spec.system,
             messages: sent.messages,
@@ -355,7 +375,7 @@ export class Engine {
       }
       conversation.messages.push({ role: "assistant", content: reply.content });
       await this.#conversations.save(conversation);
-      emit({ type: "assistant", content: reply.content });
+      emit({ type: "assistant", content: reply.content, step: { model: reply.answeredBy ?? model.label, ...(reply.answeredBy ? { backup: true } : {}), ms: Date.now() - callStarted, ...(cost !== undefined ? { cost } : {}) } });
 
       if (reply.stopReason === "refusal") {
         emit({ type: "notice", text: "The model declined to continue with this request." });
@@ -397,11 +417,19 @@ export class Engine {
       }
       conversation.messages.push({ role: "user", content: results });
       await this.#conversations.save(conversation);
+      if (repeated && moveUp("repeat")) {
+        await this.#conversations.save(conversation);
+        continue;
+      }
       if (repeated) {
         stop("repeat", `Stopped: it tried the same step (${repeated.name}) a ${ordinal(repeats + 1)} time with the same input, so it may be stuck. Say "continue" with a hint to try another way.`);
         return;
       }
       failingInARow = results.every((r) => r.is_error) ? failingInARow + 1 : 0;
+      if (failingInARow >= failingSteps && moveUp("failing")) {
+        await this.#conversations.save(conversation);
+        continue;
+      }
       if (failingInARow >= failingSteps) {
         stop("failing", `Stopped: every step failed ${failingSteps} times in a row, so it is not getting anywhere. Read the last errors, then say "continue" with a hint, or fix what it needs.`);
         return;
