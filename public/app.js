@@ -2275,12 +2275,13 @@ async function teamView() {
 const chartSnapshot = (org) => ({ orgId: org.id, members: structuredClone(org.members), groups: structuredClone(org.groups ?? []) });
 
 /** Makes one change to the chart: remembers how it was first (for undo), saves, and redraws. */
-async function orgChange(label, fn) {
+/** Makes a change to the chart that Undo can take back. `onUndo` restores anything else the change affected. */
+async function orgChange(label, fn, onUndo) {
   const org = activeOrg();
   const before = chartSnapshot(org);
   await attempt(async () => {
     await fn();
-    ui.orgx.undo.push({ ...before, label });
+    ui.orgx.undo.push({ ...before, label, onUndo });
     ui.orgx.undo = ui.orgx.undo.slice(-40);
     ui.orgx.note = label;
     ui.orgx.noteUndoes = true; // a note about a change offers Undo; any other note is information only
@@ -2294,6 +2295,7 @@ async function orgUndo() {
   if (!last) return;
   await attempt(async () => {
     await api("PUT", `orgs/${last.orgId}/chart`, { members: last.members, groups: last.groups });
+    last.onUndo?.();
     ui.orgx.note = `Undone: ${last.label}`;
     await loadOrgs();
     renderOrg();
@@ -2328,7 +2330,14 @@ function renderOrg() {
   };
   const nameOf = (id) => (id ? (memberOf_(id)?.title ?? byId.get(id)?.name ?? id) : "you");
   const set = (bot, patch, label) => orgChange(label, () => api("PUT", `orgs/${org.id}/members`, { bot, ...patch }));
-  const select = (sel) => ((o.sel = o.sel && sel && o.sel.kind === sel.kind && o.sel.id === sel.id ? null : sel), renderOrg());
+  const select = (sel, { byKey = false } = {}) => {
+    o.sel = o.sel && sel && o.sel.kind === sel.kind && o.sel.id === sel.id ? null : sel;
+    // Opened with the keyboard, its panel takes the focus, so every change can be made without a mouse.
+    o.focusPanel = byKey && Boolean(o.sel);
+    renderOrg();
+  };
+  /** Enter or Space presses a card, a group's heading or a row of the Add list, as it would a button. */
+  const press = (fn) => (e) => (e.key === "Enter" || e.key === " ") && e.target === e.currentTarget && (e.preventDefault(), fn());
 
   // ----- drag and drop: a position onto a position (reports to it; with Option held, a dotted line), onto a group (joins it), onto You -----
   const drag = (payload) => ({
@@ -2399,7 +2408,7 @@ function renderOrg() {
     const outsideBoss = m.manager && memberOf_(m.manager)?.department !== m.department;
     return h(
       "div",
-      { class: `poscard ${o.sel?.kind === "position" && o.sel.id === m.bot ? "on" : ""} ${leads ? "lead" : ""}`, style: `${botStyle(bot)}; margin-left: ${depth * 22}px`, role: "button", tabindex: "0", title: "Click to edit: who it reports to, a dotted line, its group. Or drag onto someone to report to them (hold Option while dropping for a dotted line).", onclick: () => select({ kind: "position", id: m.bot }), onkeydown: (e) => e.key === "Enter" && select({ kind: "position", id: m.bot }), ...drag({ kind: "position", id: m.bot }), ...drop({ kind: "position", id: m.bot }) },
+      { class: `poscard ${o.sel?.kind === "position" && o.sel.id === m.bot ? "on" : ""} ${leads ? "lead" : ""}`, style: `${botStyle(bot)}; margin-left: ${depth * 22}px`, role: "button", tabindex: "0", title: "Click to edit: who it reports to, a dotted line, its group. Or drag onto someone to report to them (hold Option while dropping for a dotted line).", "aria-label": `${m.title}, ${m.department}, reports to ${nameOf(m.manager)}. Press Enter to change it.`, "aria-expanded": String(o.sel?.kind === "position" && o.sel.id === m.bot), onclick: () => select({ kind: "position", id: m.bot }), onkeydown: press(() => select({ kind: "position", id: m.bot }, { byKey: true })), ...drag({ kind: "position", id: m.bot }), ...drop({ kind: "position", id: m.bot }) },
       keycap(bot, 30, mood(q), bot.type),
       h(
         "span",
@@ -2434,7 +2443,7 @@ function renderOrg() {
       { class: `groupframe ${o.sel?.kind === "group" && o.sel.id === g.id ? "on" : ""} ${st}`, ...drop({ kind: "group", name: g.name }) },
       h(
         "header",
-        { role: "button", tabindex: "0", title: "Click to edit the group", onclick: () => select({ kind: "group", id: g.id }), onkeydown: (e) => e.key === "Enter" && select({ kind: "group", id: g.id }) },
+        { role: "button", tabindex: "0", title: "Click to edit the group", "aria-label": `The ${g.name} group, ${inIt.length} position${inIt.length === 1 ? "" : "s"}. Press Enter to change it.`, "aria-expanded": String(o.sel?.kind === "group" && o.sel.id === g.id), onclick: () => select({ kind: "group", id: g.id }), onkeydown: press(() => select({ kind: "group", id: g.id }, { byKey: true })) },
         h("div", { class: "grow" }, h("h2", {}, g.name), h("div", { class: "note small" }, [`${inIt.length} position${inIt.length === 1 ? "" : "s"}`, g.lead ? `led by ${nameOf(g.lead)}` : "no lead yet", g.budget != null ? `${money(spend)} of ${money(g.budget)} this month${st === "stopped" ? ", used up" : ""}` : spend >= 0.01 ? `${money(spend)} this month` : null].filter(Boolean).join(" · ")), g.goal ? h("div", { class: "groupgoal" }, g.goal) : null),
         inIt.length ? h("button", { class: "plain small", title: "Its lead shares the work out and brings back one result", onclick: (e) => (e.stopPropagation(), (state.selectedTeam = g.lead ?? inIt[0].bot), go("home")) }, "Give a task") : null,
       ),
@@ -2582,11 +2591,11 @@ function renderOrg() {
   const panel = () => {
     if (o.sel?.kind === "position") {
       const m = memberOf_(o.sel.id);
-      return m ? h("aside", { class: "orgpanel2" }, positionPanel(m)) : null;
+      return m ? h("aside", { class: "orgpanel2", tabindex: "-1", "aria-label": `Change the position ${m.title}` }, positionPanel(m)) : null;
     }
     if (o.sel?.kind === "group") {
       const g = groups.find((x) => x.id === o.sel.id);
-      return g ? h("aside", { class: "orgpanel2" }, groupPanel(g)) : null;
+      return g ? h("aside", { class: "orgpanel2", tabindex: "-1", "aria-label": `Change the group ${g.name}` }, groupPanel(g)) : null;
     }
     return null;
   };
@@ -2598,7 +2607,7 @@ function renderOrg() {
     const needle = addFind.value.trim().toLowerCase();
     o.find = addFind.value;
     const match = (t) => !needle || t.toLowerCase().includes(needle);
-    const item = (bot, payload, sub) => h("div", { class: "additem", style: botStyle(bot), ...drag(payload), role: "button", tabindex: "0", title: "Drag onto the chart, or click to add it reporting to you", onclick: () => ((o.drag = payload), dropOn({ kind: "you" })) }, keycap(bot, 24, "", bot.type), h("span", { class: "posmain" }, h("b", {}, bot.name), h("span", { class: "possub" }, sub)));
+    const item = (bot, payload, sub) => h("div", { class: "additem", style: botStyle(bot), ...drag(payload), role: "button", tabindex: "0", title: "Drag onto the chart, or click to add it reporting to you", "aria-label": `Add ${bot.name} to the chart, reporting to you`, onclick: () => ((o.drag = payload), dropOn({ kind: "you" })), onkeydown: press(() => ((o.drag = payload), dropOn({ kind: "you" }))) }, keycap(bot, 24, "", bot.type), h("span", { class: "posmain" }, h("b", {}, bot.name), h("span", { class: "possub" }, sub)));
     const teams = (state.marketTeams ?? []).filter((t) => match(`${t.name} ${t.summary}`));
     const market = (state.market ?? []).filter((b) => !byId.has(b.id) && match(`${b.name} ${b.listing.category} ${b.listing.summary}`));
     const marketById = new Map((state.market ?? []).map((b) => [b.id, b]));
@@ -2610,7 +2619,7 @@ function renderOrg() {
             h("div", { class: "label" }, "Ready-made teams"),
             teams.map((t) => {
               const lead = marketById.get(t.bots[0]);
-              return h("div", { class: "additem team", ...drag({ kind: "team", id: t.id, lead: t.bots[0], name: t.name }), role: "button", tabindex: "0", title: "Drag onto the position it should report to, or into a group, or click to add it under you", onclick: () => ((o.drag = { kind: "team", id: t.id, lead: t.bots[0], name: t.name }), dropOn({ kind: "you" })) }, lead ? keycap(lead, 24, "", lead.type) : null, h("span", { class: "posmain" }, h("b", {}, t.name), h("span", { class: "possub" }, `${t.bots.length} positions, led by ${lead?.name ?? "its lead"}`)));
+              return h("div", { class: "additem team", ...drag({ kind: "team", id: t.id, lead: t.bots[0], name: t.name }), role: "button", tabindex: "0", title: "Drag onto the position it should report to, or into a group, or click to add it under you", "aria-label": `Add the ${t.name} to the chart, under you`, onclick: () => ((o.drag = { kind: "team", id: t.id, lead: t.bots[0], name: t.name }), dropOn({ kind: "you" })), onkeydown: press(() => ((o.drag = { kind: "team", id: t.id, lead: t.bots[0], name: t.name }), dropOn({ kind: "you" }))) }, lead ? keycap(lead, 24, "", lead.type) : null, h("span", { class: "posmain" }, h("b", {}, t.name), h("span", { class: "possub" }, `${t.bots.length} positions, led by ${lead?.name ?? "its lead"}`)));
             }),
           ]
         : null,
@@ -2647,11 +2656,19 @@ function renderOrg() {
     o.suggesting = false;
     renderOrg();
   };
-  const accept = (p) => orgChange(`Added ${p.title}${p.reportsTo ? `, reporting to ${nameOf(p.reportsTo)}` : ""}`, async () => {
-    await api("POST", `orgs/${org.id}/accept`, { bot: p.bot, group: p.group, reportsTo: p.reportsTo });
-    await loadCrew();
-    o.suggest.positions = o.suggest.positions.filter((x) => x !== p);
-  });
+  const accept = (p) => {
+    const at = o.suggest.positions.indexOf(p);
+    return orgChange(
+      `Added ${p.title}${p.reportsTo ? `, reporting to ${nameOf(p.reportsTo)}` : ""}`,
+      async () => {
+        await api("POST", `orgs/${org.id}/accept`, { bot: p.bot, group: p.group, reportsTo: p.reportsTo });
+        await loadCrew();
+        o.suggest.positions = o.suggest.positions.filter((x) => x !== p);
+      },
+      // Undoing it puts the suggestion back where it was in the list.
+      () => o.suggest && !o.suggest.positions.includes(p) && o.suggest.positions.splice(Math.max(0, at), 0, p),
+    );
+  };
   const skip = (p) => ((o.suggest.positions = o.suggest.positions.filter((x) => x !== p)), renderOrg());
   const suggestions = () => {
     if (!o.suggestOpen || o.suggestFor !== org.id && !o.suggesting) return null;
@@ -2749,7 +2766,8 @@ function renderOrg() {
       h("button", { class: "small", disabled: !o.undo.length, title: o.undo.length ? `Undo: ${o.undo.at(-1).label} (Cmd-Z)` : "Nothing to undo", onclick: () => orgUndo() }, "Undo"),
       h("button", { class: "plain small", title: "Every change is recorded in the audit log", onclick: () => ((ui.audit = { kind: "organization", actor: "", since: "30", q: "" }), go("audit")) }, "History"),
     ),
-    o.note ? h("div", { class: "banner" }, o.note, o.undo.length && o.noteUndoes ? h("button", { class: "plain small", onclick: () => orgUndo() }, "Undo") : null) : null,
+    // Always there, so screen readers announce each change as it is made.
+    h("div", { class: o.note ? "banner" : "", role: "status", "aria-live": "polite" }, o.note ? [o.note, o.undo.length && o.noteUndoes ? h("button", { class: "plain small", onclick: () => orgUndo() }, "Undo") : null] : null),
     problems.length ? h("div", { class: "orgproblems" }, problems.map(([text, fix, fn]) => h("div", { class: "orgproblem" }, h("span", { class: "grow" }, text), h("button", { class: "small", onclick: fn }, fix)))) : null,
     o.view === "access"
       ? orgAccessPanel(org)
@@ -2765,6 +2783,11 @@ function renderOrg() {
   );
   o.note = "";
   o.noteUndoes = false;
+  // Opened from the keyboard: the panel takes the focus, so its fields are the next thing reached.
+  if (o.focusPanel) {
+    o.focusPanel = false;
+    col.querySelector(".orgpanel2")?.focus();
+  }
 
   // ----- dialogs -----
   async function newGroup() {

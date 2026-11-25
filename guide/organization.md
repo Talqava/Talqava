@@ -86,7 +86,13 @@ The side panel for each position spells this out under **How work moves for this
 
 ### Change who reports to whom
 - Drag a position onto another position. To add a dotted line instead, click the position and choose under **Dotted line: also works with** (or hold **Option** while you drop).
-- Or open the position and change **Reports to** or **Also works with (dotted line)**. The List view has the same choices in each row.
+- Or open the position and change **Reports to** or **Dotted line: also works with**. The List view has the same choices in each row.
+
+### Build the chart with the keyboard, without dragging
+Everything dragging does can be done from the keyboard, and each change is announced to screen readers.
+1. Press **Tab** to reach a row in the **Add** list, a position, or a group's heading.
+2. Press **Enter** or **Space**. A row in the Add list joins the chart reporting to you. A position or a group opens its panel, and the focus moves into it.
+3. In a position's panel, **Reports to**, **Dotted line: also works with** and **Group** move it; **Take off the chart** removes it. **Undo** takes back the last change.
 
 ### Edit a position
 Click it, then change **Title**, **Responsible for** or **Group**. Changes save when you leave the field. The side panel also has these:
