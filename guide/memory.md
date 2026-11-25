@@ -63,6 +63,8 @@ Deleting a project deletes its memories for good. Its chats move to General.
 2. Type the note, and choose **Whole organization** or one group.
 3. Press **Remember this**.
 
+**Where it is kept.** Your organization's shared memory is in the organization's own database on this computer, beside its Library and Workspace, and is searched the same way. Notes from before this change were moved over automatically; nothing was lost.
+
 ## Tips
 
 - One fact per entry. Short entries are easier to find, match and correct.

@@ -4,11 +4,14 @@
 // and a short record of the work it finished). An agent sees its own shelf,
 // its department's and the organization's. Only what bears on the task in
 // hand is put in its prompt; the rest is one search away, so memory can grow
-// large without every task paying for all of it.
+// large without every task paying for all of it. It is kept in each organization's own database, with the same
+// full-text search as the Library.
 import path from "node:path";
 import { defineTool, rank } from "../core/index.ts";
 import type { Tool } from "../core/index.ts";
+import type { DatabaseSync } from "node:sqlite";
 import { DATA, newId, readJson, writeJson } from "./store.ts";
+import { openOrgDb } from "./library.ts";
 import { memberOf, orgs } from "./orgs.ts";
 import type { Org } from "./orgs.ts";
 
@@ -35,14 +38,67 @@ const ENTRY_LIMIT = 800;
 /** Finished-task lines kept per agent; older ones are dropped. */
 const LOG_LIMIT = 60;
 
-const file = () => path.join(DATA, "org-memory.json");
-const read = () => readJson<OrgMemoryEntry[]>(file(), []);
-const save = (entries: OrgMemoryEntry[]) => writeJson(file(), entries);
 const tidyText = (text: unknown) => String(text ?? "").replace(/\s+\n/g, "\n").trim().slice(0, ENTRY_LIMIT);
+
+// ----- where it is kept: each organization's own database, beside its library and workspace -----
+/** The older file that held every organization's memory together. Its entries move into the databases, once. */
+const legacyFile = () => path.join(DATA, "org-memory.json");
+
+interface Row {
+  id: string;
+  shelf: string;
+  key: string;
+  text: string;
+  by: string;
+  kind: string;
+  created_at: string;
+  updated_at: string | null;
+}
+const toEntry = (orgId: string, r: Row): OrgMemoryEntry => ({ id: r.id, org: orgId, shelf: r.shelf as Shelf, key: r.key, text: r.text, by: r.by, kind: r.kind === "log" ? "log" : "note", createdAt: r.created_at, ...(r.updated_at ? { updatedAt: r.updated_at } : {}) });
+
+const ready = new WeakSet<DatabaseSync>();
+function db(orgId: string): DatabaseSync {
+  const d = openOrgDb(orgId);
+  if (ready.has(d)) return d;
+  d.exec(`
+    create table if not exists memory (id text primary key, shelf text not null, key text not null default '', text text not null, by text not null, kind text not null default 'note', created_at text not null, updated_at text);
+    create index if not exists memory_shelf on memory(shelf, key);
+    create virtual table if not exists memory_fts using fts5(text, content='memory', content_rowid='rowid', tokenize='porter unicode61');
+    create trigger if not exists memory_ai after insert on memory begin insert into memory_fts(rowid, text) values (new.rowid, new.text); end;
+    create trigger if not exists memory_ad after delete on memory begin insert into memory_fts(memory_fts, rowid, text) values ('delete', old.rowid, old.text); end;
+    create trigger if not exists memory_au after update of text on memory begin insert into memory_fts(memory_fts, rowid, text) values ('delete', old.rowid, old.text); insert into memory_fts(rowid, text) values (new.rowid, new.text); end;
+  `);
+  ready.add(d);
+  convert(orgId, d);
+  return d;
+}
+
+/**
+ * Moves an organization's entries from the older file into its database, once: every entry, in the same order, with
+ * who may see it. They leave the file only after they are safely in the database.
+ */
+function convert(orgId: string, d: DatabaseSync) {
+  const all = readJson<OrgMemoryEntry[]>(legacyFile(), []);
+  const mine = all.filter((e) => e.org === orgId);
+  if (!mine.length) return;
+  const insert = d.prepare("insert or ignore into memory (id, shelf, key, text, by, kind, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)");
+  d.exec("begin");
+  try {
+    for (const e of mine) insert.run(e.id, e.shelf, e.key ?? "", e.text, e.by, e.kind ?? "note", e.createdAt, e.updatedAt ?? null);
+    d.exec("commit");
+  } catch (err) {
+    d.exec("rollback");
+    throw err;
+  }
+  writeJson(legacyFile(), all.filter((e) => e.org !== orgId));
+}
+
+/** Words of a search, as a full-text query: any of them, in any form. */
+const ftsQuery = (query: string) => [...new Set(query.toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? [])].slice(0, 12).map((w) => `"${w}"`).join(" OR ");
 
 export const orgMemory = {
   list(orgId: string): OrgMemoryEntry[] {
-    return read().filter((e) => e.org === orgId);
+    return (db(orgId).prepare("select * from memory order by rowid").all() as unknown as Row[]).map((r) => toEntry(orgId, r));
   },
 
   /** What an agent may see: the organization's shelf, its department's and its own. */
@@ -51,40 +107,57 @@ export const orgMemory = {
     return this.list(org.id).filter((e) => e.shelf === "org" || (!botId ? true : (e.shelf === "dept" && e.key === me?.department) || (e.shelf === "agent" && e.key === botId)));
   },
 
+  /**
+   * What an agent may see that matches some words, best first: the database's full-text search (as the Library's),
+   * then, when that finds nothing, a looser match on word forms.
+   */
+  search(org: Org, botId: string | null, query: string, limit = 12): OrgMemoryEntry[] {
+    const visible = this.visibleTo(org, botId);
+    const match = ftsQuery(query ?? "");
+    if (match) {
+      try {
+        const ids = new Set((db(org.id).prepare("select m.id from memory_fts f join memory m on m.rowid = f.rowid where memory_fts match ? order by bm25(memory_fts) limit 60").all(match) as unknown as { id: string }[]).map((r) => r.id));
+        const byId = new Map(visible.map((e) => [e.id, e]));
+        const found = [...ids].map((id) => byId.get(id)).filter((e): e is OrgMemoryEntry => Boolean(e));
+        if (found.length) return found.slice(0, limit);
+      } catch {
+        // A query the index cannot read falls through to the looser match.
+      }
+    }
+    return rank(query ?? "", visible, (e) => e.text).slice(0, limit).map(({ item }) => item);
+  },
+
   add(entry: { org: string; shelf: Shelf; key?: string; text: unknown; by: string; kind?: "note" | "log" }): OrgMemoryEntry {
     const text = tidyText(entry.text);
     if (!text) throw new Error("Say what to remember.");
-    const all = read();
+    const d = db(entry.org);
     const made: OrgMemoryEntry = { id: newId().slice(0, 8), org: entry.org, shelf: entry.shelf, key: entry.shelf === "org" ? "" : String(entry.key ?? ""), text, by: entry.by, kind: entry.kind ?? "note", createdAt: new Date().toISOString() };
-    all.push(made);
+    d.prepare("insert into memory (id, shelf, key, text, by, kind, created_at) values (?, ?, ?, ?, ?, ?, ?)").run(made.id, made.shelf, made.key, made.text, made.by, made.kind, made.createdAt);
     // An agent's record of finished work is kept to its latest lines.
-    const logs = all.filter((e) => e.kind === "log" && e.org === made.org && e.key === made.key);
-    const drop = new Set(logs.slice(0, Math.max(0, logs.length - LOG_LIMIT)).map((e) => e.id));
-    save(all.filter((e) => !drop.has(e.id)));
+    if (made.kind === "log") d.prepare("delete from memory where kind = 'log' and key = ? and rowid not in (select rowid from memory where kind = 'log' and key = ? order by rowid desc limit ?)").run(made.key, made.key, LOG_LIMIT);
     return made;
   },
 
   update(orgId: string, id: string, text: unknown): OrgMemoryEntry {
-    const all = read();
-    const entry = all.find((e) => e.id === id && e.org === orgId);
-    if (!entry) throw new Error("There is no such entry.");
+    const d = db(orgId);
+    const row = d.prepare("select * from memory where id = ?").get(String(id)) as unknown as Row | undefined;
+    if (!row) throw new Error("There is no such entry.");
     const next = tidyText(text);
     if (!next) throw new Error("Say what to remember.");
-    entry.text = next;
-    entry.updatedAt = new Date().toISOString();
-    save(all);
-    return entry;
+    const at = new Date().toISOString();
+    d.prepare("update memory set text = ?, updated_at = ? where id = ?").run(next, at, row.id);
+    return toEntry(orgId, { ...row, text: next, updated_at: at });
   },
 
   remove(orgId: string, id: string) {
-    const all = read();
-    if (!all.some((e) => e.id === id && e.org === orgId)) throw new Error("There is no such entry.");
-    save(all.filter((e) => !(e.id === id && e.org === orgId)));
+    const done = db(orgId).prepare("delete from memory where id = ?").run(String(id));
+    if (!done.changes) throw new Error("There is no such entry.");
   },
 
-  /** Forgets everything an organization remembered, when the organization is deleted. */
+  /** Forgets everything an organization remembered, when the organization is deleted (its database goes with it). */
   purge(orgId: string) {
-    save(read().filter((e) => e.org !== orgId));
+    const all = readJson<OrgMemoryEntry[]>(legacyFile(), []);
+    if (all.some((e) => e.org === orgId)) writeJson(legacyFile(), all.filter((e) => e.org !== orgId));
   },
 
   /** Keeps a line about a task an agent finished: what it was, and how its report began. */
@@ -150,8 +223,8 @@ export function teamMemoryTool(who: (conversationId: string) => { id: string; na
       const member = me ? memberOf(org, me.id) : null;
       const mine = orgMemory.visibleTo(org, me?.id ?? null);
       if (input.action === "search") {
-        const found = rank(input.query ?? "", mine, (e) => e.text).slice(0, 12);
-        return found.length ? found.map(({ item }) => `- [${item.id}] (${shelfName(item)}) ${item.text}`).join("\n") : "Nothing saved matches that.";
+        const found = orgMemory.search(org, me?.id ?? null, input.query ?? "");
+        return found.length ? found.map((item) => `- [${item.id}] (${shelfName(item)}) ${item.text}`).join("\n") : "Nothing saved matches that.";
       }
       if (input.action === "add") {
         const shelf: Shelf = !member || input.shelf === "organization" ? "org" : input.shelf === "mine" ? "agent" : "dept";

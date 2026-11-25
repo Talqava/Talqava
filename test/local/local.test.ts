@@ -3038,3 +3038,49 @@ test("company templates and playbooks: a preview of what they add, routines arri
     orgs.remove(org0.id);
   }
 });
+
+test("shared memory lives in the organization's database: old notes are converted once, and search uses its index", async () => {
+  const { orgs } = await import("../../src/local/orgs.ts");
+  const market = await import("../../src/local/marketplace.ts");
+  const { orgMemory } = await import("../../src/local/orgmemory.ts");
+  const fs = (await import("node:fs")).default;
+  const path = (await import("node:path")).default;
+  const org0 = orgs.create("Memory Co", "Keep the books.", "custom");
+  const legacy = path.join(store.DATA, "org-memory.json");
+  const kept = fs.existsSync(legacy) ? fs.readFileSync(legacy, "utf8") : null;
+  try {
+    market.addTeam("finance-team");
+    const org = orgs.active();
+    // Notes from before the move, in the older file, with another organization's beside them.
+    const old = [
+      { id: "old00001", org: org.id, shelf: "org", key: "", text: "The fiscal year starts in April.", by: "You", kind: "note", createdAt: "2026-10-01T00:00:00.000Z" },
+      { id: "old00002", org: org.id, shelf: "dept", key: "Finance", text: "Invoices are payable within 30 days.", by: "Head of Finance", kind: "note", createdAt: "2026-10-02T00:00:00.000Z" },
+      { id: "old00003", org: org.id, shelf: "agent", key: "bookkeeper", text: "The bank feed is refreshed on Mondays.", by: "Bookkeeper", kind: "note", createdAt: "2026-10-03T00:00:00.000Z", updatedAt: "2026-10-04T00:00:00.000Z" },
+      { id: "other001", org: "someone-else", shelf: "org", key: "", text: "Not ours.", by: "You", kind: "note", createdAt: "2026-10-01T00:00:00.000Z" },
+    ];
+    fs.writeFileSync(legacy, JSON.stringify(old));
+    // Every entry arrives, in order, with who may see it; the file keeps only the other organization's.
+    const all = orgMemory.list(org.id);
+    assert.deepEqual(all.map((e) => [e.id, e.shelf, e.key]), [["old00001", "org", ""], ["old00002", "dept", "Finance"], ["old00003", "agent", "bookkeeper"]]);
+    assert.equal(all[2].updatedAt, "2026-10-04T00:00:00.000Z");
+    assert.deepEqual(JSON.parse(fs.readFileSync(legacy, "utf8")).map((e: { id: string }) => e.id), ["other001"]);
+    // Who may see what is unchanged: the Bookkeeper sees all three; an agent in Finance but not the Bookkeeper sees two.
+    assert.equal(orgMemory.visibleTo(org, "bookkeeper").length, 3);
+    assert.equal(orgMemory.visibleTo(org, "invoice-chaser").length, 2);
+    // Search finds by any word, in any form, and only among what the agent may see.
+    assert.deepEqual(orgMemory.search(org, "bookkeeper", "invoice payable").map((e) => e.id), ["old00002"]);
+    assert.deepEqual(orgMemory.search(org, "invoice-chaser", "bank feed").map((e) => e.id), []);
+    assert.deepEqual(orgMemory.search(org, "bookkeeper", "refreshing feeds").map((e) => e.id), ["old00003"]);
+    // Adding, changing and removing still work, and a change is found by its new words.
+    const added = orgMemory.add({ org: org.id, shelf: "org", text: "Suppliers are paid on Fridays.", by: "You" });
+    orgMemory.update(org.id, added.id, "Suppliers are paid on Thursdays.");
+    assert.deepEqual(orgMemory.search(org, null, "Thursdays").map((e) => e.id), [added.id]);
+    assert.deepEqual(orgMemory.search(org, null, "Fridays").map((e) => e.id), []);
+    orgMemory.remove(org.id, added.id);
+    assert.throws(() => orgMemory.remove(org.id, added.id), /no such entry/);
+  } finally {
+    if (kept === null) fs.rmSync(legacy, { force: true });
+    else fs.writeFileSync(legacy, kept);
+    orgs.remove(org0.id);
+  }
+});
