@@ -44,6 +44,7 @@ import { accessGraph, accessGraphs } from "./access.ts";
 import { loadModelList } from "./modelprices.ts";
 import { COLUMN_TYPES, peopleOf, tables } from "./tables.ts";
 import { sheets } from "./sheets.ts";
+import { PUBLISH_RULES, PUBLISH_WORDS, connectSite, dailyPostPrompt, listContent, listSites, removeSite, updateSite } from "./wordpress.ts";
 import { fromDocx, fromXlsx, toDocx, toXlsx } from "./officefiles.ts";
 import { listOfficeTemplates, useOfficeTemplate } from "./office-templates.ts";
 import { pageTool } from "../core/tools/page.ts";
@@ -207,6 +208,7 @@ function describeRequest(method: string, parts: string[], body: any, url: URL): 
     const map: Record<string, string> = { upload: `Uploaded “${name ?? "a file"}”`, folders: `Made the folder “${body.name ?? ""}”`, move: body.name ? `Renamed to “${body.name}”` : "Moved files", delete: "Deleted files", restore: "Restored from Deleted", purge: "Deleted for good", open: "Showed in Finder", launch: "Opened a file", search: "Searched the library", folder: "Changed who can use a folder" };
     return { kind: "library", action: map[id] ?? (method === "PATCH" ? "Changed who can use a file" : method === "DELETE" ? "Deleted a file" : `${method} library ${id ?? ""}`.trim()), detail: name ? `into ${url.searchParams.get("folder") ?? ""}` : words(body) };
   }
+  if (area === "integrations" && id === "wordpress") return action === "connect" ? null : { kind: "integration", action: method === "DELETE" ? "Disconnected a WordPress site" : parts[3] === "daily" ? "Set up a routine that writes a blog post" : "Changed a WordPress site's settings" };
   if (area === "integrations" && id === "connectors") return { kind: "integration", action: `${parts[3] === "remove" ? "Disconnected" : "Connected"} the ${connectorLabel(parts[2] ?? "")} connector from the catalogue` };
   if (area === "integrations") return { kind: "integration", action: `${id ? id[0].toUpperCase() + id.slice(1) : "Integration"}: ${(action ?? method.toLowerCase()).replace(/-/g, " ")}`, detail: words(body) };
   // Goals and projects write their own entries; small edits (a title, a description) are not worth a line each.
@@ -1607,6 +1609,23 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (route === "GET integrations" && !parts[1]) return send(res, 200, await listIntegrations());
     if (route === "GET integrations" && parts[1] === "git") return send(res, 200, await gitIntegration());
     if (route === "GET integrations" && parts[1] === "mcp") return send(res, 200, mcpIntegration());
+    // WordPress: connect a site, choose what agents may do on it, see its recent posts, and set up a daily post.
+    if (parts[1] === "wordpress") {
+      if (route === "GET integrations" && !parts[2]) return send(res, 200, { sites: listSites(), rules: PUBLISH_RULES.map((id) => ({ id, words: PUBLISH_WORDS[id] })) });
+      if (route === "POST integrations" && parts[2] === "connect") return send(res, 200, await attempt(() => connectSite(body)));
+      if (route === "GET integrations" && parts[2] && parts[3] === "posts") return send(res, 200, await attempt(() => listContent(parts[2], url.searchParams.get("kind") === "page" ? "page" : "post", "", 8)));
+      if (route === "PATCH integrations" && parts[2]) return send(res, 200, await attempt(() => updateSite(parts[2], body)));
+      if (route === "DELETE integrations" && parts[2]) return send(res, 200, await attempt(() => removeSite(parts[2])));
+      if (route === "POST integrations" && parts[2] && parts[3] === "daily") {
+        return send(res, 200, await attempt(async () => {
+          const site = listSites().find((x) => x.id === parts[2]);
+          if (!site) throw new Error("There is no such site.");
+          const hour = Math.min(23, Math.max(0, Math.floor(Number(body.hour ?? 9))));
+          const days = body.days === "weekdays" ? "1-5" : "*";
+          return jobs.create({ name: `Blog post for ${site.name}`, prompt: dailyPostPrompt(site, body.about), schedule: `0 ${hour} * * ${days}`, owner: jobOwner(body.owner), org: body.owner ? orgs.active().id : null });
+        }));
+      }
+    }
     // The connector catalogue: well-known services, what each can read and change, connected with a key.
     if (route === "GET integrations" && parts[1] === "connectors") return send(res, 200, listCatalog());
     if (route === "POST integrations" && parts[1] === "connectors" && parts[3] === "connect") return send(res, 200, await attempt(() => connectCatalog(parts[2], body.key)));

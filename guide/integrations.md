@@ -69,6 +69,26 @@ A repository is a folder of code or documents with a full history of changes. Th
 3. Quit Claude completely and open it again. Keep Talqava open while you use it.
 4. Ask Claude, for example, "What agents are on my Talqava team?" Claude can see your team, give an agent a task, read how it went, list recent tasks, and search or add to your organization's memory. Work that changes files or sends something still waits for your approval in Talqava.
 
+### Connect your WordPress website
+
+1. Open **Integrations** and press **WordPress** (under **Websites**).
+2. In your WordPress site, open **Users › Profile**, scroll to **Application Passwords**, type the name Talqava and press **Add New Application Password**. Copy the password it shows.
+3. Back in Talqava, type your site's address and your WordPress user name, paste the application password, and press **Check and connect**. Talqava checks it with your site before saving.
+4. Choose **What agents may do on this site**:
+   - **Agents write drafts only; I publish them in WordPress** (the starting choice). Nothing an agent writes is public until you publish it.
+   - **Agents ask me before each publish.** Each post waits for your approval.
+   - **Agents publish without asking.** Whatever an agent writes goes live straight away.
+
+Agents with the **connected services** power can then read your posts and pages, save drafts, and update a post or page. They never delete anything, and WordPress keeps earlier versions under **Revisions**. On a drafts-only site an agent cannot change a post that is already public.
+
+### Have an agent write a blog post every day
+
+1. On the **WordPress** page, find your site and **Have an agent write a blog post on a schedule**.
+2. Say what your blog is about, choose the agent, the days and the time, and press **Set up the routine**.
+3. Each run, the agent reads your recent posts so it does not repeat one, follows your Workspace pages, writes the post and saves it as a draft (or publishes it, if you allow that). Change, pause or remove it under **Routines**.
+
+To ask for one post or one change by hand, give a task in your own words, such as "Write a post about our winter opening hours for the blog" or "Update the About page on our website with our new address".
+
 ### Connect a well-known service from the catalogue
 
 The catalogue lists services that publish their own connector and accept a key you make: **Stripe**, **Airtable**, **monday.com**, **Intercom**, **Linear** and **GitHub**. It is on the **Connectors and AI apps** page under **From the catalogue**, and in the **Marketplace** under **Connectors**.
@@ -111,6 +131,10 @@ So agents can call a service that has no integration of its own, without seeing 
 - Agents never push, merge or deploy. Those stay with you.
 
 ## If something goes wrong
+
+- **"WordPress refused that…"** The user name or application password is not accepted. Make a new application password under **Users › Profile** and paste it again. Some security plugins switch application passwords off; allow them for your user.
+- **"…sent the request on to another address."** Use the exact address your browser shows when you open your site, with or without `www`, starting with `https://`.
+- **"That address does not answer as a WordPress site."** Check the address. Some hosts or plugins switch off the site's REST API, which this needs.
 
 - **"GitHub did not accept the token. It may have expired or been revoked."** Make a new token and connect again.
 - **"The code ran out before it was approved."** Press **Connect GitHub** for a new code.

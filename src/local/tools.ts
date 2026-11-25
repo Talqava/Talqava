@@ -31,6 +31,7 @@ import { libraryPrompt, libraryTool, GENERAL_AGENT } from "./library.ts";
 import { projectFilesPrompt, workspacePrompt, workspaceTool } from "./workspace.ts";
 import { tableTool } from "./tables.ts";
 import { guard } from "./guardrails.ts";
+import { wordpressTools } from "./wordpress.ts";
 import { preparing, withLevels } from "./sensitivity.ts";
 import { sheetTool } from "./sheets.ts";
 import { goalsPrompt } from "./goals.ts";
@@ -669,9 +670,14 @@ function orgOverview(): string[] {
 /** Connector tools for a run, and a line for the prompt about any connector that did not answer. */
 async function connectors(enabled: boolean) {
   const cfg = getConfig();
-  if (!enabled || !cfg.mcpServers.length) return { tools: [] as Tool[], note: [] as string[], names: [] as string[] };
-  const { tools, problems } = await connectorTools(cfg.mcpServers);
-  const note = problems.length ? [`These connectors could not be reached, so their tools are missing: ${problems.join("; ")}.`] : [];
+  if (!enabled) return { tools: [] as Tool[], note: [] as string[], names: [] as string[] };
+  // A connected WordPress site comes with its own tools, for agents with the same power as other connected services.
+  const site = wordpressTools();
+  const siteNote = site.length ? ["A WordPress site is connected: use the wordpress__content tool to read, draft and update its posts and pages, and wordpress__publish where the owner allows publishing."] : [];
+  if (!cfg.mcpServers.length) return { tools: site, note: siteNote, names: site.map((t) => t.name) };
+  const { tools: found, problems } = await connectorTools(cfg.mcpServers);
+  const tools = [...found, ...site];
+  const note = [...(problems.length ? [`These connectors could not be reached, so their tools are missing: ${problems.join("; ")}.`] : []), ...siteNote];
   return { tools, note, names: tools.map((t) => t.name) };
 }
 

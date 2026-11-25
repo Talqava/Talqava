@@ -23,7 +23,7 @@ export interface IntegrationInfo {
 }
 
 /** The categories integrations are filed under, in the order they are shown. */
-export const INTEGRATION_CATEGORIES = ["AI models", "Code and repositories", "AI apps and connectors", "Other services"];
+export const INTEGRATION_CATEGORIES = ["AI models", "Websites", "Code and repositories", "AI apps and connectors", "Other services"];
 
 const run = (cwd: string, args: string[], timeout = 15_000): Promise<{ ok: boolean; out: string; err: string }> =>
   new Promise((resolve) => {
@@ -138,7 +138,16 @@ export async function listIntegrations(): Promise<{ categories: string[]; integr
     status: keys.length ? `${keys.length} key${keys.length === 1 ? "" : "s"} saved` : "No keys saved",
   };
   const { langfuseIntegration } = await import("./langfuse.ts");
-  return { categories: INTEGRATION_CATEGORIES, integrations: [aiModels, line(openrouter), line(git), line(mcp), apiKeys, line(langfuseIntegration())] };
+  const wpSites = cfg.wordpress ?? [];
+  const wordpress: IntegrationInfo = {
+    id: "wordpress",
+    name: "WordPress",
+    category: "Websites",
+    summary: "Connect your WordPress site so agents can write blog posts and update pages. You choose whether they only write drafts, ask before publishing, or publish by themselves.",
+    state: wpSites.length ? "connected" : "needs-setup",
+    status: wpSites.length ? `${wpSites.length} site${wpSites.length === 1 ? "" : "s"} connected` : "Connect your site",
+  };
+  return { categories: INTEGRATION_CATEGORIES, integrations: [aiModels, wordpress, line(openrouter), line(git), line(mcp), apiKeys, line(langfuseIntegration())] };
 }
 
 /**

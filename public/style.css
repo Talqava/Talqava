@@ -2016,3 +2016,5 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .levelsdialog .levelwords { padding-left: 18px; margin: 6px 0; }
 .commentrow { padding: 8px 0; border-top: 1px solid var(--line); }
 .commentrow p { margin: 2px 0 4px; white-space: pre-wrap; }
+.wppost { padding: 5px 0; border-top: 1px solid var(--line); gap: 10px; }
+.wpdaily { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; }
