@@ -32,6 +32,8 @@ export interface PageInfo {
   folder: string;
   /** A note's tags. */
   tags: string[];
+  /** The project it belongs to, or null. */
+  project: string | null;
   /** Kept at the top of its list. */
   pinned: boolean;
   /** When the owner asked to be reminded of it, or null. */
@@ -132,12 +134,14 @@ function db(orgId: string): DatabaseSync {
   if (!have.has("tags")) d.exec("alter table pages add column tags text not null default '[]'");
   if (!have.has("level")) d.exec("alter table pages add column level text not null default 'internal'");
   if (!have.has("pinned")) d.exec("alter table pages add column pinned integer not null default 0");
+  if (!have.has("project")) d.exec("alter table pages add column project text");
   if (!have.has("remind_at")) d.exec("alter table pages add column remind_at text");
   ready.add(d);
   return d;
 }
 
 interface Row {
+  project?: string | null;
   pinned?: number;
   remind_at?: string | null;
   level: string;
@@ -336,6 +340,7 @@ function info(org: Org, d: DatabaseSync, row: Row, byId: Map<string, Row>, open:
     folder: row.folder ?? "",
     tags: tagsOf(row.tags),
     level: levelOf(row.level),
+    project: row.project ?? null,
     pinned: Boolean(row.pinned),
     remindAt: row.remind_at ?? null,
     parent: row.parent,
@@ -474,7 +479,7 @@ export const workspace = {
   },
 
   /** A new page. The owner may put it anywhere; an agent only under a page it may see, and it inherits who may see it. */
-  create(org: Org, who: Who, input: { parent?: unknown; title?: unknown; markdown?: unknown; icon?: unknown; template?: string; task?: string | null; position?: number; kind?: unknown; folder?: unknown; tags?: unknown; level?: unknown }): Page {
+  create(org: Org, who: Who, input: { parent?: unknown; title?: unknown; markdown?: unknown; icon?: unknown; template?: string; task?: string | null; position?: number; kind?: unknown; folder?: unknown; tags?: unknown; level?: unknown; project?: unknown }): Page {
     const d = db(org.id);
     const kind = kindOf(input.kind);
     // Documents and notes are not inside pages: a folder or notebook groups them.
@@ -493,6 +498,7 @@ export const workspace = {
     // A page made inside another starts at that page's level, so a sensitive section stays sensitive.
     if (parent) d.prepare("update pages set level = (select level from pages where id = ?) where id = ?").run(parent, id);
     if (input.level !== undefined && who === OWNER) d.prepare("update pages set level = ? where id = ?").run(levelOf(input.level), id);
+    if (input.project && who === OWNER) d.prepare("update pages set project = ? where id = ?").run(String(input.project).slice(0, 64), id);
     if (kind !== "page") {
       // A note starts private: no agent sees it until the owner says so. A document an agent writes is seen by its
       // own group (and the owner); one the owner makes starts open to every agent, like a page.
@@ -526,7 +532,7 @@ export const workspace = {
   },
 
   /** The owner changes a page's title, icon, place, who may see it, or how agents may change it. */
-  update(org: Org, id: string, patch: { title?: unknown; icon?: unknown; parent?: unknown; position?: unknown; access?: unknown; edit?: unknown; protected?: unknown; kind?: unknown; folder?: unknown; tags?: unknown; level?: unknown; pinned?: unknown; remindAt?: unknown }): Page {
+  update(org: Org, id: string, patch: { title?: unknown; icon?: unknown; parent?: unknown; position?: unknown; access?: unknown; edit?: unknown; protected?: unknown; kind?: unknown; folder?: unknown; tags?: unknown; level?: unknown; pinned?: unknown; remindAt?: unknown; project?: unknown }): Page {
     const d = db(org.id);
     const { row, byId } = visible(org, d, id, OWNER);
     if (patch.title !== undefined) {
@@ -555,6 +561,7 @@ export const workspace = {
     if (patch.protected !== undefined) d.prepare("update pages set protected = ? where id = ?").run(patch.protected ? 1 : 0, row.id);
     if (patch.folder !== undefined) d.prepare("update pages set folder = ? where id = ?").run(cleanFolder(patch.folder), row.id);
     if (patch.pinned !== undefined) d.prepare("update pages set pinned = ? where id = ?").run(patch.pinned ? 1 : 0, row.id);
+    if (patch.project !== undefined) d.prepare("update pages set project = ? where id = ?").run(patch.project ? String(patch.project).slice(0, 64) : null, row.id);
     if (patch.remindAt !== undefined) {
       const at = patch.remindAt ? new Date(String(patch.remindAt)) : null;
       if (at && Number.isNaN(at.getTime())) throw new Error("Choose a date and time for the reminder.");
@@ -868,6 +875,17 @@ export function workspacePrompt(org: Org, who: Who, about = ""): string {
   const tree = new Map(workspace.tree(org, who).map((p) => [p.id, p]));
   const lines = pages.map((h) => `- “${h.title}” (page ${h.page}): ${tree.get(h.page)?.summary || h.text.slice(0, 200)}`);
   return `${intro}\n\nPages that match this task (read one with the workspace tool before relying on it):\n${lines.join("\n")}`;
+}
+
+/** For an agent's prompt: the files that belong to the project its task is in, so it starts from them. */
+export function projectFilesPrompt(org: Org, who: Who, project: string | null | undefined, projectTitle = ""): string {
+  if (!project) return "";
+  let files: PageInfo[] = [];
+  try {
+    files = workspace.tree(org, who).filter((p) => p.project === project);
+  } catch {}
+  if (!files.length) return "";
+  return `# This task's project${projectTitle ? `: ${projectTitle}` : ""}\n\nThese files belong to the project. Start from them, and put what you make with them:\n${files.slice(0, 30).map((p) => `- “${p.title}” (${KIND_WORDS[p.kind]}, ${p.kind === "sheet" ? `sheet tool, file ${p.id}` : `workspace tool, page ${p.id}`})`).join("\n")}`;
 }
 
 /** The tool agents use for the workspace. `who` says which agent is calling, and `task` which task it is working on. */

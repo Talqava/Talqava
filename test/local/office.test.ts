@@ -148,3 +148,21 @@ test("slides: a deck is slides of a title, text and notes; agents save and sugge
   const out = String(await tool.run({ action: "file", kind: "slides", title: "Team update", markdown: "# One\n\n- a\n\n---\n\n# Two\n\n- b" } as never, { conversation: { id: "task-7" }, signal: new AbortController().signal } as never));
   assert.match(out, /Saved as the slides “Team update” .* 2 slides/);
 });
+
+test("a file can belong to a project, and an agent working in that project is told about it", async () => {
+  const { projectFilesPrompt } = await import("../../src/local/workspace.ts");
+  const doc = workspace.create(org, null, { kind: "doc", title: "Launch plan", project: "proj-1" });
+  const sheet = workspace.create(org, null, { kind: "sheet", title: "Launch budget", markdown: "!sheet One\n" });
+  assert.equal(doc.project, "proj-1");
+  assert.equal(workspace.update(org, sheet.id, { project: "proj-1" }).project, "proj-1");
+  const told = projectFilesPrompt(org, "sales-lead", "proj-1", "Spring launch");
+  assert.match(told, /# This task's project: Spring launch/);
+  assert.match(told, /“Launch plan” \(document, workspace tool, page /);
+  assert.match(told, /“Launch budget” \(sheet, sheet tool, file /);
+  assert.equal(projectFilesPrompt(org, "sales-lead", "another-project"), "");
+  assert.equal(projectFilesPrompt(org, "sales-lead", null), "");
+  // A file the agent may not see is not mentioned.
+  workspace.update(org, doc.id, { access: { private: true } });
+  assert.doesNotMatch(projectFilesPrompt(org, "sales-lead", "proj-1"), /Launch plan/);
+  assert.equal(workspace.update(org, sheet.id, { project: null }).project, null);
+});

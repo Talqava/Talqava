@@ -28,7 +28,7 @@ import { loadCrew } from "./crew.ts";
 import { assignableBy, groupModelOf, memberOf, oneLine, orgs, reportsOf, requestableBy, rolePrompt } from "./orgs.ts";
 import { orgMemoryPrompt, teamMemoryTool } from "./orgmemory.ts";
 import { libraryPrompt, libraryTool, GENERAL_AGENT } from "./library.ts";
-import { workspacePrompt, workspaceTool } from "./workspace.ts";
+import { projectFilesPrompt, workspacePrompt, workspaceTool } from "./workspace.ts";
 import { tableTool } from "./tables.ts";
 import { guard } from "./guardrails.ts";
 import { preparing, withLevels } from "./sensitivity.ts";
@@ -732,7 +732,8 @@ function unguardedRunSpec(jobs: JobBook) {
       const org = orgs.active();
       const role = rolePrompt(bot, org);
       const onChart = Boolean(memberOf(org, bot.id));
-      const remembered = onChart ? [goalsPrompt(org, bot.id), orgMemoryPrompt(org, bot.id, topicOf(conversation)), workspacePrompt(org, bot.id, topicOf(conversation)), libraryPrompt(org, bot.id, topicOf(conversation))].filter(Boolean).join("\n\n") : "";
+      const inProject = onChart ? ((item) => (item?.projectId ? { id: item.projectId, title: "" } : null))((await import("./work.ts")).work.list(org).find((t) => t.quest === conversation.id)) : null;
+      const remembered = onChart ? [goalsPrompt(org, bot.id), projectFilesPrompt(org, bot.id, inProject?.id, inProject?.title), orgMemoryPrompt(org, bot.id, topicOf(conversation)), workspacePrompt(org, bot.id, topicOf(conversation)), libraryPrompt(org, bot.id, topicOf(conversation))].filter(Boolean).join("\n\n") : "";
       const question = Boolean(quest.kind);
       // Why the task exists, from the mission down: so a hand-off three levels deep still knows what it is for.
       const why = question ? "" : whyPrompt(quest);

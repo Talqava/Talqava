@@ -2,6 +2,7 @@
 // memory (a chat folder, kept apart from other projects'), its lead, the goal it serves, what "done" looks like and
 // a due day. "Project" used to mean two things, a group of tasks under a goal and a folder of chats; here they
 // become one: every chat folder is a project, and a project gets its chat folder the first time it needs one.
+import { workspace } from "./workspace.ts";
 import { conversations, spaces } from "./store.ts";
 import { orgs } from "./orgs.ts";
 import type { Org } from "./orgs.ts";
@@ -29,6 +30,7 @@ export interface ProjectPage {
   project: ProjectCard;
   tasks: WorkItem[];
   chats: { id: string; title: string; updatedAt: string; bot: string | null }[];
+  files: { id: string; kind: string; title: string; updatedAt: string; updatedBy: string }[];
 }
 
 const NEEDS_OWNER = new Set(["review", "waiting", "blocked"]);
@@ -110,7 +112,9 @@ export const projects = {
           .filter((c) => c.space === project.space && c.source === "chat")
           .map((c) => ({ id: c.id, title: c.title, updatedAt: c.updatedAt, bot: c.bot ?? null }))
       : [];
-    return { project, tasks, chats };
+    // The documents, sheets, slides, notes and pages put in this project.
+    const files = workspace.tree(org).filter((f) => f.project === project.id).map((f) => ({ id: f.id, kind: f.kind, title: f.title, updatedAt: f.updatedAt, updatedBy: f.updatedBy }));
+    return { project, tasks, chats, files };
   },
 
   /** The project's chat folder, made the first time it is needed. Its name follows the project's, kept unique. */
