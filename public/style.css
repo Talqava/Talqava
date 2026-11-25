@@ -1803,3 +1803,10 @@ dialog.guidedialog::backdrop { background: var(--scrim); }
 .rsteptable th, .rsteptable td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); }
 .rsteptable th { font-weight: 600; color: var(--muted); }
 .rsteptable .tag { margin-left: 6px; }
+
+/* The page icon picker. */
+.iconpicker { position: absolute; z-index: 60; width: 320px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m, 8px); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18); }
+.icongrid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; max-height: 220px; overflow-y: auto; }
+.iconcell { font-size: 20px; line-height: 1; padding: 6px 0; border-radius: 6px; border: 1px solid transparent; background: none; cursor: pointer; }
+.iconcell:hover, .iconcell.on { background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.iconcell.current { outline: 2px solid var(--accent); }

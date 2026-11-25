@@ -23,13 +23,38 @@ export const BLOCKS = [
   { id: "divider", label: "Divider", hint: "A line between sections", words: "divider line rule separator" },
 ];
 
+/** Where a link to another page points: an address inside the app, which the app opens itself. */
+export const pageHref = (id) => `#page/${id}`;
+
 /**
  * Makes an editor in `element`, starting from `markdown`. `onChange` is called after every edit. `onSlash` is
  * called with what follows a "/" typed at the start of an empty line, and where it is, so the app can show a menu;
- * `onSlashEnd` when that stops. Returns a small handle; the editor itself is never exposed.
+ * `onSlashEnd` when that stops. `onLink` is called the same way with what follows "[[" typed anywhere, so the app
+ * can offer pages to link to; `onLinkEnd` when that stops. Returns a small handle; the editor itself is never exposed.
  */
-export function createEditor(element, { markdown = "", editable = true, placeholder = "", onChange, onSlash, onSlashEnd } = {}) {
+export function createEditor(element, { markdown = "", editable = true, placeholder = "", onChange, onSlash, onSlashEnd, onLink, onLinkEnd } = {}) {
   let slashing = false;
+  let linking = false;
+  // "[[" and up to 60 characters of a page's name, just before the cursor.
+  const linkState = (editor) => {
+    const { $from, empty } = editor.state.selection;
+    if (!empty) return null;
+    const before = $from.parent.textBetween(0, $from.parentOffset, undefined, "\ufffc");
+    const m = /\[\[([^\[\]\ufffc]{0,60})$/.exec(before);
+    if (!m) return null;
+    return { query: m[1].trim().toLowerCase(), from: $from.pos - m[0].length, to: $from.pos };
+  };
+  const checkLink = (editor) => {
+    const s = editable ? linkState(editor) : null;
+    if (s) {
+      linking = true;
+      const at = editor.view.coordsAtPos(s.to);
+      onLink?.(s.query, { left: at.left, top: at.top, bottom: at.bottom });
+    } else if (linking) {
+      linking = false;
+      onLinkEnd?.();
+    }
+  };
   const slashState = (editor) => {
     const { state } = editor;
     const { $from, empty } = state.selection;
@@ -54,7 +79,8 @@ export function createEditor(element, { markdown = "", editable = true, placehol
     element,
     editable,
     extensions: [
-      StarterKit.configure({ link: { openOnClick: !editable, autolink: true, defaultProtocol: "https" } }),
+      // Links to other pages ("#page/…") are opened by the app itself, so the editor never follows them.
+      StarterKit.configure({ link: { openOnClick: false, autolink: true, defaultProtocol: "https", isAllowedUri: (url, ctx) => url.startsWith("#page/") || ctx.defaultValidate(url) } }),
       TaskList,
       TaskItem.configure({ nested: true }),
       TableKit.configure({ table: { resizable: false } }),
@@ -66,9 +92,13 @@ export function createEditor(element, { markdown = "", editable = true, placehol
     onUpdate: ({ editor: e }) => {
       onChange?.();
       checkSlash(e);
+      checkLink(e);
     },
-    onSelectionUpdate: ({ editor: e }) => checkSlash(e),
-    onBlur: () => slashing && ((slashing = false), onSlashEnd?.()),
+    onSelectionUpdate: ({ editor: e }) => (checkSlash(e), checkLink(e)),
+    onBlur: () => {
+      if (slashing) (slashing = false), onSlashEnd?.();
+      if (linking) (linking = false), onLinkEnd?.();
+    },
   });
 
   return {
@@ -101,6 +131,15 @@ export function createEditor(element, { markdown = "", editable = true, placehol
       (run ? run(chain) : chain).run();
       slashing = false;
       onSlashEnd?.();
+    },
+    /** Replaces the "[[…" being typed with a link to a page, showing its title. */
+    linkPage(id, title) {
+      const s = linkState(editor);
+      const chain = editor.chain().focus();
+      if (s) chain.deleteRange({ from: s.from, to: s.to });
+      chain.insertContent({ type: "text", text: title, marks: [{ type: "link", attrs: { href: pageHref(id) } }] }).unsetMark("link").insertContent(" ").run();
+      linking = false;
+      onLinkEnd?.();
     },
     /** Applies simple formatting from a toolbar: bold, italic, strike, code, link. */
     format(kind, value) {

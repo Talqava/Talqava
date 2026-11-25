@@ -2732,3 +2732,33 @@ test("each connected AI service is checked in the background, and one that stops
     server.close();
   }
 });
+
+test("workspace pages link to each other by name, keep links on rename, list backlinks, and deleted pages can be emptied", async () => {
+  const { orgs } = await import("../../src/local/orgs.ts");
+  const { workspace } = await import("../../src/local/workspace.ts");
+  const org0 = orgs.create("Links Co", "Sell well.", "custom");
+  try {
+    const org = orgs.active();
+    const prices = workspace.create(org, null, { title: "Price list", icon: "🧑‍💼" });
+    // A whole emoji is kept, even one made of several characters.
+    assert.equal(workspace.get(org, prices.id).icon, "🧑‍💼");
+    const sop = workspace.create(org, null, { title: "Sales procedure" });
+    workspace.save(org, sop.id, "Quote from [[price list]], never from memory. [[No such page]] stays as typed.");
+    const md = workspace.get(org, sop.id).markdown;
+    assert.match(md, new RegExp(`\\[Price list\\]\\(#page/${prices.id}\\)`));
+    assert.match(md, /\[\[No such page\]\] stays as typed/);
+    assert.deepEqual(workspace.backlinks(org, prices.id).map((p) => p.title), ["Sales procedure"]);
+    // Renaming keeps the link and shows the new name.
+    workspace.update(org, prices.id, { title: "Prices 2027" });
+    assert.match(workspace.get(org, sop.id).markdown, new RegExp(`\\[Prices 2027\\]\\(#page/${prices.id}\\)`));
+    // Deleted pages: restorable, then emptied for good.
+    workspace.archive(org, sop.id);
+    assert.equal(workspace.deleted(org).length, 1);
+    assert.equal(workspace.deleted(org)[0].daysLeft, 30);
+    assert.deepEqual(workspace.purge(org), { removed: 1 });
+    assert.equal(workspace.deleted(org).length, 0);
+    assert.throws(() => workspace.restore(org, sop.id), /no such deleted page/);
+  } finally {
+    orgs.remove(org0.id);
+  }
+});

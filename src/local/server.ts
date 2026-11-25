@@ -1127,11 +1127,14 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       if (route === "GET workspace" && id && !sub) return send(res, 200, await attempt(() => workspace.get(org, id)));
       if (route === "PUT workspace" && id && !sub) return send(res, 200, await attempt(() => workspace.save(org, id, body.markdown, body.baseRev)));
       if (route === "PATCH workspace" && id && !sub) return send(res, 200, await attempt(() => workspace.update(org, id, body)));
-      if (route === "DELETE workspace" && id && !sub) return send(res, 200, await attempt(() => workspace.archive(org, id)));
+      if (route === "DELETE workspace" && id && id !== "deleted" && !sub) return send(res, 200, await attempt(() => workspace.archive(org, id)));
       if (route === "POST workspace" && id && sub === "restore") return send(res, 200, await attempt(() => workspace.restore(org, id)));
+      // Empty deleted: every deleted page is removed for good.
+      if (route === "DELETE workspace" && id === "deleted" && !sub) return send(res, 200, await attempt(() => workspace.purge(org)));
       if (route === "GET workspace" && id && sub === "revisions" && !extra) return send(res, 200, await attempt(() => workspace.revisions(org, id)));
       if (route === "GET workspace" && id && sub === "revisions" && extra) return send(res, 200, await attempt(() => workspace.revision(org, id, Number(extra))));
       if (route === "POST workspace" && id && sub === "revisions" && extra) return send(res, 200, await attempt(() => workspace.restoreRevision(org, id, Number(extra))));
+      if (route === "GET workspace" && id && sub === "backlinks") return send(res, 200, await attempt(() => workspace.backlinks(org, id)));
       if (route === "GET workspace" && id && sub === "tasks") {
         return send(res, 200, await attempt(() => {
           workspace.get(org, id);
