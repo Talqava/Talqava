@@ -42,6 +42,8 @@ These limits are enforced by the app itself. A person who tries something their 
 
 **Sensitivity levels decide what may reach an AI service.** Every page, document, note, sheet and Library document has a level: **Public**, **Internal** (the starting level), **Confidential** or **Restricted**. Under **Sensitive information** you decide, for each level, where it may be sent: any connected AI service, only approved services, only models on this computer, or no AI model at all. An agent whose AI service may not receive a level is not given those items; it is told why, so it says so in its report, and the attempt is logged. A **Restricted** item is also hidden from every agent you have not named on it. Until you change these rules, every level may go to any service, as before.
 
+**What is stored, and how it is protected.** Talqava keeps its data on this computer. What sits on the disk is protected by the computer's own disk encryption (FileVault on a Mac, BitLocker on Windows); **Backups and stored data** tells you whether it is on. Backups are encrypted by Talqava itself with your passphrase, so a copy kept elsewhere cannot be read without it. Talqava does not add a second layer of encryption to the files on this disk, or keep keys in a company key service.
+
 **Alerts and reviews.** Under **Alerts and reviews**, Talqava lists what deserves a look from the last 7 days: a run of refused sign-ins, changes to people or rules, and agents refused again and again. Alerts are shown here and in your monitoring system if you connect one; Talqava does not send email.
 
 **Agent guardrails are rules above every agent.** Under **Agent guardrails** you set rules for the whole installation: whether changes always ask a person, whether agents may run commands, use connected services or the web, which sites are approved, and the most a task may spend or run. An agent's own settings can be stricter than these, never looser. They work whether or not people and sign-in are turned on, and apply to tasks that start after you change them.
@@ -126,6 +128,18 @@ A page made inside a sensitive page starts at the same level. Tables follow thei
 1. Under **Keeping and deleting records**, type their name or email under **Find everything about one person** and press **Search**.
 2. Talqava lists every page, document, note, sheet, Library document, memory, chat and task where it appears. **Download this list** for your records.
 3. Open each place to correct or delete it. Talqava does not erase it for you, because a name can sit inside text you still need.
+
+### Back up everything, encrypted
+
+1. Under **Backups and stored data**, type a passphrase of at least 12 characters and press **Set up backups**. Write the passphrase down somewhere safe: without it a backup cannot be opened, by you or anyone.
+2. Change the folder if you want backups kept somewhere that is copied off this computer, such as a synced drive.
+3. A backup is made every night while Talqava is open. Press **Back up now** to make one straight away. The newest 7 are kept.
+4. Press **Test a restore** now and then. Talqava opens the newest backup with your passphrase and reads every file back, without changing anything, so you know it works before you need it.
+
+### Get your data back from a backup
+
+1. Press **Restore into a new folder** and type your passphrase. The backup's files are written to a new folder named `restored-…` next to Talqava's data folder. Your current data is not touched.
+2. To switch to the restored copy: quit Talqava, rename the current `data` folder (for example to `data-old`), rename the `restored-…` folder to `data`, and open Talqava again.
 
 ### Do an access review
 

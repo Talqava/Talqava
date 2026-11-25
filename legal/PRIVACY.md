@@ -16,7 +16,8 @@ Everything Talqava knows is stored in its data folder on your computer:
 - workspace pages, Office documents, sheets and notes, their history and their tables;
 - library documents, and the text read from them;
 - the people you add under Security: their name, email, role, a scrambled form of their password that cannot be turned back into it, and when they signed in;
-- your settings, including API keys and sign-ins you add.
+- your settings, including API keys and sign-ins you add;
+- encrypted backups, when you set them up, in the folder you choose. Only a key made from your passphrase is kept, never the passphrase.
 
 On a Mac, the app keeps this in `~/Library/Application Support/Talqava Agents/data` (or `Talqava/data`). If you run Talqava from the source code or the installer, it is the `data` folder you chose. We cannot see or reach any of it.
 

@@ -49,6 +49,7 @@ import { listOfficeTemplates, useOfficeTemplate } from "./office-templates.ts";
 import { pageTool } from "../core/tools/page.ts";
 import { describeGuardrails, guardrails, guardrailsFrom } from "./guardrails.ts";
 import { securityOverview, securityReport } from "./securitycenter.ts";
+import { backupStatus, makeBackup, nightlyBackup, restoreTo, setBackup, testRestore } from "./backup.ts";
 import { finishSso, setSso, sso, ssoPublic, startSso } from "./sso.ts";
 import { RETENTION_CHOICES, findPerson, retention, retentionFrom, sweep } from "./retention.ts";
 import { REVIEW_EVERY_DAYS, alerts, feedStatus, reviews, setFeed, startAuditFeed } from "./auditfeed.ts";
@@ -828,7 +829,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     const area = parts[0] || "";
     if (!people.networkAllowed(req.socket.remoteAddress)) throw new HttpError(403, "Talqava can only be used from your organization's approved networks.");
     // The most sensitive changes ask the person to type their password again, unless they did so in the last few minutes.
-    const sensitive = req.method !== "GET" && ((area === "people" && parts[1] !== "start") || (area === "security-ops" && parts[1] === "feed") || (route === "PUT settings" && (body.guardrails || body.sensitivity || body.retention)));
+    const sensitive = req.method !== "GET" && ((area === "people" && parts[1] !== "start") || (area === "security-ops" && (parts[1] === "feed" || parts[1] === "backup")) || (route === "PUT settings" && (body.guardrails || body.sensitivity || body.retention)));
     if (sensitive && !people.confirmedRecently(cookieOf(req))) throw Object.assign(new HttpError(403, "Type your password again to make this change."), { confirm: true });
     if (people.mustSetUpSecondStep(me) && !["me", "state", "people"].includes(area)) throw new HttpError(403, "Set up your second step first: your organization requires it. Open Security.");
     if (!mayDo(me.role, req.method ?? "GET", area, parts[1] ?? "")) throw new HttpError(403, `Your role (${ROLE_WORDS[me.role].name}) does not allow that. Ask an administrator.`);
@@ -873,6 +874,11 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   if (parts[0] === "security-ops") {
     const by = me ? `${me.name} (${ROLE_WORDS[me.role].name})` : "You";
     if (me && req.method !== "GET" && me.role !== "owner" && me.role !== "admin") throw new HttpError(403, `Your role (${ROLE_WORDS[me.role].name}) does not allow that. Ask an administrator.`);
+    if (route === "GET security-ops" && parts[1] === "backup") return send(res, 200, backupStatus());
+    if (req.method === "PUT" && parts[1] === "backup") return send(res, 200, await tryIt(() => setBackup(body)));
+    if (req.method === "POST" && parts[1] === "backup" && parts[2] === "now") return send(res, 200, await tryIt(() => ((r) => ({ name: path.basename(r.file), files: r.files, bytes: r.bytes, skipped: r.skipped }))(makeBackup())));
+    if (req.method === "POST" && parts[1] === "backup" && parts[2] === "test") return send(res, 200, await tryIt(() => testRestore(body.passphrase, body.name)));
+    if (req.method === "POST" && parts[1] === "backup" && parts[2] === "restore") return send(res, 200, await tryIt(() => restoreTo(body.passphrase, body.name)));
     if (route === "GET security-ops" && parts[1] === "person") return send(res, 200, await tryIt(() => findPerson(orgs.active(), url.searchParams.get("q"))));
     if (route === "GET security-ops") return send(res, 200, { feed: feedStatus(), alerts: alerts(), reviews: reviews.list().slice(0, 5), due: reviews.due(), every: REVIEW_EVERY_DAYS, retention: retention(), retentionChoices: RETENTION_CHOICES });
     if (req.method === "PUT" && parts[1] === "feed") return send(res, 200, await tryIt(() => setFeed(body.url ? body : null)));
@@ -1790,6 +1796,8 @@ export function start() {
     }
   };
   setTimeout(tidy, 60_000).unref();
+  setTimeout(() => nightlyBackup(), 120_000).unref();
+  setInterval(() => nightlyBackup(), 3600 * 1000).unref();
   setInterval(tidy, 24 * 3600 * 1000).unref();
   const server = http.createServer(handle);
   server.listen(PORT, HOST, () => {
