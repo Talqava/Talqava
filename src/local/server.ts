@@ -252,13 +252,22 @@ class HttpError extends Error {
 }
 
 // ---------- sign-in ----------
-const sha = (text: string) => crypto.createHash("sha256").update(text).digest();
-const sessionToken = () => crypto.createHmac("sha256", getConfig().sessionSecret).update(`session:${PASSWORD}`).digest("hex");
+/**
+ * A password stretched into a key with scrypt, salted with this installation's secret. Deliberately slow, so guessing
+ * is slow too. The password itself is never hashed with a fast hash or kept in a cookie.
+ */
+const passwordKey = (password: string) => crypto.scryptSync(password, `talqava-sign-in:${getConfig().sessionSecret}`, 32);
+let ownKey: Buffer | null = null;
+/** The key of the password this app was started with, worked out once. */
+const ownPasswordKey = () => (ownKey ??= passwordKey(PASSWORD));
+const sessionToken = () => crypto.createHmac("sha256", getConfig().sessionSecret).update("session:").update(ownPasswordKey()).digest("hex");
+/** Compares two texts without giving away, by how long it takes, where they differ. */
+const sameText = (a: string, b: string) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
 function signedIn(req: IncomingMessage): boolean {
   if (!PASSWORD) return true;
   const cookie = new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([a-f0-9]+)`).exec(req.headers.cookie || "");
-  return Boolean(cookie) && crypto.timingSafeEqual(sha(cookie![1]), sha(sessionToken()));
+  return Boolean(cookie) && sameText(cookie![1], sessionToken());
 }
 
 // Without a password the page only answers to this machine's own address, and
@@ -691,7 +700,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   (req as { auditBody?: unknown }).auditBody = route === "POST login" ? {} : body;
 
   if (route === "POST login") {
-    const ok = PASSWORD && crypto.timingSafeEqual(sha(String(body.password || "")), sha(PASSWORD));
+    const ok = PASSWORD && crypto.timingSafeEqual(passwordKey(String(body.password || "").slice(0, 1000)), ownPasswordKey());
     if (!ok) {
       await new Promise((r) => setTimeout(r, 1000)); // slows password guessing
       throw new HttpError(401, "Wrong password.");
@@ -1281,7 +1290,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       // Opens a file in the app this computer uses for it (Preview, Word, Excel…).
       return send(res, 200, await attempt(() => {
         const { full } = library.file(org, Number(body.id));
-        const [command, args] = process.platform === "darwin" ? ["open", [full]] : process.platform === "win32" ? ["cmd", ["/c", "start", "", full]] : ["xdg-open", [full]];
+        const [command, args] = process.platform === "darwin" ? ["open", [full]] : process.platform === "win32" ? ["explorer.exe", [full]] : ["xdg-open", [full]];
         execFile(command, args, () => {});
         return { ok: true };
       }));

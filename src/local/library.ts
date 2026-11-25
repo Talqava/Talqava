@@ -154,7 +154,16 @@ function unzip(buffer: Buffer): Map<string, () => Buffer> {
 }
 
 const unescapeXml = (text: string) => text.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&amp;/g, "&");
-const xmlText = (xml: string, paragraph: RegExp) => unescapeXml(xml.replace(paragraph, "\n").replace(/<[^>]+>/g, "")).replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+/** Text with every tag taken out. Repeated until nothing is left to take, so pieces cannot join up into a new tag. */
+export function stripTags(text: string): string {
+  let out = text;
+  for (let before = ""; before !== out; ) {
+    before = out;
+    out = out.replace(/<[^>]*>/g, "");
+  }
+  return out;
+}
+const xmlText = (xml: string, paragraph: RegExp) => unescapeXml(stripTags(xml.replace(paragraph, "\n"))).replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 
 function officeText(type: string, buffer: Buffer): string {
   const files = unzip(buffer);
@@ -165,7 +174,7 @@ function officeText(type: string, buffer: Buffer): string {
     return slides.map((n, i) => `Slide ${i + 1}\n${xmlText(read(n), /<\/a:p>/g)}`).join("\n\n");
   }
   // A spreadsheet: the words in its cells (numbers alone say little without them).
-  const shared = [...read("xl/sharedStrings.xml").matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => unescapeXml(m[1].replace(/<[^>]+>/g, "")));
+  const shared = [...read("xl/sharedStrings.xml").matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => unescapeXml(stripTags(m[1])));
   const sheets = [...files.keys()].filter((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort();
   return sheets
     .map((n, i) => {
