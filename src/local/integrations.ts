@@ -162,6 +162,20 @@ export async function listIntegrations(): Promise<{ categories: string[]; integr
     state: c.connected ? "connected" : "needs-setup",
     status: c.connected ? "Connected with your key" : "Connects with a key you paste",
   }));
+  // And the services built on Talqava's own connector kit.
+  const { listServices } = await import("./connector-kit.ts");
+  await import("./services/index.ts");
+  for (const s of listServices()) {
+    const bad = s.connections.filter((c) => c.problem).length;
+    services.push({
+      id: `service:${s.id}`,
+      name: s.name,
+      category: s.category,
+      summary: s.about,
+      state: s.connections.length ? "connected" : "needs-setup",
+      status: s.connections.length ? `${s.connections.map((c) => c.label).join(", ")}${bad ? " · needs attention" : ""}` : "Connects with a key you paste",
+    });
+  }
   const taken = new Set([...own, ...services].map((i) => i.name.toLowerCase()));
   const coming: IntegrationInfo[] = COMING_SERVICES.filter((c) => !taken.has(c.name.toLowerCase())).map((c) => ({
     id: `coming:${c.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,

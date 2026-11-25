@@ -59,6 +59,8 @@ import { ROLES, ROLE_WORDS, mayDo, people } from "./people.ts";
 import type { Person } from "./people.ts";
 import { projects } from "./projects.ts";
 import { connectCatalog, connectorLabel, disconnectCatalog, listCatalog } from "./connector-catalog.ts";
+import { changeRules, checkConnections, connectService, listServices, removeConnection, updateConnection } from "./connector-kit.ts";
+import "./services/index.ts";
 import { installKit, listKits, previewKit, runPlaybook, undoKit } from "./kits.ts";
 import { connectLangfuse, langfuseIntegration, recordStep, removeLangfuse } from "./langfuse.ts";
 import { finishOpenRouterSignIn, openrouterIntegration, openrouterModels, removeOpenRouter, saveOpenRouterKey, startOpenRouterSignIn, useOpenRouterModel } from "./openrouter.ts";
@@ -208,6 +210,7 @@ function describeRequest(method: string, parts: string[], body: any, url: URL): 
     const map: Record<string, string> = { upload: `Uploaded “${name ?? "a file"}”`, folders: `Made the folder “${body.name ?? ""}”`, move: body.name ? `Renamed to “${body.name}”` : "Moved files", delete: "Deleted files", restore: "Restored from Deleted", purge: "Deleted for good", open: "Showed in Finder", launch: "Opened a file", search: "Searched the library", folder: "Changed who can use a folder" };
     return { kind: "library", action: map[id] ?? (method === "PATCH" ? "Changed who can use a file" : method === "DELETE" ? "Deleted a file" : `${method} library ${id ?? ""}`.trim()), detail: name ? `into ${url.searchParams.get("folder") ?? ""}` : words(body) };
   }
+  if (area === "integrations" && id === "services") return null; // the kit writes its own audit entries, with the account's name
   if (area === "integrations" && id === "wordpress") return action === "connect" ? null : { kind: "integration", action: method === "DELETE" ? "Disconnected a WordPress site" : parts[3] === "daily" ? "Set up a routine that writes a blog post" : "Changed a WordPress site's settings" };
   if (area === "integrations" && id === "connectors") return { kind: "integration", action: `${parts[3] === "remove" ? "Disconnected" : "Connected"} the ${connectorLabel(parts[2] ?? "")} connector from the catalogue` };
   if (area === "integrations") return { kind: "integration", action: `${id ? id[0].toUpperCase() + id.slice(1) : "Integration"}: ${(action ?? method.toLowerCase()).replace(/-/g, " ")}`, detail: words(body) };
@@ -1609,6 +1612,14 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (route === "GET integrations" && !parts[1]) return send(res, 200, await listIntegrations());
     if (route === "GET integrations" && parts[1] === "git") return send(res, 200, await gitIntegration());
     if (route === "GET integrations" && parts[1] === "mcp") return send(res, 200, mcpIntegration());
+    // Services built on the connector kit: one set of routes for all of them.
+    if (parts[1] === "services") {
+      if (route === "GET integrations" && !parts[2]) return send(res, 200, { services: listServices(), rules: changeRules() });
+      if (route === "POST integrations" && parts[2] && parts[3] === "connect") return send(res, 200, await attempt(() => connectService(parts[2], body)));
+      if (route === "POST integrations" && parts[2] === "check") return send(res, 200, await checkConnections());
+      if (route === "PATCH integrations" && parts[2] === "connections" && parts[3]) return send(res, 200, await attempt(async () => updateConnection(parts[3], body)));
+      if (route === "DELETE integrations" && parts[2] === "connections" && parts[3]) return send(res, 200, await attempt(async () => removeConnection(parts[3])));
+    }
     // WordPress: connect a site, choose what agents may do on it, see its recent posts, and set up a daily post.
     if (parts[1] === "wordpress") {
       if (route === "GET integrations" && !parts[2]) return send(res, 200, { sites: listSites(), rules: PUBLISH_RULES.map((id) => ({ id, words: PUBLISH_WORDS[id] })) });
