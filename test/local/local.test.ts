@@ -1926,8 +1926,8 @@ test("the gateway to AI models: connect any service with a key, list its models 
     assert.equal((await gateway.listModels(store.getConfig().providers.find((p) => p.id === "azure")!)).models.length, 3);
 
     // Another service by name.
-    const custom = await gateway.connect("custom", { address: `${address}/v1`, key: "good-key", name: "Portkey" });
-    assert.equal(custom.provider, "portkey");
+    const custom = await gateway.connect("custom", { address: `${address}/v1`, key: "good-key", name: "Company Gateway" });
+    assert.equal(custom.provider, "company-gateway");
     await assert.rejects(gateway.connect("custom", { address: `${address}/v1`, name: "!!" }), /Give the service a name/);
 
     // Backups: only from connected services; the model behind them hands over.
@@ -1944,7 +1944,7 @@ test("the gateway to AI models: connect any service with a key, list its models 
     assert.deepEqual(store.getConfig().backups, ["anthropic/claude-haiku-5-5"]);
     const state = await gateway.gatewayState();
     assert.equal(state.services.length, gateway.SERVICES.length);
-    assert.deepEqual(state.connected.filter((c) => !c.standard).map((c) => c.id).sort(), ["anthropic", "azure", "groq", "portkey"]);
+    assert.deepEqual(state.connected.filter((c) => !c.standard).map((c) => c.id).sort(), ["anthropic", "azure", "company-gateway", "groq"]);
   } finally {
     server.close();
     delete process.env.TALQAVA_OPENROUTER_API;
@@ -2760,5 +2760,56 @@ test("workspace pages link to each other by name, keep links on rename, list bac
     assert.throws(() => workspace.restore(org, sop.id), /no such deleted page/);
   } finally {
     orgs.remove(org0.id);
+  }
+});
+
+test("Langfuse gets each model call's model, tokens, cost and agent, never what was said; Portkey takes its own key header", async () => {
+  const lf = await import("../../src/local/langfuse.ts");
+  const http = await import("node:http");
+  const got: { auth: string; version: string; body: any }[] = [];
+  const server = http.createServer(async (req, res) => {
+    let raw = "";
+    for await (const chunk of req) raw += chunk;
+    got.push({ auth: String(req.headers.authorization), version: String(req.headers["x-langfuse-ingestion-version"]), body: JSON.parse(raw) });
+    const ok = req.url === "/api/public/otel/v1/traces" && req.headers.authorization === `Basic ${Buffer.from("pk-lf-1:sk-lf-2").toString("base64")}`;
+    res.writeHead(ok ? 200 : 401, { "content-type": "application/json" }).end("{}");
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const host = `http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}`;
+  try {
+    await assert.rejects(lf.connectLangfuse({ host, publicKey: "abc", secretKey: "def" }), /starts with pk-lf-/);
+    await assert.rejects(lf.connectLangfuse({ host, publicKey: "pk-lf-1", secretKey: "sk-lf-wrong" }), /did not accept those keys/);
+    assert.deepEqual(await lf.connectLangfuse({ host, publicKey: "pk-lf-1", secretKey: "sk-lf-2" }), { ok: true });
+    lf.recordStep({ model: "claude-opus-5-5 on Anthropic", ms: 2500, cost: 0.0123, input: 1200, output: 300, cacheRead: 8000 }, { trace: "task-1", traceName: "Close November", agent: "Bookkeeper", session: "conv-1" });
+    await lf.flushLangfuse();
+    const sent = got.at(-1)!;
+    assert.equal(sent.version, "4");
+    const span = sent.body.resourceSpans[0].scopeSpans[0].spans[0];
+    const attrs = Object.fromEntries(span.attributes.map((a: { key: string; value: { stringValue: string } }) => [a.key, a.value.stringValue]));
+    assert.equal(attrs["langfuse.observation.type"], "generation");
+    assert.equal(attrs["langfuse.trace.name"], "Close November");
+    assert.deepEqual(JSON.parse(attrs["langfuse.observation.usage_details"]), { input: 1200, output: 300, cache_read_input_tokens: 8000 });
+    assert.deepEqual(JSON.parse(attrs["langfuse.observation.cost_details"]), { total: 0.0123 });
+    assert.equal(span.traceId.length, 32);
+    assert.equal(BigInt(span.endTimeUnixNano) - BigInt(span.startTimeUnixNano), 2_500_000_000n);
+    // Nothing that was said is in it.
+    assert.ok(!JSON.stringify(sent.body).includes("observation.input"));
+    lf.removeLangfuse();
+    assert.equal(store.getConfig().langfuse, undefined);
+  } finally {
+    store.saveConfig({ langfuse: undefined });
+    server.close();
+  }
+  // Portkey's key goes in its own header.
+  const { OpenAICompatibleModel } = await import("../../src/core/index.ts");
+  let header = "";
+  const portkey = http.createServer((req, res) => ((header = String(req.headers["x-portkey-api-key"])), res.writeHead(500).end()));
+  await new Promise<void>((r) => portkey.listen(0, "127.0.0.1", r));
+  try {
+    const m = new OpenAICompatibleModel({ providerId: "portkey", providerName: "Portkey", baseUrl: `http://127.0.0.1:${(portkey.address() as import("node:net").AddressInfo).port}/v1`, apiKey: "pk-key", keyHeader: "x-portkey-api-key", model: "@openai-prod/gpt-x" });
+    await m.call({ system: "", messages: [{ role: "user", content: "hi" }], tools: [], hostedTools: [], mcpServers: [], signal: new AbortController().signal }, { onText() {}, onThinking() {}, onToolStart() {} }).catch(() => {});
+    assert.equal(header, "pk-key");
+  } finally {
+    portkey.close();
   }
 });

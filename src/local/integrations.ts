@@ -137,7 +137,8 @@ export async function listIntegrations(): Promise<{ categories: string[]; integr
     state: keys.length ? "connected" : "needs-setup",
     status: keys.length ? `${keys.length} key${keys.length === 1 ? "" : "s"} saved` : "No keys saved",
   };
-  return { categories: INTEGRATION_CATEGORIES, integrations: [aiModels, line(openrouter), line(git), line(mcp), apiKeys] };
+  const { langfuseIntegration } = await import("./langfuse.ts");
+  return { categories: INTEGRATION_CATEGORIES, integrations: [aiModels, line(openrouter), line(git), line(mcp), apiKeys, line(langfuseIntegration())] };
 }
 
 /**

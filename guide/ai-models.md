@@ -1,6 +1,6 @@
 # AI models
 
-AI models is where you connect the AI services your agents think with: Claude, OpenAI, Google Gemini, Mistral, DeepSeek, Azure, Amazon Bedrock, Google Vertex AI, a LiteLLM gateway and more than 20 others, or free models that run on your own computer. You pick a service, paste its key, and Talqava checks it and finds its models. Open it from **Integrations → AI models**.
+AI models is where you connect the AI services your agents think with: Claude, OpenAI, Google Gemini, Mistral, DeepSeek, Azure, Amazon Bedrock, Google Vertex AI, Portkey, a LiteLLM gateway and more than 20 others, or free models that run on your own computer. You pick a service, paste its key, and Talqava checks it and finds its models. Open it from **Integrations → AI models**.
 
 ## What you'll see
 

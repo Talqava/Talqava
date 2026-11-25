@@ -36,6 +36,7 @@ Talqava sends information off your computer only to services you choose to use, 
 | Connect an AI service | A request to check the key and list the service's models, with your key | That service only |
 | Look at a service's models, or use one | A request for OpenRouter's public list of models and prices, to show what each model costs and can do. It carries no key and nothing about you, only the name "Talqava" and talqava.com. Done at most once a day. | OpenRouter |
 | Open Talqava, or look at a service's models | A download of LiteLLM's public list of model prices, to show what each model of a connected service costs and can do. It carries no key and nothing about you. Done at most once a day. | GitHub, where the list is published |
+| Connect Langfuse (optional) | For each model call: the model's name, tokens, cost, time taken, the agent's title and the task's or chat's title. Never what was said. Sent with your Langfuse keys. | Your Langfuse project (Langfuse Cloud or your own) |
 | Choose backup models | When your chosen model's service is down, busy or out of credit, the same request goes to the next backup's service | The backup's service |
 | Add Talqava to the Claude desktop app | Nothing over the internet: Talqava adds itself to Claude's settings on your computer | Your computer |
 

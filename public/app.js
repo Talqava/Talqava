@@ -3413,6 +3413,8 @@ INTEGRATION_MARKS.mcp = `<svg viewBox="0 0 48 48" width="44" height="44" aria-hi
 INTEGRATION_MARKS.openrouter = `<svg viewBox="0 0 48 48" width="44" height="44" aria-hidden="true"><rect x="3" y="3" width="42" height="42" rx="11" fill="var(--accent)" fill-opacity="0.11" stroke="var(--accent)" stroke-opacity="0.45"/><g fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 24h7c3 0 4-1.5 5.5-4.5S28 14 31 14h5"/><path d="M12 24h7c3 0 4 1.5 5.5 4.5S28 34 31 34h5"/><path d="M19 24h17"/><path d="M33 11l3 3-3 3M33 21l3 3-3 3M33 31l3 3-3 3"/></g><circle cx="12" cy="24" r="2.6" fill="var(--accent)"/></svg>`;
 INTEGRATION_MARKS["ai-models"] = `<svg viewBox="0 0 48 48" width="44" height="44" aria-hidden="true"><rect x="3" y="3" width="42" height="42" rx="11" fill="var(--accent)" fill-opacity="0.11" stroke="var(--accent)" stroke-opacity="0.5" stroke-width="1.25"/><g fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="15" y="15" width="18" height="18" rx="3"/><path d="M20 15v-4M28 15v-4M20 37v-4M28 37v-4M15 20h-4M15 28h-4M37 20h-4M37 28h-4"/><path d="M21 24h6"/></g></svg>`;
 INTEGRATION_MARKS["api-keys"] = `<svg viewBox="0 0 48 48" width="44" height="44" aria-hidden="true"><rect x="3" y="3" width="42" height="42" rx="11" fill="var(--accent)" fill-opacity="0.11" stroke="var(--accent)" stroke-opacity="0.5" stroke-width="1.25"/><g fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="24" r="6"/><path d="M24 24h13M32 24v5M36 24v4"/></g></svg>`;
+// A chart line: our own drawing for "costs sent elsewhere", not Langfuse's logo.
+INTEGRATION_MARKS.langfuse = `<svg viewBox="0 0 48 48" width="44" height="44" aria-hidden="true"><rect x="3" y="3" width="42" height="42" rx="11" fill="var(--accent)" fill-opacity="0.11" stroke="var(--accent)" stroke-width="1.5"/><path d="M13 33l7-8 6 5 9-12" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="35" cy="18" r="2.4" fill="var(--accent)"/></svg>`;
 const integrationMark = (id) => {
   const node = h("span", { class: "imark" });
   node.innerHTML = INTEGRATION_MARKS[id] ?? "";
@@ -3498,6 +3500,50 @@ function apiKeysPage(col, again) {
 
 }
 
+/** Under Integrations › Langfuse: send each model call's cost and tokens to the owner's own Langfuse project. */
+async function langfusePage(col, again) {
+  const info = await api("GET", "integrations/langfuse").catch(() => ({ state: "needs-setup" }));
+  const status = h("p", { class: "note", role: "status" });
+  const host = h("select", { "aria-label": "Langfuse region" }, [["eu", "Langfuse Cloud, Europe"], ["us", "Langfuse Cloud, United States"], ["jp", "Langfuse Cloud, Japan"], ["own", "My own Langfuse"]].map(([v, l]) => h("option", { value: v }, l)));
+  const own = h("input", { placeholder: "https://langfuse.example.com", hidden: true, "aria-label": "Your Langfuse address" });
+  host.addEventListener("change", () => (own.hidden = host.value !== "own"));
+  const pk = h("input", { placeholder: "pk-lf-…", autocomplete: "off", "aria-label": "Public key" });
+  const sk = h("input", { type: "password", placeholder: "sk-lf-…", autocomplete: "off", "aria-label": "Secret key" });
+  fill(
+    col,
+    h("button", { class: "plain back", onclick: () => ((ui.integration = null), again()) }, "← All integrations"),
+    h("div", { class: "ihero" }, integrationMark("langfuse"), h("div", { class: "grow" }, h("h1", {}, "Langfuse"), h("p", { class: "lead" }, "Optional, for owners who already use Langfuse: every model call your agents make is sent there with its model, tokens, cost, time and agent, grouped by task. What was said is never sent."))),
+    info.state === "connected"
+      ? h("div", { class: "card" }, h("div", { class: "row" }, h("div", { class: "grow" }, h("strong", {}, "Connected"), h("div", { class: "note small" }, info.status)), h("button", { class: "plain danger small", onclick: () => confirm("Stop sending costs to Langfuse?\n\nIts keys are forgotten on this computer.") && attempt(async () => (await api("POST", "integrations/langfuse/remove"), again()), col) }, "Disconnect")))
+      : h(
+          "form",
+          {
+            class: "form",
+            onsubmit: async (e) => {
+              e.preventDefault();
+              status.textContent = "Checking the keys with Langfuse…";
+              status.className = "note";
+              try {
+                await api("POST", "integrations/langfuse/connect", { host: host.value === "own" ? own.value : host.value, publicKey: pk.value, secretKey: sk.value });
+                toast("Langfuse is connected. Each model call is sent there from now on.");
+                again();
+              } catch (err) {
+                status.textContent = err.message;
+                status.className = "note bad";
+              }
+            },
+          },
+          h("p", { class: "note small" }, "In your Langfuse project, open Settings → API keys and create a pair. The keys are kept on this computer and sent only to Langfuse."),
+          h("label", {}, "Where your Langfuse is", host),
+          own,
+          h("label", {}, "Public key", pk),
+          h("label", {}, "Secret key", sk),
+          status,
+          h("div", {}, h("button", { class: "primary" }, "Connect")),
+        ),
+  );
+}
+
 /** Under Integrations › MCP: connectors added by hand, including ones that run as a program on this computer. */
 function connectorsByHand(col, again) {
   const c = state.config;
@@ -3546,6 +3592,7 @@ async function integrationsView() {
   if (ui.integration === "git" && git) return fill(col, ...gitIntegrationPage(git, act, col, again));
   if (ui.integration === "ai-models") return aiModelsPage(col, again);
   if (ui.integration === "api-keys") return apiKeysPage(col, again);
+  if (ui.integration === "langfuse") return langfusePage(col, again);
   if (ui.integration === "mcp" && git) return (fill(col, ...mcpIntegrationPage(git, act, col, again)), connectorsByHand(col, again));
   if (ui.integration === "openrouter" && git) {
     if (ui.orWaiting && !git.connected) waitForSignIn();

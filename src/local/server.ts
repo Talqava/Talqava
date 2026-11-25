@@ -42,6 +42,7 @@ import { addKey, connect, disconnect, refreshHealth, serviceProblems, findLocal,
 import { board } from "./board.ts";
 import { accessGraph, accessGraphs } from "./access.ts";
 import { loadModelList } from "./modelprices.ts";
+import { connectLangfuse, langfuseIntegration, recordStep, removeLangfuse } from "./langfuse.ts";
 import { finishOpenRouterSignIn, openrouterIntegration, openrouterModels, removeOpenRouter, saveOpenRouterKey, startOpenRouterSignIn, useOpenRouterModel } from "./openrouter.ts";
 import { autoSetupGit, cloneRepository, disconnectRepository, gitIntegration, githubAccounts, githubRepos, installGit, listIntegrations, pollGithubSignIn, removeGitIntegration, startGithubSignIn, testGithub } from "./integrations.ts";
 import { ASSIGN_RULES, INDUSTRIES, REQUEST_RULES, STRUCTURES, seatsFor } from "./structures.ts";
@@ -113,6 +114,12 @@ export const engine = new Engine({
   onEvent: (id, event) => {
     quests.onEvent(id, event);
     auditEvent(id, event);
+    // Each model call's cost and tokens go to Langfuse too, when the owner connected it.
+    if (event.type === "assistant" && event.step && getConfig().langfuse) {
+      const quest = questStore.get(id);
+      const root = quest ? rootOf(quest) : id;
+      recordStep(event.step, { trace: root, traceName: (questStore.get(root)?.title ?? conversations.get(id)?.title ?? "Chat").slice(0, 200), agent: quest ? quest.bot.title || quest.bot.name : getConfig().agentName || "Assistant", session: id });
+    }
   },
 });
 quests.attach(engine);
@@ -1274,6 +1281,9 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (route === "GET integrations" && !parts[1]) return send(res, 200, await listIntegrations());
     if (route === "GET integrations" && parts[1] === "git") return send(res, 200, await gitIntegration());
     if (route === "GET integrations" && parts[1] === "mcp") return send(res, 200, mcpIntegration());
+    if (route === "GET integrations" && parts[1] === "langfuse") return send(res, 200, langfuseIntegration());
+    if (route === "POST integrations" && parts[1] === "langfuse" && parts[2] === "connect") return send(res, 200, await attempt(() => connectLangfuse(body)));
+    if (route === "POST integrations" && parts[1] === "langfuse" && parts[2] === "remove") return send(res, 200, await attempt(async () => removeLangfuse()));
     if (route === "GET integrations" && parts[1] === "openrouter") return send(res, 200, await openrouterIntegration());
     if (route === "POST integrations" && parts[1] === "openrouter") {
       // Sign-in starts from the address the app is open on, so OpenRouter can send the person back to it.

@@ -375,7 +375,7 @@ export class Engine {
       }
       conversation.messages.push({ role: "assistant", content: reply.content });
       await this.#conversations.save(conversation);
-      emit({ type: "assistant", content: reply.content, step: { model: reply.answeredBy ?? model.label, ...(reply.answeredBy ? { backup: true } : {}), ms: Date.now() - callStarted, ...(cost !== undefined ? { cost } : {}) } });
+      emit({ type: "assistant", content: reply.content, step: { model: reply.answeredBy ?? model.label, ...(reply.answeredBy ? { backup: true } : {}), ms: Date.now() - callStarted, ...(cost !== undefined ? { cost } : {}), input: reply.usage.input + (reply.usage.cacheWrite ?? 0), output: reply.usage.output, ...(reply.usage.cacheRead ? { cacheRead: reply.usage.cacheRead } : {}) } });
 
       if (reply.stopReason === "refusal") {
         emit({ type: "notice", text: "The model declined to continue with this request." });

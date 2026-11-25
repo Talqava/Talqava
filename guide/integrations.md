@@ -1,6 +1,6 @@
 # Integrations
 
-Integrations connect Talqava to the tools your business already uses, so your agents can work where the work is. Today there are five: **AI models** for the AI services your agents think with, **OpenRouter** for hundreds of models through one account, **Git and GitHub** for code and documents kept in repositories, **MCP** for using your team from Claude and for giving agents tools from other services, and **API keys for other services**. Each one says plainly what agents can and cannot do with it.
+Integrations connect Talqava to the tools your business already uses, so your agents can work where the work is. Today there are six: **AI models** for the AI services your agents think with, **OpenRouter** for hundreds of models through one account, **Git and GitHub** for code and documents kept in repositories, **MCP** for using your team from Claude and for giving agents tools from other services, **API keys for other services**, and **Langfuse** for seeing your agents' costs in Langfuse if you use it. Each one says plainly what agents can and cannot do with it.
 
 ## What you'll see
 
@@ -76,6 +76,13 @@ A repository is a folder of code or documents with a full history of changes. Th
 3. Press **Add connector**. Remove it any time with **Remove**.
 
 A connector that runs as a program on your computer is added further down the same page, under **All connectors, and ones that run on this computer**: give it a name and the program to run, then press **Add connector**.
+
+### Send your agents' costs to Langfuse (optional)
+
+1. In your Langfuse project, open **Settings → API keys** and create a pair.
+2. In Talqava, open **Integrations → Langfuse**, choose where your Langfuse is (Europe, United States, Japan, or your own address), paste the public and secret keys, and press **Connect**. Talqava checks them with Langfuse first.
+3. From then on, every model call your agents make is sent there, grouped by task: the model, tokens, cost, time and which agent. What was said is never sent.
+4. Press **Disconnect** to stop.
 
 ### Store a key for another service
 
