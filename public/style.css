@@ -2022,3 +2022,4 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .commentrow p { margin: 2px 0 4px; white-space: pre-wrap; }
 .wppost { padding: 5px 0; border-top: 1px solid var(--line); gap: 10px; }
 .wpdaily { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; }
+.ihero .packicon.big { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 11px; font-size: 20px; font-weight: 700; }

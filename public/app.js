@@ -3881,6 +3881,66 @@ function connectorCatalog(cat, done) {
   ];
 }
 
+/** Integrations › any service built on the connector kit: what agents can do, connect an account, set the rule. One page for all. */
+async function servicePage(col, again, id) {
+  const back = h("button", { class: "plain back", onclick: () => ((ui.integration = null), again()) }, "← All integrations");
+  let d, svc;
+  try {
+    d = await api("GET", "integrations/services");
+    svc = d.services.find((x) => x.id === id);
+    if (!svc) throw new Error("There is no such service.");
+  } catch (err) {
+    return fill(col, back, h("div", { class: "banner error" }, err.message));
+  }
+  if (state.view !== "integrations" || ui.integration !== `service:${id}`) return;
+  const act = (fn, done) => attempt(async () => ((r) => (done && toast(typeof done === "function" ? done(r) : done), again()))(await fn()), col);
+  const KINDS = [
+    ["read", "Can read"],
+    ["write", "Can change"],
+    ["destructive", "Can delete (always asks you first)"],
+  ];
+  const allows = h(
+    "div",
+    { class: "card form" },
+    h("b", {}, "What agents can do"),
+    KINDS.filter(([k]) => svc.actions.some((a) => a.kind === k)).map(([k, words]) => h("div", {}, h("div", { class: "label" }, words), h("ul", {}, svc.actions.filter((a) => a.kind === k).map((a) => h("li", {}, a.summary))))),
+    h("p", { class: "note small" }, "Only agents with the “connected services” power can use it. You choose below whether they only read, ask before each change, or change things without asking."),
+  );
+  const card = (c) => {
+    const rule = h(
+      "select",
+      { "aria-label": "What agents may do", onchange: (e) => (e.target.value !== "auto" || confirm(`Let agents change things in ${svc.name} (${c.label}) without asking?\n\nChanges happen straight away in your real account. Choose this only when you trust the work and check it regularly.`) ? act(() => api("PATCH", `integrations/services/connections/${c.id}`, { rule: e.target.value }), "Saved.") : again()) },
+      d.rules.map((r) => h("option", { value: r.id, selected: r.id === c.rule }, r.words)),
+    );
+    return h(
+      "div",
+      { class: "card form" },
+      h("div", { class: "row" }, h("div", { class: "grow" }, h("b", {}, c.label), h("div", { class: "note small" }, `Connected ${new Date(c.addedAt).toLocaleDateString()}`)), h("span", { class: `chip ${c.problem ? "bad" : "on"}` }, c.problem ? "Needs attention" : "Connected")),
+      c.problem ? h("div", { class: "banner error" }, `${c.problem} Make a new key and connect again below; the account keeps its settings.`) : null,
+      h("label", {}, "What agents may do with this account", rule),
+      h("div", { class: "row" }, h("button", { class: "plain danger", onclick: () => confirm(`Disconnect ${svc.name} (${c.label})? Agents can no longer use it, and its key is forgotten. Nothing in ${svc.name} is changed.`) && act(() => api("DELETE", `integrations/services/connections/${c.id}`), "Disconnected.") }, "Disconnect")),
+    );
+  };
+  const inputs = svc.fields.map((f) => ({ f, node: h("input", { type: f.secret ? "password" : "text", autocomplete: "off", placeholder: f.placeholder ?? f.label, "aria-label": f.label }) }));
+  const values = () => Object.fromEntries(inputs.map((x) => [x.f.key, x.node.value]));
+  fill(
+    col,
+    back,
+    h("div", { class: "ihero" }, h("span", { class: "packicon conn big", "aria-hidden": "true" }, svc.name[0].toUpperCase()), h("div", { class: "grow" }, h("div", { class: "row" }, h("h1", {}, svc.name), h("span", { class: `chip ${svc.connections.length ? "on" : ""}` }, svc.connections.length ? "Connected" : "Not connected")), h("p", { class: "lead" }, svc.about))),
+    allows,
+    svc.connections.map(card),
+    h(
+      "form",
+      { class: "card form", onsubmit: (e) => (e.preventDefault(), act(() => api("POST", `integrations/services/${svc.id}/connect`, { values: values() }), (c) => `${svc.name} is connected (${c.label}). Agents ask before each change until you choose otherwise.`)) },
+      h("b", {}, svc.connections.length ? "Connect another account" : `Connect ${svc.name}`),
+      h("ol", {}, svc.steps.map((step) => h("li", {}, step))),
+      inputs.map((x) => h("label", {}, x.f.label, x.node, x.f.help ? h("span", { class: "note small" }, x.f.help) : null)),
+      h("p", { class: "note small" }, `Talqava checks it with ${svc.name} before saving. It is kept on this computer and sent only to ${svc.name}. `, h("button", { type: "button", class: "plain link", onclick: () => window.open(svc.docs, "_blank", "noopener") }, `${svc.name}'s instructions`)),
+      h("div", {}, h("button", { class: "primary" }, "Check and connect")),
+    ),
+  );
+}
+
 /** Integrations › WordPress: connect a site, choose what agents may do there, and set up a blog post that writes itself. */
 async function wordpressPage(col, again) {
   const back = h("button", { class: "plain back", onclick: () => ((ui.integration = null), again()) }, "← All integrations");
@@ -3998,6 +4058,7 @@ async function integrationsView() {
   if (ui.integration === "api-keys") return apiKeysPage(col, again);
   if (ui.integration === "langfuse") return langfusePage(col, again);
   if (ui.integration === "wordpress") return wordpressPage(col, again);
+  if (ui.integration?.startsWith("service:")) return servicePage(col, again, ui.integration.slice(8));
   if (ui.integration === "mcp" && git) return (fill(col, ...mcpIntegrationPage(git, act, col, again)), connectorsByHand(col, again));
   if (ui.integration === "openrouter" && git) {
     if (ui.orWaiting && !git.connected) waitForSignIn();

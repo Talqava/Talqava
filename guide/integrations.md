@@ -94,6 +94,26 @@ A post can be given **categories**, **tags** and a **featured image**. Agents ch
 
 To ask for one post or one change by hand, give a task in your own words, such as "Write a post about our winter opening hours for the blog" or "Update the About page on our website with our new address".
 
+### Connect your shop, team chat or task list (WooCommerce, Slack, Asana)
+
+These services are built into Talqava and all work the same way.
+
+1. Open **Integrations** and choose the service, for example **WooCommerce**.
+2. Read **What agents can do**: what they can read, what they can change, and what they can delete (deleting always asks you first).
+3. Follow the numbered steps on the page to make a key in the service, paste it, and press **Check and connect**. Talqava checks the key with the service before saving it.
+4. Choose **What agents may do with this account**:
+   - **Agents only read; they change nothing.**
+   - **Agents ask me before each change** (the starting choice).
+   - **Agents make changes without asking.** Changes happen straight away in your real account, so choose this only for work you trust.
+
+What each one does:
+
+- **WooCommerce**: see orders, products and customers of the shop on your WordPress site; change a product's price, stock or text; move an order to another status; add a note to an order. A note marked for the customer is emailed to them.
+- **Slack**: read the channels the bot has been invited to, and post messages and replies. You make the bot in your own Slack workspace; the page lists the permissions to give it.
+- **Asana**: see projects and tasks, add tasks, change them or mark them done, and comment.
+
+You can connect more than one account of a service. To disconnect, press **Disconnect** on the account; its key is forgotten and nothing in the service is changed.
+
 ### Connect a well-known service from the catalogue
 
 The catalogue lists services that publish their own connector and accept a key you make: **Stripe**, **Airtable**, **monday.com**, **Intercom**, **Linear** and **GitHub**. It is on the **Connectors and AI apps** page under **From the catalogue**, and in the **Marketplace** under **Connectors**.
