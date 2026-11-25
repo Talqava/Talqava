@@ -12,7 +12,7 @@ import type { Org } from "./orgs.ts";
 import { openOrgDb } from "./library.ts";
 import { loadCrew } from "./crew.ts";
 import { audit } from "./audit.ts";
-import { MAX_RUNNING, questStore, quests, setWhyGoal } from "./quests.ts";
+import { MAX_RUNNING, handoverText, questStore, quests, setWhyGoal } from "./quests.ts";
 import { goalLine, goals, goalsDb } from "./goals.ts";
 import type { Quest } from "./quests.ts";
 
@@ -389,7 +389,13 @@ export const work = {
     const row = rowOf(d, id);
     if (!row) throw new Error("There is no such task.");
     if (row.state === "todo") d.prepare("update work_items set held = null, updated_at = ? where id = ?").run(now(), row.id);
-    else if (row.quest && !busy(questStore.get(row.quest))) await quests.resume(row.quest, "[Carry on with this task from where it stopped, then end with a short report.]");
+    else if (row.quest && !busy(questStore.get(row.quest))) {
+      // It carries on from its own hand-over note: why it stopped, what it did, and where it got to.
+      const stopped = questStore.get(row.quest);
+      const note = stopped?.handover ? `\n\n${handoverText(stopped.handover, "your last run")}` : "";
+      const hint = stopped?.stop === "repeat" || stopped?.stop === "failing" ? " Last time it got stuck: try a different way rather than repeating the same step." : "";
+      await quests.resume(row.quest, `[Carry on with this task from where it stopped, then end with a short report.${hint}]${note}`);
+    }
     this.kick();
     return this.get(org, id);
   },

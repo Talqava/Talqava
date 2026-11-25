@@ -54,6 +54,10 @@ Your mission is at the top. Below it are goal cards, grouped under "The whole or
 
 **Goals, projects and tasks.** A goal is something you can measure, with a date, such as "40 wholesale customers by March". A project is a piece of work that serves a goal, and it can have a lead. A task can belong to a project (and so serve its goal), or serve a goal directly. When a task starts, its agent is told which goal and project it serves, with the goal's current progress, and to keep the work aimed at that. Every agent is also told your active goals (the organization's, and its own group's) and asked to put what moves them forward first.
 
+**Every task has exits, and leaves a note when it stops.** Besides its budget, a task stops on its own when it has worked for 30 minutes (5 for a question to a colleague), when it tries the very same step a third time, or when every step fails four times in a row. Each of these means it is stuck or going round in circles, so it stops before wasting more money. Agents also cannot send work or questions back up their own chain (for example, a bookkeeper asking the head of finance who gave it the work), because that would go round in circles; they say in their report what they need instead.
+
+**Hand-over notes.** Whenever a task stops before finishing (its budget, a time limit, getting stuck, an error, or you stopping it), its agent leaves a **Hand-over note** on the task: why it stopped, what it did last, which files and pages it changed, what it last said, and where to pick up. You see it in the task's comments and on its page. **Try again** hands the note back to the agent, so it carries on from there instead of starting over.
+
 ## How to…
 
 **Create a task**
@@ -147,6 +151,9 @@ Your mission is at the top. Below it are goal cards, grouped under "The whole or
 - **"This task has started. Cancel it and create a new one for someone else."**: you can only reassign tasks still in To do.
 - **"Its agent is no longer on your team."**: the agent was removed. Reassign the task, then click **Try again**.
 - **"It reached its budget."** or a monthly budget message: raise the budget (per task in Settings, per agent on the agent's page, or per group on the Organization page), then click **Try again**.
+- **"Stopped: it tried the same step … a third time"** or **"Stopped: every step failed 4 times in a row"**: the agent is stuck. Read its **Hand-over note** and the last errors, add a comment with a hint (for example where the file really is), then click **Try again**.
+- **"Stopped at its time limit"**: the task ran for over 30 minutes. Click **Try again** to let it carry on from its hand-over note, or split the task into smaller ones.
+- **"… is further up this same task … would go round in circles"**: an agent tried to send work back to the agent that gave it the work. It finishes its part and says in its report what it needs; nothing to fix.
 - **"Its result did not pass its check."**: open the work to see which check failed.
 - **"The lead must be a position on the chart."**: add that agent to your Organization chart first.
 

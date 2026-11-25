@@ -1747,3 +1747,10 @@ dialog.guidedialog::backdrop { background: var(--scrim); }
 .pvsum { font-weight: 500; }
 .updatebox { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
 .updatebox ul { margin: 0; padding-left: 18px; }
+
+/* ---------- a stopped task's hand-over note ---------- */
+.handover { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.handover summary { cursor: pointer; display: block; line-height: 1.5; }
+.handover ul { margin: 0 0 4px; padding-left: 18px; }
+.handover .handwords { white-space: pre-wrap; margin: 0; color: var(--soft); }
+.qnote:not(:empty) { padding: 0 16px; }

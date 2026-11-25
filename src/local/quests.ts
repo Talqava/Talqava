@@ -3,7 +3,7 @@
 // back up when the app starts again. Quests on code get their own branch.
 import fs from "node:fs";
 import path from "node:path";
-import type { Bot, Engine, RunEvent } from "../core/index.ts";
+import type { Bot, ContentBlock, Engine, RunEvent, RunStop } from "../core/index.ts";
 import { DATA, WORKSPACE, conversations, getConfig, readJson, writeJson } from "./store.ts";
 import { feedback, runChecks } from "./checks.ts";
 import { budgetBlock, groupBlock, recordSpend } from "./spend.ts";
@@ -57,8 +57,78 @@ export interface Quest {
   charge?: { org: string; group: string };
   /** Why the task exists, as it stood when it started: the organization's mission and the group's purpose. */
   purpose?: { org: string; mission?: string; group?: string; goal?: string };
+  /** Which exit stopped its last run, when it did not finish on its own. */
+  stop?: RunStop;
+  /** Written whenever a run stops before finishing, so the next run, or another agent, picks up from here. */
+  handover?: Handover;
   createdAt: string;
   updatedAt: string;
+}
+
+/** What a stopped run leaves for whoever carries on: why it stopped, what it did, and where it got to. */
+export interface Handover {
+  at: string;
+  why: string;
+  steps: number;
+  cost: number;
+  /** What it did, in order, in plain words (the last few). */
+  did: string[];
+  /** Files and workspace pages it changed or proposed. */
+  changed: string[];
+  /** What it last said. */
+  lastWords: string;
+  /** Where to pick up. */
+  next: string;
+}
+
+const ACTION_WORDS: Record<string, string> = { bash: "ran a command", str_replace_based_edit_tool: "worked on a file", web_search: "searched the web", web_fetch: "read a web page", http_request: "called a web API", memory: "used memory", skill: "used a skill", schedule: "scheduled work", browser: "used the browser", conversation_search: "searched past chats", assign_task: "handed work to a colleague", request_work: "requested work from another department", escalate: "took a decision to its lead", ask_colleague: "asked a colleague", team_memory: "used team memory", library: "searched the library", workspace: "used the workspace" };
+const clip = (text: string, n: number) => (text.length > n ? `${text.slice(0, n - 1).trimEnd()}…` : text);
+
+/** Builds the hand-over note for a run that stopped, from what it did: nothing is asked of the model, so it costs nothing and always works. */
+export function handoverOf(quest: Quest, why: string): Handover {
+  const conversation = conversations.get(quest.id);
+  const messages = conversation?.messages ?? [];
+  const calls: { name: string; input: Record<string, unknown> }[] = [];
+  let lastWords = "";
+  for (const m of messages) {
+    if (m.role !== "assistant" || !Array.isArray(m.content)) continue;
+    for (const b of m.content as ContentBlock[]) {
+      if (b.type === "tool_use") calls.push({ name: b.name, input: (b.input ?? {}) as Record<string, unknown> });
+      if (b.type === "text" && b.text.trim()) lastWords = b.text.trim();
+    }
+  }
+  const changed = new Set<string>();
+  for (const c of calls) {
+    if (c.name === "str_replace_based_edit_tool" && ["create", "str_replace", "insert"].includes(String(c.input.command)) && c.input.path) changed.add(`File ${c.input.path}`);
+    if (c.name === "workspace" && c.input.action === "suggest") changed.add(`Suggested a change to page ${c.input.page}`);
+    if (c.name === "workspace" && c.input.action === "file") changed.add(`New page “${c.input.title}”`);
+  }
+  const did: string[] = [];
+  for (const c of calls.slice(-8)) {
+    const words = ACTION_WORDS[c.name] ?? `used ${c.name}`;
+    const about = String(c.input.command ?? c.input.query ?? c.input.path ?? c.input.url ?? c.input.to ?? c.input.action ?? "").replace(/\s+/g, " ");
+    did.push(clip(about ? `${words}: ${about}` : words, 140));
+  }
+  const last = calls.at(-1);
+  const next = lastWords
+    ? `Pick up from its last message, below, and finish the task.${last ? ` Its last step was: ${did.at(-1)}.` : ""}`
+    : last
+      ? `It had not reported yet. Its last step was: ${did.at(-1)}. Check that step's result, then carry on.`
+      : "It stopped before doing anything. Start the task from its brief.";
+  return { at: new Date().toISOString(), why, steps: quest.steps, cost: conversation?.usage.cost ?? 0, did, changed: [...changed].slice(0, 20), lastWords: clip(lastWords, 1200), next };
+}
+
+/** The note as text, for a task's comments and for the brief of whoever carries on. */
+export function handoverText(h: Handover, who: string): string {
+  return [
+    `Hand-over note from ${who}. Stopped: ${h.why}`,
+    h.did.length ? `What it did last:\n${h.did.map((d) => `- ${d}`).join("\n")}` : "",
+    h.changed.length ? `What it changed:\n${h.changed.map((c) => `- ${c}`).join("\n")}` : "",
+    h.lastWords ? `What it last said:\n${h.lastWords}` : "",
+    `Next: ${h.next}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 /** How a report from a hand-off starts, so the window can show it as a report rather than something the person typed. */
@@ -496,7 +566,9 @@ export class QuestRunner {
           const status = this.#stopping.has(id) ? "stopped" : (this.#ending.get(id) ?? "done");
           this.#ending.delete(id);
           this.#stopping.delete(id);
-          this.#set(id, { status });
+          this.#set(id, status === "done" ? { status, stop: undefined } : { status });
+          // A run that stopped before finishing leaves a hand-over note, so the next run, or another agent, picks up from here.
+          if (status !== "done" && !quest.kind) this.#handOver(id, status).catch(() => {});
           // The organization keeps a line about each task an agent finishes, so later work can build on it.
           if (status === "done" && !quest.kind) {
             const said = [...(conversations.get(id)?.messages ?? [])].reverse().find((m) => m.role === "assistant" && Array.isArray(m.content) && m.content.some((b) => b.type === "text" && b.text.trim()));
@@ -530,6 +602,11 @@ export class QuestRunner {
       case "notice":
         if (event.text.startsWith("Stopped at its budget")) this.#ending.set(id, "budget");
         break;
+      case "stopped":
+        // A budget stop is "budget"; time, a repeated step or steps that keep failing mean the task is stuck.
+        this.#ending.set(id, ["steps", "spend", "shared"].includes(event.reason) ? "budget" : "failed");
+        this.#set(id, { stop: event.reason, note: event.text });
+        break;
       case "error":
         this.#ending.set(id, "failed");
         this.#set(id, { note: event.text });
@@ -538,6 +615,19 @@ export class QuestRunner {
         this.#set(id, { resumedAt: new Date().toISOString() });
         break;
     }
+  }
+
+  async #handOver(id: string, status: QuestStatus) {
+    const quest = questStore.get(id);
+    if (!quest) return;
+    const why = status === "stopped" ? "you stopped it." : (quest.note ?? (status === "budget" ? "it reached its budget." : "it ran into a problem."));
+    const handover = handoverOf(quest, why.replace(/^Stopped(:| at its)\s*/i, "").replace(/ Say "continue"[^.]*\./, "").trim() || why);
+    this.#set(id, { handover });
+    // On a task from the board, the note is also left on the task, where the owner reads it and any successor's brief includes it.
+    const { work } = await import("./work.ts");
+    const org = orgs.active();
+    const item = work.ofQuest(org, id);
+    if (item) await work.comment(org, item.id, handoverText(handover, `the ${quest.bot.name}`), quest.bot.id).catch(() => {});
   }
 
   #set(id: string, patch: Partial<Quest>) {

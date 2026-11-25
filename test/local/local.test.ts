@@ -2179,3 +2179,60 @@ test("marketplace packages: every listing passes the checks, the preview says wh
     if (crew.loadCrew().bots.some((b) => b.id === "bookkeeper" && b.source === "personal")) crew.removeBot("bookkeeper");
   }
 });
+
+test("a task that stops leaves a hand-over note on the task, Try again picks up from it, and work cannot go round in circles", { timeout: 40_000 }, async () => {
+  const { orgs } = await import("../../src/local/orgs.ts");
+  const market = await import("../../src/local/marketplace.ts");
+  const { work } = await import("../../src/local/work.ts");
+  const quests = await import("../../src/local/quests.ts");
+  const crewMod = await import("../../src/local/crew.ts");
+  const org0 = orgs.create("Handover Co", "Keep the books.", "custom");
+  const before = store.getConfig().budget;
+  try {
+    market.addTeam("finance-team");
+    const org = orgs.active();
+    // One step only, so the task stops at its budget after its first step.
+    store.saveConfig({ budget: { steps: 1 } });
+    const lead = crewMod.loadCrew().bots.find((b) => b.id === "head-of-finance")!;
+    crewMod.saveBot(lead.id, { ...lead, budget: { steps: 1, spend: 0.5 } });
+    script.length = 0;
+    script.push(call("workspace", { action: "list" }), say("unreached"));
+    const item = work.create(org, { title: "Close November", description: "Close the November books and report.", owner: "head-of-finance", createdBy: "owner" });
+    await work.schedule();
+    const questId = work.get(org, item.id).quest!;
+    for (let i = 0; i < 100 && quests.quests.isRunning(questId); i++) await new Promise((r) => setTimeout(r, 30));
+    await new Promise((r) => setTimeout(r, 200));
+    const stopped = quests.questStore.get(questId)!;
+    assert.equal(stopped.status, "budget");
+    assert.equal(stopped.stop, "steps");
+    assert.ok(stopped.handover);
+    assert.match(stopped.handover!.did.join(" "), /used the workspace: list/);
+    // The note is left on the task, as a comment from the agent.
+    const notes = work.comments(org, item.id).map((c: { text: string }) => c.text).join("\n");
+    assert.match(notes, /Hand-over note from the Head of Finance\. Stopped: .*1 steps/);
+    assert.match(notes, /Next: /);
+
+    // Try again: the agent is told to carry on, with its own note.
+    crewMod.saveBot(lead.id, { ...lead, budget: { steps: 5, spend: 0.5 } });
+    script.push(say("Closed November: all accounts reconciled."));
+    await work.retry(org, item.id);
+    for (let i = 0; i < 100 && quests.quests.isRunning(questId); i++) await new Promise((r) => setTimeout(r, 30));
+    const asked = JSON.stringify(mock.requests.at(-1)!.body.messages.at(-1));
+    assert.match(asked, /Carry on with this task from where it stopped/);
+    assert.match(asked, /Hand-over note from your last run\. Stopped:/);
+
+    // Round in circles: an agent cannot send work or questions back up its own chain.
+    const stamp = new Date().toISOString();
+    const up = { id: "f".repeat(16), title: "Plan Q1", bot: lead, status: "running" as const, steps: 0, createdAt: stamp, updatedAt: stamp };
+    const down = { id: "e".repeat(15) + "1", title: "Part of Q1", bot: crewMod.loadCrew().bots.find((b) => b.id === "bookkeeper")!, status: "running" as const, steps: 0, parent: { id: up.id, by: "Head of Finance", delivered: false }, depth: 1, createdAt: stamp, updatedAt: stamp };
+    quests.questStore.save(up);
+    quests.questStore.save(down);
+    const ctx = { signal: new AbortController().signal, conversation: { id: down.id, messages: [] } as unknown as Conversation };
+    await assert.rejects(Promise.resolve(tools.askTool.run({ to: "Head of Finance", question: "Which accounts should I reconcile first?" }, ctx)), /further up this same task.*round in circles/);
+    quests.questStore.remove(up.id);
+    quests.questStore.remove(down.id);
+  } finally {
+    store.saveConfig({ budget: before });
+    orgs.remove(org0.id);
+  }
+});

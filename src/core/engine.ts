@@ -17,10 +17,12 @@ import type {
   MaybePromise,
   RunEvent,
   RunSpec,
+  RunStop,
   ToolResult,
 } from "./types.ts";
 
 type Listener = (event: RunEvent) => void;
+const ordinal = (n: number) => (["first", "second", "third", "fourth", "fifth", "sixth"][n - 1] ?? `${n}th`);
 type ToolCall = { id: string; name: string; input: unknown };
 
 interface Run {
@@ -244,19 +246,35 @@ export class Engine {
       return costOf(prices, { input: Math.ceil(chars / 3.5), output: 800 });
     };
 
+    // Every exit stops the same way: a notice people read, and a "stopped" event that says which exit it was.
+    const stop = (reason: RunStop, text: string) => {
+      emit({ type: "notice", text });
+      emit({ type: "stopped", reason, text });
+    };
+    const limits = spec.limits ?? {};
+    const startedAt = Date.now();
+    const repeats = limits.repeats ?? 2;
+    const failingSteps = limits.failingSteps ?? 4;
+    const tried = new Map<string, number>();
+    let failingInARow = 0;
+
     for (let step = 0; ; step++) {
       if (run.abort.signal.aborted) return;
       if (step >= steps) {
-        emit({ type: "notice", text: `Stopped at its budget: ${steps} steps. Say "continue" to keep going.` });
+        stop("steps", `Stopped at its budget: ${steps} steps. Say "continue" to keep going.`);
         return;
       }
       if (spendLimit !== undefined && (prices || spent > 0) && (spent >= spendLimit || (lastCall > 0 && spent + lastCall > spendLimit))) {
-        emit({ type: "notice", text: `Stopped at its budget: about ${dollars(spent)} spent of ${dollars(spendLimit)}${spent < spendLimit ? "; the next step would have gone over" : ""}. Say "continue" to keep going.` });
+        stop("spend", `Stopped at its budget: about ${dollars(spent)} spent of ${dollars(spendLimit)}${spent < spendLimit ? "; the next step would have gone over" : ""}. Say "continue" to keep going.`);
         return;
       }
       const left = spec.remaining?.();
       if (left !== undefined && (left <= 0 || nextCall() > left)) {
-        emit({ type: "notice", text: `Stopped at its budget: the task's shared budget has ${dollars(Math.max(0, left))} left, less than the next step would cost. Say "continue" to keep going.` });
+        stop("shared", `Stopped at its budget: the task's shared budget has ${dollars(Math.max(0, left))} left, less than the next step would cost. Say "continue" to keep going.`);
+        return;
+      }
+      if (limits.minutes !== undefined && Date.now() - startedAt > limits.minutes * 60_000) {
+        stop("time", `Stopped at its time limit: it has worked for over ${limits.minutes} minutes. Say "continue" to keep going.`);
         return;
       }
 
@@ -315,7 +333,13 @@ export class Engine {
       }
 
       const results: ToolResult[] = [];
+      let repeated: ToolCall | null = null;
       for (const call of calls) {
+        // The very same step tried again and again means the run is going round in circles: it does not run again.
+        const key = `${call.name} ${JSON.stringify(call.input)}`;
+        const times = (tried.get(key) ?? 0) + 1;
+        tried.set(key, times);
+        if (times > repeats) repeated ??= call;
         // An input cut off at the length limit can look valid, so never run it.
         const result: ToolResult =
           reply.stopReason === "max_tokens"
@@ -325,12 +349,23 @@ export class Engine {
                 is_error: true,
                 content: "This tool call was cut off at the output limit and did not run. Try again with a smaller input, split into steps.",
               }
-            : await this.#runTool(conversation, run, spec, call);
+            : times > repeats
+              ? { type: "tool_result", tool_use_id: call.id, is_error: true, content: `Not run: this exact step was already tried ${repeats} times in this task. The task stopped here so it can be looked at.` }
+              : await this.#runTool(conversation, run, spec, call);
         results.push(result);
         emit({ type: "tool_result", result });
       }
       conversation.messages.push({ role: "user", content: results });
       await this.#conversations.save(conversation);
+      if (repeated) {
+        stop("repeat", `Stopped: it tried the same step (${repeated.name}) a ${ordinal(repeats + 1)} time with the same input, so it may be stuck. Say "continue" with a hint to try another way.`);
+        return;
+      }
+      failingInARow = results.every((r) => r.is_error) ? failingInARow + 1 : 0;
+      if (failingInARow >= failingSteps) {
+        stop("failing", `Stopped: every step failed ${failingSteps} times in a row, so it is not getting anywhere. Read the last errors, then say "continue" with a hint, or fix what it needs.`);
+        return;
+      }
     }
   }
 

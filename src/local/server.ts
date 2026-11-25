@@ -613,6 +613,9 @@ function questSummary(quest: Quest) {
     outcome: quest.outcome ?? null,
     changedFiles: quest.changedFiles ?? null,
     note: quest.note ?? null,
+    // Which exit stopped it, and what it left for whoever carries on.
+    stop: quest.stop ?? null,
+    handover: quest.handover ?? null,
     // What this task and everything handed on from it have cost together, and how many tasks that is.
     chain: rootOf(quest) === quest.id ? { cost: chainCost(quest.id), tasks: chainSize(quest.id), budget: chainBudget(), ...chainProgress(quest.id) } : null,
     // The agent's latest words: its report once it has finished, or what it last said while working.

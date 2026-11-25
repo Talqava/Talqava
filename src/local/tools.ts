@@ -307,6 +307,7 @@ export const assignTool: Tool = defineTool<{ to: string; task: string }>({
     const task = String(input.task ?? "").trim();
     if (task.length < 10) throw new Error("Say what the task is, with everything the agent needs to know.");
     if ((quest?.depth ?? 0) >= MAX_DEPTH) throw new Error(`Tasks can be handed down ${MAX_DEPTH} levels at most. Do this one yourself.`);
+    noRoundTrip(quest, target);
     const { work } = await import("./work.ts");
     const open = questStore.list().filter((q) => q.parent?.id === conversation.id && !q.parent.delivered).length + work.pendingFor(conversation.id);
     if (open >= MAX_OPEN_HANDOFFS) throw new Error(`${MAX_OPEN_HANDOFFS} tasks you assigned are still open. Wait for their reports before assigning more.`);
@@ -373,6 +374,7 @@ export const askTool: Tool = defineTool<{ to: string; question: string }>({
     if (question.length < 8) throw new Error("Say what you are asking, with the context needed to answer it.");
     if (quest?.kind) throw new Error("You are answering a question yourself. Answer from what you know, and say what you are unsure of.");
     if ((quest?.depth ?? 0) >= MAX_DEPTH) throw new Error("This task is already several hand-offs deep. Work from what you have, and say what you could not confirm.");
+    noRoundTrip(quest, target);
     const open = questStore.list().filter((q) => q.parent?.id === conversation.id && !q.parent.delivered).length;
     if (open >= MAX_OPEN_HANDOFFS) throw new Error(`${MAX_OPEN_HANDOFFS} tasks and questions of yours are still open. Wait for them before asking more.`);
     const asked = questStore.list().filter((q) => q.parent?.id === conversation.id && q.kind === "question");
@@ -418,6 +420,7 @@ export const requestTool: Tool = defineTool<{ to: string; request: string; why?:
     if (request.length < 10) throw new Error("Say what you need, with everything they need to know.");
     if (quest?.kind) throw new Error("You are answering a question yourself. Say in your answer what work is needed and from whom.");
     if ((quest?.depth ?? 0) >= MAX_DEPTH) throw new Error("This task is already several hand-offs deep. Say in your report what is needed from the other department.");
+    noRoundTrip(quest, target);
     const { work } = await import("./work.ts");
     const open = questStore.list().filter((q) => q.parent?.id === conversation.id && !q.parent.delivered).length + work.pendingFor(conversation.id);
     if (open >= MAX_OPEN_HANDOFFS) throw new Error(`${MAX_OPEN_HANDOFFS} tasks and requests of yours are still open. Wait for them before making more.`);
@@ -537,6 +540,24 @@ export function costModel(cfg: ReturnType<typeof getConfig>, bot: Bot, work: "ma
   return { ref: cfg.model, effort: cfg.effort };
 }
 
+/** Every task's run stops after this long, besides its budget; a question to a colleague much sooner. */
+const TASK_LIMITS = { minutes: 30 };
+const QUESTION_LIMITS = { minutes: 5 };
+
+/**
+ * Work or a question sent back to an agent further up the same chain goes round in circles (A hands to B, B asks A).
+ * It is refused, and the agent is told to finish its part and say in its report what it needs.
+ */
+function noRoundTrip(quest: ReturnType<typeof questStore.get>, target: Bot) {
+  const seen = new Set<string>();
+  for (let q = quest; q?.parent && !seen.has(q.id); q = questStore.get(q.parent.id)) {
+    seen.add(q.id);
+    const up = questStore.get(q.parent.id);
+    if (up?.bot.id === target.id)
+      throw new Error(`The ${target.name} is further up this same task: it handed this work on. Sending work or questions back to it would go round in circles. Finish your part from what you have, and say in your report what you need from the ${target.name}.`);
+  }
+}
+
 /** A question is answered on a small budget: a few steps, and no hand-offs of its own. */
 const QUESTION_BUDGET = { steps: 3, spend: 0.05 };
 
@@ -642,6 +663,7 @@ export function localRunSpec(jobs: JobBook) {
           mcpServers: [],
           approvalMode: bot.approvals,
           budget: QUESTION_BUDGET,
+          limits: QUESTION_LIMITS,
           cautionAfter: [...CAUTION_TOOLS],
           remaining: () => shareLeft(quest.id),
         };
@@ -655,6 +677,7 @@ export function localRunSpec(jobs: JobBook) {
         mcpServers: [],
         approvalMode: bot.approvals,
         budget: question ? QUESTION_BUDGET : { ...cfg.budget, ...bot.budget },
+        limits: question ? QUESTION_LIMITS : TASK_LIMITS,
         // What a connector returns is outside content too.
         cautionAfter: [...CAUTION_TOOLS, ...linked.names],
         // The task and what is handed on from it share one budget, checked before every step.

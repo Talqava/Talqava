@@ -1996,6 +1996,7 @@ function readMail(m) {
     approvals,
     live && !q.approvals?.length ? h("div", { class: "readnow" }, h("i", { class: "dot", "aria-hidden": "true" }), q.activity ? `Working on it: ${NAMES[q.activity.name] || q.activity.name}` : "Working on it now.") : null,
     q.status === "failed" && q.note ? h("div", { class: "banner error" }, q.note) : null,
+    handoverCard(q),
     !live && q.chain?.stopped ? h("div", { class: "banner" }, `${q.chain.stopped} part${q.chain.stopped === 1 ? "" : "s"} of this task stopped before finishing${q.chain.cost >= q.chain.budget ? `, because the task reached its ${money(q.chain.budget)} budget` : ""}. The receipt shows which, and what each cost. Reply “continue” to carry on, or raise the budget per task under Settings.`) : null,
     whyChain(q),
     q.said || !live ? report : null,
@@ -4278,6 +4279,22 @@ async function marketBotView() {
 }
 
 // ---------- one quest ----------
+/** What a stopped run left for whoever carries on: why, what it did and changed, and where to pick up. */
+function handoverCard(q) {
+  return q?.handover && !isLive(q) && q.status !== "done"
+      ? h(
+          "details",
+          { class: "card handover", open: q.stop === "repeat" || q.stop === "failing" },
+          h("summary", {}, h("b", {}, "Hand-over note"), h("span", { class: "note small" }, ` · stopped ${when(q.handover.at)}: ${q.handover.why}`)),
+          q.handover.did.length ? [h("div", { class: "label" }, "What it did last"), h("ul", {}, q.handover.did.map((d) => h("li", {}, d)))] : null,
+          q.handover.changed.length ? [h("div", { class: "label" }, "What it changed"), h("ul", {}, q.handover.changed.map((c) => h("li", {}, c)))] : null,
+          q.handover.lastWords ? [h("div", { class: "label" }, "What it last said"), h("p", { class: "handwords" }, q.handover.lastWords)] : null,
+          h("p", {}, h("b", {}, "Next: "), q.handover.next),
+          h("p", { class: "note small" }, "Say “continue” below, or press Try again on the task, and it picks up from this note."),
+        )
+      : null;
+}
+
 function questView() {
   ui.body.className = "body questview";
   ui.qhead = h("div", { class: "subhead" });
@@ -4291,7 +4308,8 @@ function questView() {
   ui.changesPanel = h("div", { class: "tabpanel pad", hidden: true });
   ui.receiptPanel = h("div", { class: "tabpanel pad", hidden: true });
   ui.convoPanel = h("div", { class: "tabpanel" }, conversationPane());
-  fill(ui.qcenter, ui.tabs, ui.changesPanel, ui.receiptPanel, ui.convoPanel);
+  ui.qnote = h("div", { class: "qnote" });
+  fill(ui.qcenter, ui.tabs, ui.qnote, ui.changesPanel, ui.receiptPanel, ui.convoPanel);
   ui.title = h("span");
   ui.meta = h("span", { class: "meta" });
   ui.changesFor = null;
@@ -4312,6 +4330,7 @@ async function refreshQuest(first = false) {
   if (state.view !== "quest" || state.convId !== id) return;
   const changed = !state.quest || state.quest.id !== q.id || state.quest.status !== q.status || state.quest.outcome !== q.outcome;
   state.quest = q;
+  if (ui.qnote) fill(ui.qnote, handoverCard(q));
   const [label, tone] = standing(q);
   const where = q.branch ? ["on branch ", h("code", {}, q.branch), " · your own branch is untouched"] : q.project ? [`in ${basename(q.project)}`] : ["in the workspace folder"];
   fill(ui.qhead, 
