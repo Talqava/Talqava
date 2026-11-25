@@ -821,6 +821,10 @@ button.primary { letter-spacing: 0.005em; }
 .integrations .lead { margin: 0; }
 .igrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
 .icard { display: flex; flex-direction: column; gap: 12px; align-items: stretch; text-align: left; padding: 18px; min-height: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-l); }
+.icard.coming { opacity: 0.72; border-style: dashed; }
+.icard[hidden], .icat[hidden] { display: none; }
+.isearch { width: 100%; max-width: 520px; min-height: 42px; padding: 0 14px; border-radius: var(--r-m, 10px); border: 1px solid var(--line2); background: var(--panel); color: inherit; font: inherit; }
+.pills.small .mpill { min-height: 28px; padding: 0 12px; font-size: 13px; }
 .icard:hover { background: var(--raised); border-color: color-mix(in srgb, var(--accent) 50%, var(--line2)); }
 .ihead { display: flex; gap: 14px; align-items: center; }
 .ihead b { font-size: 16px; font-weight: 600; }

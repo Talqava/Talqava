@@ -3691,7 +3691,7 @@ const integrationMark = (id) => {
   node.innerHTML = INTEGRATION_MARKS[id] ?? "";
   return node;
 };
-const STATE_WORDS = { connected: ["Connected", "on"], "needs-setup": ["Not set up", ""], unavailable: ["Unavailable", "bad"] };
+const STATE_WORDS = { connected: ["Connected", "on"], "needs-setup": ["Not set up", ""], unavailable: ["Unavailable", "bad"], coming: ["Coming", ""] };
 
 /** What the pages under Integrations share: the settings they change, saved and then shown again. */
 const connectionSaver = (col, again) => (patch) =>
@@ -4004,38 +4004,72 @@ async function integrationsView() {
     return fill(col, ...openrouterIntegrationPage(git, act, col, again));
   }
 
-  const chosen = ui.integrationCategory ?? "All";
-  const shown = list.integrations.filter((i) => chosen === "All" || i.category === chosen);
+  // One directory: every service, connected, available or coming, filed under plain categories, with a search box.
+  const all = list.integrations;
+  const count = (state) => all.filter((i) => (state === "available" ? i.state === "needs-setup" || i.state === "unavailable" : i.state === state)).length;
+  const SHOW = [
+    ["all", `Everything (${all.length})`],
+    ["connected", `Connected (${count("connected")})`],
+    ["available", `Available (${count("available")})`],
+    ["coming", `Coming (${count("coming")})`],
+  ];
+  const open = async (i) => {
+    if (i.state === "coming") return;
+    if (!i.connector) return (ui.integration = i.id), again();
+    if (i.state === "connected") return (ui.integration = "mcp"), again();
+    const cat = await api("GET", "integrations/connectors");
+    const entry = cat.connectors.find((c) => c.id === i.connector);
+    if (entry) connectorDialog(entry, again);
+  };
+  const order = { connected: 0, "needs-setup": 1, unavailable: 1, coming: 2 };
+  const cards = all
+    .slice()
+    .sort((x, y) => order[x.state] - order[y.state])
+    .map((i) => {
+      const mark = INTEGRATION_MARKS[i.id] ? integrationMark(i.id) : h("span", { class: "packicon conn", "aria-hidden": "true" }, i.name[0].toUpperCase());
+      const inside = [h("div", { class: "ihead" }, mark, h("div", { class: "grow" }, h("b", {}, i.name), h("div", { class: "by" }, i.status)), h("span", { class: `chip ${STATE_WORDS[i.state][1]}` }, STATE_WORDS[i.state][0])), h("p", { class: "mdesc" }, i.summary)];
+      const node = i.state === "coming" ? h("article", { class: "icard coming" }, ...inside) : h("button", { class: "icard", onclick: () => attempt(() => open(i), col) }, ...inside, h("span", { class: "ilink" }, i.state === "connected" ? "Manage →" : i.connector ? "See what it can do →" : "Set up →"));
+      return { i, node, words: `${i.name} ${i.summary} ${i.category}`.toLowerCase() };
+    });
+  const sections = list.categories.map((c) => ({ c, mine: cards.filter((x) => x.i.category === c), node: null })).filter((x) => x.mine.length);
+  for (const sec of sections) sec.node = h("section", { class: "icat" }, h("h2", {}, sec.c), h("div", { class: "igrid" }, sec.mine.map((x) => x.node)));
+  const none = h("p", { class: "note", role: "status", hidden: true }, "Nothing matches. Any service that offers a connector (an MCP server) can be added by hand under Connectors and AI apps.");
+  const search = h("input", { type: "search", class: "isearch", placeholder: "Search for a service, such as Stripe or email", "aria-label": "Search integrations", value: ui.integrationSearch ?? "" });
+  const showPills = h("div", { class: "pills", role: "group", "aria-label": "Show" });
+  const catPills = h("div", { class: "pills small", role: "group", "aria-label": "Categories" });
+  const apply = () => {
+    const q = (ui.integrationSearch ?? "").trim().toLowerCase();
+    const show = ui.integrationShow ?? "all";
+    const cat = ui.integrationCategory ?? "All";
+    const fits = (x) => (!q || q.split(/\s+/).every((w) => x.words.includes(w))) && (show === "all" || (show === "available" ? x.i.state === "needs-setup" || x.i.state === "unavailable" : x.i.state === show));
+    let any = false;
+    for (const sec of sections) {
+      let seen = false;
+      for (const x of sec.mine) {
+        const on = fits(x) && (cat === "All" || sec.c === cat);
+        x.node.hidden = !on;
+        seen = seen || on;
+      }
+      sec.node.hidden = !seen;
+      any = any || seen;
+    }
+    none.hidden = any;
+    fill(showPills, SHOW.map(([id, words]) => h("button", { class: `mpill ${id === show ? "on" : ""}`, "aria-pressed": String(id === show), onclick: () => ((ui.integrationShow = id), apply()) }, words)));
+    fill(catPills, ["All", ...sections.map((x) => x.c)].map((c) => h("button", { class: `mpill ${c === cat ? "on" : ""}`, "aria-pressed": String(c === cat), onclick: () => ((ui.integrationCategory = c), apply()) }, c)));
+  };
+  search.addEventListener("input", () => ((ui.integrationSearch = search.value), apply()));
+  if (ui.integrationCategory && !sections.some((x) => x.c === ui.integrationCategory)) ui.integrationCategory = "All";
   fill(
     col,
     h("div", {}, h("h1", {}, "Integrations"), h("p", { class: "lead" }, "Connect the tools your business already uses, so your agents can work where the work is. Each integration says exactly what agents can and cannot do with it.")),
-    h("div", { class: "pills", role: "group", "aria-label": "Categories" }, ["All", ...list.categories].map((c) => h("button", { class: `mpill ${c === chosen ? "on" : ""}`, "aria-pressed": String(c === chosen), onclick: () => ((ui.integrationCategory = c), again()) }, c))),
-    ...list.categories
-      .filter((c) => shown.some((i) => i.category === c))
-      .map((c) =>
-        h(
-          "section",
-          { class: "icat" },
-          h("h2", {}, c),
-          h(
-            "div",
-            { class: "igrid" },
-            shown
-              .filter((i) => i.category === c)
-              .map((i) =>
-                h(
-                  "button",
-                  { class: "icard", onclick: () => ((ui.integration = i.id), again()) },
-                  h("div", { class: "ihead" }, integrationMark(i.id), h("div", { class: "grow" }, h("b", {}, i.name), h("div", { class: "by" }, i.status)), h("span", { class: `chip ${STATE_WORDS[i.state][1]}` }, STATE_WORDS[i.state][0])),
-                  h("p", { class: "mdesc" }, i.summary),
-                  h("span", { class: "ilink" }, i.state === "connected" ? "Manage →" : "Set up →"),
-                ),
-              ),
-          ),
-        ),
-      ),
-    h("p", { class: "note" }, "More integrations will be added here. Any service that offers a connector (an MCP server) can already be added under ", h("button", { class: "plain link", onclick: () => ((ui.integration = "mcp"), again()) }, "Connectors and AI apps"), "."),
+    search,
+    showPills,
+    catPills,
+    none,
+    ...sections.map((x) => x.node),
+    h("p", { class: "note" }, "Services marked Coming are planned and cannot be connected yet. Any service that offers a connector (an MCP server) can already be added under ", h("button", { class: "plain link", onclick: () => ((ui.integration = "mcp"), again()) }, "Connectors and AI apps"), "."),
   );
+  apply();
 }
 
 /** A typical task for one agent, for the "about $x a task" line: what agents read and write in one, roughly. */
