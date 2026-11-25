@@ -313,6 +313,7 @@ async function updateSettings(body: any) {
   if (typeof body.checkFirst === "boolean") patch.checkFirst = body.checkFirst;
   if (typeof body.assistantSeesGroups === "boolean") patch.assistantSeesGroups = body.assistantSeesGroups;
   if (["leads", "all", "never"].includes(body.planFirst)) patch.planFirst = body.planFirst;
+  if (body.privacy === "off" || body.privacy === "mask") patch.privacy = body.privacy;
   if (["ask", "auto"].includes(body.approvalMode)) patch.approvalMode = body.approvalMode;
   if (typeof body.apiKey === "string") patch.apiKey = body.apiKey.trim();
 

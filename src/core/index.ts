@@ -20,6 +20,7 @@ export type { OpenAICompatibleOptions, SummaryCache, ConversationSummary } from 
 export { CLAUDE_PRICES, FREE, costOf } from "./models/pricing.ts";
 export { checkModel } from "./models/check.ts";
 export { FallbackModel } from "./models/fallback.ts";
+export { Masker, PrivacyModel, maskMessages } from "./models/privacy.ts";
 export type { OnSwitch } from "./models/fallback.ts";
 export type { CheckResult } from "./models/check.ts";
 export { pageTool, htmlToText, isPrivateAddress } from "./tools/page.ts";

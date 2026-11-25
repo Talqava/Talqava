@@ -1,11 +1,11 @@
 // Turns the model named in the settings ("provider/model") into something the engine can call,
 // with the backup models behind it.
-import { AnthropicModel, FallbackModel, OpenAICompatibleModel } from "../core/index.ts";
+import { AnthropicModel, FallbackModel, OpenAICompatibleModel, PrivacyModel } from "../core/index.ts";
 import type { Model } from "../core/index.ts";
 import { apiKey, getConfig, summaries } from "./store.ts";
 import type { Config } from "./store.ts";
 import { ATTRIBUTION, OPENROUTER_ID, openrouterCatalogNow, openrouterModelInfo } from "./openrouter.ts";
-import { knownPricesNow, serviceOf } from "./gateway.ts";
+import { isLocalRef, knownPricesNow, serviceOf } from "./gateway.ts";
 import { audit } from "./audit.ts";
 
 export function splitRef(ref: string): { providerId: string; model: string } {
@@ -51,6 +51,12 @@ export function resolveOne(cfg: Config = getConfig(), ref = cfg.model): Model {
  * busy or out of credit before it starts answering, the next one answers instead.
  */
 export function resolveModel(cfg: Config = getConfig(), ref = cfg.model): Model {
+  const model = withBackups(cfg, ref);
+  // The privacy guardrail hides personal details from AI services; a model on this computer sends nothing out.
+  return cfg.privacy === "mask" && !(isLocalRef(ref) && !(cfg.backups ?? []).some((b) => b !== ref && !isLocalRef(b))) ? new PrivacyModel(model) : model;
+}
+
+function withBackups(cfg: Config, ref: string): Model {
   const first = resolveOne(cfg, ref);
   const backups: Model[] = [];
   for (const backup of cfg.backups ?? []) {

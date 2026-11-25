@@ -2489,3 +2489,12 @@ test("the owner can pause and resume a task (with what is under it), one agent, 
     orgs.remove(org0.id);
   }
 });
+
+test("the privacy guardrail covers AI services, not models on this computer", async () => {
+  const { resolveModel } = await import("../../src/local/models.ts");
+  const { PrivacyModel } = await import("../../src/core/index.ts");
+  const cfg = { ...store.getConfig(), privacy: "mask" as const, backups: [] };
+  assert.ok(resolveModel(cfg, "anthropic/claude-opus-5-5") instanceof PrivacyModel);
+  assert.ok(!(resolveModel(cfg, "local/qwen3:4b") instanceof PrivacyModel));
+  assert.ok(!(resolveModel({ ...cfg, privacy: "off" }, "anthropic/claude-opus-5-5") instanceof PrivacyModel));
+});
