@@ -1811,3 +1811,6 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 /* Page packs in the Marketplace, and a toast with an action. */
 .packicon { font-size: 26px; line-height: 1; }
 .toast .toastact { margin-left: 12px; font-weight: 600; text-decoration: underline; color: inherit; }
+
+/* A connector's tile in the catalogue: its first letter, not its logo. */
+.packicon.conn { font-weight: 700; font-size: 16px; color: var(--ink, inherit); }

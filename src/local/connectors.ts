@@ -151,3 +151,17 @@ export async function closeConnectors() {
   await Promise.all([...connections.values()].map((c) => c.client.close().catch(() => {})));
   connections.clear();
 }
+
+/**
+ * Checks a connector before it is saved: connects, lists its tools, and closes again. Says how many tools it has and
+ * how many of them only read.
+ */
+export async function probeConnector(server: McpServer): Promise<{ tools: number; readOnly: number }> {
+  const client = await within(connect(server), CONNECT_MS, `Connector ${server.name}`);
+  try {
+    const listed = await within(client.listTools(), CONNECT_MS, `Connector ${server.name}`);
+    return { tools: listed.tools.length, readOnly: listed.tools.filter((t) => t.annotations?.readOnlyHint).length };
+  } finally {
+    await client.close().catch(() => {});
+  }
+}
