@@ -82,3 +82,7 @@ Department colours are calm and differ in lightness as well as hue. Green, amber
 ## Using the brand
 
 The Talqava name and logo belong to GR Investments LLC. The MIT licence covers Talqava's code, not its name or logo: you may use the logo to refer to Talqava, but not in a way that suggests your own product or version is the official Talqava, or is made or endorsed by us. See the [Terms of Use](../../legal/TERMS.md).
+
+## GitHub pictures
+
+`github/talqava-org-avatar.png` (500 × 500, the organization's picture) and `github/talqava-social-preview.png` (1280 × 640, the picture shown when the repository is shared) are drawn from the logo by `make-github-images.cjs` (run `npx electron ../docs/brand/make-github-images.cjs` from `app/desktop`). GitHub has no API for either, so they are uploaded by hand: the organization picture under the organization's Settings → Profile, and the social preview under the repository's Settings → General → Social preview.
