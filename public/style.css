@@ -1982,3 +1982,30 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .security .sectabs { position: sticky; top: 0; z-index: 2; background: var(--bg, #f5f6f4); padding: 8px 0; }
 .security .secrow .secgo { order: 3; }
 .palette ul { max-height: min(70vh, 560px); overflow-y: auto; }
+
+/* The main column: the top bar, the area tabs when an area has parts, then the page. */
+.main { display: flex; flex-direction: column; }
+.main > .body { flex: 1 1 auto; min-height: 0; }
+.menubtn { display: none; }
+
+/* A narrow window or a phone: the menu slides in from the side, and two-column pages stack. */
+@media (max-width: 860px) {
+  #app { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+  .rail { position: fixed; inset: 0 auto 0 0; width: min(280px, 86vw); z-index: 60; transform: translateX(-102%); transition: transform 0.18s ease; box-shadow: none; }
+  body.menuopen .rail { transform: none; box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.35); }
+  .menubtn { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; border: 1px solid var(--line); border-radius: var(--r-m, 8px); background: var(--panel); color: var(--text); font-size: 18px; cursor: pointer; flex: none; }
+  .top { padding: 6px 10px; gap: 8px; flex-wrap: wrap; }
+  .areatabs { padding: 6px 10px; }
+  .center { padding: 16px 14px 28px; }
+  .body.two { grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; overflow-y: auto; }
+  .body.two > .side { border-right: 0; border-bottom: 1px solid var(--line); max-height: 38vh; overflow-y: auto; }
+  .wspage, .deckwork { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .wspanel { position: static; }
+  .palette { min-width: 0; flex: 1 1 160px; }
+}
+@media (prefers-reduced-motion: reduce) { .rail { transition: none; } }
+@media (max-width: 860px) {
+  .body.three, .body.wsbody { grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; overflow-y: auto; }
+  .body.three > *, .body.wsbody > *, .body.two > * { overflow-y: visible; }
+  .body.three > .side, .body.wsbody > .side { border-right: 0; border-bottom: 1px solid var(--line); max-height: 38vh; overflow-y: auto; }
+}

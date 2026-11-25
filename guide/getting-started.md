@@ -60,7 +60,11 @@ That's it: you have run your first task. From here, add more agents, set budgets
 
 ## A tour of the menu
 
-The menu on the left follows one idea: **you give work, agents do it, you stay in control.**
+The menu on the left follows one idea: **you give work, agents do it, you stay in control.** The first time you open Talqava, a short welcome says the same; **Show the welcome again** on Home brings it back.
+
+In a narrow window or on a phone, the menu is behind the **☰** button at the top left, and pages with two columns stack into one.
+
+The box at the top finds anything: files by name or by the words inside, tasks, chats, agents, and any page of the app.
 
 **Home**: Where Talqava opens. What needs you, what is being worked on, quick ways to start something, and the files you were last working on.
 

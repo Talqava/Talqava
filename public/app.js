@@ -208,6 +208,9 @@ async function boot() {
   if (needsKey(state.config)) (state.view = "integrations"), (ui.integration = "ai-models");
   await Promise.all([loadCrew(), loadQuests(), refreshList(), loadTemplates(), loadSpaces(), loadOrgs()]);
   render();
+  try {
+    if (!localStorage.getItem("talqava.welcomed") && !state.me?.mustSetUpSecondStep && !document.querySelector("dialog[open]")) showWelcome();
+  } catch {}
   clearInterval(boot.timer);
   // One heartbeat keeps every part of the window current.
   boot.timer = setInterval(tick, 2000);
@@ -451,6 +454,7 @@ function go(view, id = null) {
   state.marketId = view === "marketbot" ? id : null;
   if (view === "project") state.projectId = id;
   closePalette();
+  document.body.classList.remove("menuopen"); // on a narrow window the menu slides away once a page is chosen
   renderTop();
   renderAreaTabs();
   renderBody();
@@ -502,6 +506,7 @@ function renderTop() {
   const bots = ["home", "quest"].includes(state.view); // the repository and quest spending belong to the bots' work pages
   renderRail();
   fill(ui.top,
+    h("button", { class: "menubtn", "aria-label": "Menu", "aria-expanded": String(document.body.classList.contains("menuopen")), onclick: () => document.body.classList.toggle("menuopen") }, h("span", { "aria-hidden": "true" }, "☰")),
     ...[
       bots
         ? h(
@@ -5328,8 +5333,14 @@ function renderQuestRight(q) {
   const spend = q.budget?.spend;
   const share = spend ? Math.min(1, (q.cost || 0) / spend) : q.budget?.steps ? Math.min(1, q.steps / q.budget.steps) : 0;
   const bot = state.crew?.bots.find((b) => b.id === q.bot.id);
+  // The files and pages this task read, changed or made, so the link runs both ways.
+  const filesBlock = h("section", { class: "panel-block" }, h("h2", { class: "label" }, "Files and pages"), h("p", { class: "note small" }, "Looking…"));
+  api("GET", `quests/${q.id}/receipt`)
+    .then((r) => fill(filesBlock, h("h2", { class: "label" }, "Files and pages"), r.pages?.length ? r.pages.map((p) => h("button", { class: "plain wstaskrow", onclick: () => openPage(p.page) }, h("span", { class: "grow" }, p.title), h("span", { class: "note small" }, p.how.join(", ")))) : h("p", { class: "note small" }, "This task has not read or made a file or page.")))
+    .catch(() => filesBlock.remove());
   fill(ui.qright,
     q.why?.length > 1 ? h("section", { class: "panel-block" }, h("h2", { class: "label" }, "Why"), whyChain(q)) : null,
+    filesBlock,
     !isLive(q) && q.said ? h("section", { class: "panel-block" }, h("h2", { class: "label" }, "Workspace"), h("p", { class: "note" }, "Keep this report where your agents can find it next time."), h("button", { class: "small", onclick: (e) => fileAsPage(q, e.currentTarget.parentElement) }, "Save the report as a page")) : null,
     checkBlock(q),
     h(
@@ -7733,6 +7744,38 @@ function importOfficeFile(accept, box) {
   input.click();
 }
 
+/** The first-run welcome: the idea in a line, and the few places that matter. Shown once; Home can show it again. */
+function showWelcome() {
+  const dialog = h("dialog", { class: "aidialog welcome" });
+  const close = () => {
+    try {
+      localStorage.setItem("talqava.welcomed", "1");
+    } catch {}
+    dialog.close();
+    dialog.remove();
+  };
+  const point = (where, about) => h("li", {}, h("b", {}, where), ` ${about}`);
+  fill(
+    dialog,
+    h("h3", {}, "Welcome to Talqava"),
+    h("p", {}, "You give work, your AI agents do it, and you stay in control. Everything in the app is one of five things:"),
+    h(
+      "ul",
+      {},
+      point("What needs you.", "Home and the Inbox: plans to approve, questions, finished work, changes to accept."),
+      point("The work.", "Tasks, Projects and Routines: what you asked for, and work that repeats by itself."),
+      point("The team.", "Agents, Organization and the Marketplace: who does the work and how they are organized."),
+      point("What you make and know.", "Office (documents, sheets, slides, notes) and Knowledge (procedures, files, memory)."),
+      point("Keeping control.", "Admin: who may do what, what may be sent where, and a record of everything."),
+    ),
+    h("p", { class: "note" }, "The box at the top finds anything. The User guide explains the screen you are on."),
+    h("div", { class: "row" }, h("button", { class: "primary", onclick: () => (close(), go("start")) }, "Take me to Home"), h("button", { class: "plain", onclick: () => (close(), showGuide("getting-started")) }, "Read Getting started")),
+  );
+  dialog.addEventListener("cancel", close);
+  document.body.append(dialog);
+  dialog.showModal();
+}
+
 /** Home: what needs you, what is running, where to start, and what you were last working on. */
 async function startView() {
   ui.body.className = "body";
@@ -7802,7 +7845,7 @@ async function startView() {
     h(
       "section",
       { class: "isec" },
-      h("h2", {}, "How Talqava fits together"),
+      h("div", { class: "row" }, h("h2", { class: "grow" }, "How Talqava fits together"), h("button", { class: "plain link", onclick: () => showWelcome() }, "Show the welcome again")),
       h(
         "div",
         { class: "startmap" },
