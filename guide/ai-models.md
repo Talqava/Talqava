@@ -1,6 +1,6 @@
 # AI models
 
-AI models is where you connect the AI services your agents think with: Claude, OpenAI, Google Gemini, Mistral, DeepSeek, Azure, a LiteLLM gateway and more than 20 others, or free models that run on your own computer. You pick a service, paste its key, and Talqava checks it and finds its models. Open it from **Integrations → AI models**.
+AI models is where you connect the AI services your agents think with: Claude, OpenAI, Google Gemini, Mistral, DeepSeek, Azure, Amazon Bedrock, a LiteLLM gateway and more than 20 others, or free models that run on your own computer. You pick a service, paste its key, and Talqava checks it and finds its models. Open it from **Integrations → AI models**.
 
 ## What you'll see
 
@@ -16,7 +16,7 @@ AI models is where you connect the AI services your agents think with: Claude, O
 - **Backups keep work going.** If your main service is down, busy or out of credit, the first backup answers instead, then the next. Each switch is noted in the **Audit log**.
 - **Keys stay on your computer.** A key is checked with its service before it is saved, kept on this computer, and only ever sent to that service. Agents never see it.
 - **Local models are free and private.** Programs such as Ollama or LM Studio run models on your own computer. Nothing leaves it, but they are usually slower and less capable than paid services, and you must download a model in the program before Talqava can use it.
-- **Prices are estimates.** Prices and sizes come from OpenRouter's public list of models, which needs no account. Your service's bill is the real figure.
+- **Prices are estimates.** Prices, sizes and whether a model can use tools come from two public lists of models, OpenRouter's and the LiteLLM project's, which need no account and are refreshed once a day. Your service's bill is the real figure.
 
 ## How to…
 
@@ -95,6 +95,7 @@ Without prices, only the step budget can stop a task. Set the context size to wh
 - **"… does not list its models, so type the name of the model you want."** Use **Or type a model's name**.
 - **"No model runner is running on this computer."** Install Ollama or LM Studio, download a model, start it, then look again.
 - **"That does not look like an Azure resource name."** Type only the first part of the address, for example my-company.
+- **"That does not look like an AWS region."** For Amazon Bedrock, type your region, for example us-east-1. You can see it at the top right of the AWS console. The key is a Bedrock API key, made in the Bedrock console under **API keys**. Long-term keys expire on the date chosen when they were made; when one expires, connect again with a new key.
 - **"Up to four backups."** Remove one before adding another.
 - **"… rejected the API key."** during a task: the key was revoked or ran out. Connect the service again with a new key.
 
