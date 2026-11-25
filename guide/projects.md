@@ -45,6 +45,14 @@ A project is one folder for a body of work, such as onboarding a client, a launc
 
 You can also pick the project at the top of the chat list on the **Chat** page.
 
+### Keep a project's files with it
+
+1. Open the project and go to **Files**.
+2. Press **+ Document**, **+ Sheet**, **+ Slides** or **+ Note** to start a file in the project.
+3. To add a file you already have, open it and choose the project under **Project** in its side panel.
+
+Agents working on the project's tasks are told which files belong to it, so they start from them.
+
 ### See what needs you
 
 1. On the **Projects** page, tick **Needs me** to see only projects with something waiting on you.

@@ -7674,10 +7674,10 @@ async function renderDeck(col, id) {
   const aside = h(
     "aside",
     { class: "wspanel" },
-    h("div", { class: "label" }, "Who can see it"),
-    whoSel,
+    accessPicker(page, patch, org),
     h("div", { class: "label" }, "When agents want to change it"),
     edit,
+    h("label", { class: "power" }, h("input", { type: "checkbox", checked: page.protected, onchange: (e) => patch({ protected: e.target.checked }) }), "Protected: agents never change it directly"),
     levelPicker(page, id),
     org.members.length ? [h("div", { class: "label" }, "Give these slides to an agent"), giveTo, giveWhat, h("button", { class: "small", onclick: give }, "Give the task")] : null,
     h("div", { class: "row wrap wspanelend" }, h("button", { class: "small", onclick: () => pageHistory(page) }, "History"), h("button", { class: "small danger", onclick: () => confirm(`Delete “${page.title}”? You can restore it from Deleted in the Workspace for 30 days.`) && attempt(async () => (await api("DELETE", `workspace/pages/${id}`), (ui.ws.open = null), slidesView()), col) }, "Delete")),
@@ -8814,7 +8814,48 @@ function levelPicker(page, id) {
   const say = () => (note.textContent = `${words[sel.value]} Which AI services may receive each level is set under Security.`);
   sel.addEventListener("change", () => attempt(async () => (await api("PATCH", `workspace/pages/${id}`, { level: sel.value }), (page.level = sel.value), say(), toast(`Marked ${LEVEL_NAMES[sel.value]}.`))));
   say();
-  return [h("div", { class: "label" }, "Sensitivity"), sel, note];
+  return [h("div", { class: "label" }, "Sensitivity"), sel, note, projectPicker(page, id), page.kind === "sheet" || page.kind === "deck" ? linksBox(id) : null];
+}
+
+/** In a file's panel: the project it belongs to. */
+function projectPicker(page, id) {
+  const sel = h("select", { "aria-label": "Project" }, h("option", { value: "" }, "No project"));
+  const draw = (list) => fill(sel, h("option", { value: "" }, "No project"), list.map((p) => h("option", { value: p.id, selected: page.project === p.id }, p.title)), page.project && !list.some((p) => p.id === page.project) ? h("option", { value: page.project, selected: true }, "A project that was removed") : null);
+  if (ui.projects) draw(ui.projects);
+  else api("GET", "goals").then((g) => ((ui.goals = g.goals), (ui.projects = g.projects), draw(g.projects))).catch(() => {});
+  sel.addEventListener("change", () => attempt(async () => (await api("PATCH", `workspace/pages/${id}`, { project: sel.value || null }), (page.project = sel.value || null), toast(sel.value ? "Added to the project. It is listed under the project's Files." : "Taken out of its project."))));
+  return [h("div", { class: "label" }, "Project"), sel, page.project ? h("button", { class: "plain link small", onclick: () => go("project", page.project) }, "Open the project") : null];
+}
+
+/** In a file's panel: the tasks that read, changed or made it, and the pages that link to it. */
+function linksBox(id) {
+  const used = h("div", { class: "wstasks" });
+  const from = h("div", { class: "wstasks" });
+  api("GET", `workspace/pages/${id}/tasks`).then((tasks) => fill(used, tasks.length ? tasks.slice(0, 8).map((t) => h("button", { class: "plain wstaskrow", onclick: () => go("quest", t.task) }, h("span", { class: "grow" }, t.title), h("span", { class: "note small" }, t.how))) : h("p", { class: "note small" }, "No task has used it yet."))).catch(() => {});
+  api("GET", `workspace/pages/${id}/backlinks`).then((pages) => fill(from, pages.length ? pages.map((p) => h("button", { class: "plain wstaskrow", onclick: () => openPage(p.id) }, h("span", { class: "grow" }, p.title))) : h("p", { class: "note small" }, "No page links here yet."))).catch(() => {});
+  return [h("div", { class: "label" }, "Used by"), used, h("div", { class: "label" }, "Linked from"), from];
+}
+
+/** In a file's panel: who can see it: every agent, only some groups or agents, or nobody. */
+function accessPicker(page, patch, org) {
+  const groups = [...new Set((org.members ?? []).map((m) => m.department))];
+  const mode = () => (page.access.private ? "private" : page.access.everyone ? "everyone" : "some");
+  const sel = h("select", { "aria-label": "Who can see it" }, [["everyone", "Every agent"], ["some", "Only some groups or agents"], ["private", "Private: no agent sees it"]].map(([v, t]) => h("option", { value: v, selected: mode() === v }, t)));
+  const box = h("div", { class: "sheetgroups" });
+  const save = (access) => patch({ access });
+  const draw = () =>
+    fill(
+      box,
+      sel.value === "some"
+        ? [
+            ...groups.map((g) => h("label", { class: "power" }, h("input", { type: "checkbox", checked: page.access.departments.includes(g), onchange: (e) => save({ departments: e.target.checked ? [...page.access.departments, g] : page.access.departments.filter((x) => x !== g), agents: page.access.agents }) }), g)),
+            h("details", {}, h("summary", { class: "note small" }, `Or agents by name${page.access.agents.length ? ` · ${page.access.agents.length} chosen` : ""}`), (org.members ?? []).map((m) => h("label", { class: "power" }, h("input", { type: "checkbox", checked: page.access.agents.includes(m.bot), onchange: (e) => save({ departments: page.access.departments, agents: e.target.checked ? [...page.access.agents, m.bot] : page.access.agents.filter((x) => x !== m.bot) }) }), m.title))),
+          ]
+        : null,
+    );
+  sel.addEventListener("change", () => (save(sel.value === "everyone" ? { everyone: true } : sel.value === "private" ? { private: true } : { departments: page.access.departments, agents: page.access.agents }), draw()));
+  draw();
+  return [h("div", { class: "label" }, "Who can see it"), sel, box];
 }
 
 /** Security › Sensitive information: which AI services may receive each level. Only owners and administrators change it. */
@@ -9723,6 +9764,19 @@ async function projectView() {
       sorted.length ? h("section", { class: "card" }, sorted.map(taskRow)) : null,
     ];
   };
+  const FILE_KIND = { doc: "Document", sheet: "Sheet", deck: "Slides", note: "Note", page: "Workspace page" };
+  const newFile = (kind) =>
+    attempt(async () => {
+      const made = kind === "sheet" ? await api("POST", "workspace/sheets", { title: `${p.title}: sheet` }) : await api("POST", "workspace/pages", { kind, title: kind === "deck" ? `${p.title}: slides` : "Untitled", project: p.id, ...(kind === "deck" ? { markdown: `# ${p.title}\n\nA line about what it covers\n` } : {}) });
+      if (kind === "sheet") await api("PATCH", `workspace/pages/${made.id}`, { project: p.id });
+      ui.ws ??= { collapsed: new Set() };
+      ui.ws.focusTitle = true;
+      openPage(made.id);
+    }, col);
+  const files = () => [
+    h("div", { class: "row wrap" }, h("span", { class: "grow note" }, "The documents, sheets, slides, notes and pages of this project. Agents working on the project's tasks are told about them. Add an existing file from its side panel, under Project."), ["doc", "sheet", "deck", "note"].map((k) => h("button", { class: "small", onclick: () => newFile(k) }, `+ ${FILE_KIND[k]}`))),
+    (data.files ?? []).length ? h("section", { class: "card" }, data.files.map((f) => h("button", { class: "plain projectrow", onclick: () => openPage(f.id) }, h("span", { class: "grow" }, f.title), h("span", { class: "note small" }, `${FILE_KIND[f.kind] ?? "File"} · ${f.updatedBy} · ${officeDay(f.updatedAt)}`)))) : h("p", { class: "note" }, "No files in this project yet."),
+  ];
   const chats = () => [
     h("div", { class: "row" }, h("span", { class: "grow note" }, "Chats in this project share the project's own memory, kept apart from other projects."), h("button", { class: "small primary", onclick: startChat }, "+ Chat in this project")),
     data.chats.length ? h("section", { class: "card" }, data.chats.map((c) => h("button", { class: "plain projectrow", onclick: () => openChat(c) }, h("span", { class: "grow" }, c.title || "New chat"), h("span", { class: "note small" }, when(c.updatedAt))))) : h("p", { class: "note" }, "No chats yet."),
@@ -9731,7 +9785,7 @@ async function projectView() {
     col,
     h("button", { class: "plain back", onclick: () => go("projects") }, "← All projects"),
     h("div", { class: "row wrap projecthead" }, h("div", { class: "grow" }, h("h1", {}, p.title), h("div", { class: "note" }, [p.leadName ? `Led by ${p.leadName}` : "No lead", p.goalTitle ? `Serves: ${p.goalTitle}` : "No goal", p.due ? dueWords(p.due) : "No due day"].join(" · "), p.healthWhy ? ` · ${p.healthWhy}` : "")), healthTag(p), status, h("button", { class: "small", onclick: () => projectDialog({ project: p }) }, "Edit"), h("button", { class: "small plain danger", onclick: remove }, "Remove")),
-    h("div", { class: "segmented projecttabs", role: "tablist", "aria-label": "Parts of this project" }, tabBtn("overview", "Overview"), tabBtn("tasks", `Tasks · ${data.tasks.length}`), tabBtn("chats", `Chats · ${data.chats.length}`)),
-    tab === "tasks" ? tasks() : tab === "chats" ? chats() : overview(),
+    h("div", { class: "segmented projecttabs", role: "tablist", "aria-label": "Parts of this project" }, tabBtn("overview", "Overview"), tabBtn("tasks", `Tasks · ${data.tasks.length}`), tabBtn("files", `Files · ${(data.files ?? []).length}`), tabBtn("chats", `Chats · ${data.chats.length}`)),
+    tab === "tasks" ? tasks() : tab === "files" ? files() : tab === "chats" ? chats() : overview(),
   );
 }

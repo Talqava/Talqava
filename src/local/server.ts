@@ -1451,7 +1451,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       if (route === "POST workspace" && id && sub === "changes" && extra) return send(res, 200, await attempt(() => tables.decide(org, id, extra, body.decision)));
     }
     if (area === "pages") {
-      if (route === "POST workspace" && !id) return send(res, 200, await attempt(() => workspace.create(org, null, { parent: body.parent, title: body.title, markdown: body.markdown, icon: body.icon, kind: body.kind, folder: body.folder, tags: body.tags, level: body.level })));
+      if (route === "POST workspace" && !id) return send(res, 200, await attempt(() => workspace.create(org, null, { parent: body.parent, title: body.title, markdown: body.markdown, icon: body.icon, kind: body.kind, folder: body.folder, tags: body.tags, level: body.level, project: body.project })));
       if (route === "GET workspace" && id && !sub) return send(res, 200, await attempt(() => workspace.get(org, id)));
       if (route === "PUT workspace" && id && !sub) return send(res, 200, await attempt(() => workspace.save(org, id, body.markdown, body.baseRev)));
       if (route === "PATCH workspace" && id && !sub) return send(res, 200, await attempt(() => workspace.update(org, id, body)));

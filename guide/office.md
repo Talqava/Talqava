@@ -147,6 +147,14 @@ To make it a task, choose an agent under **Give this note to an agent** and pres
 
 What is kept: text, headings, lists, tables, bold and italic; cell values, formulas and sheet names. What is not: fonts, colours, page layout, pictures, charts, merged cells and comments. A formula that uses a function Sheets does not have shows **#NAME?** after import. Older .doc and .xls files need saving as .docx or .xlsx first.
 
+### Put a file in a project
+
+1. Open the document, sheet, slides or note. In its side panel, choose a project under **Project**.
+2. The file is then listed under the project's **Files** tab, and agents working on that project's tasks are told about it.
+3. You can also start a new file from the project itself: open the project, go to **Files**, and press **+ Document**, **+ Sheet**, **+ Slides** or **+ Note**.
+
+Every file's side panel has the same parts in the same order: who can see it, how agents may change it, **Protected**, **Sensitivity**, **Project**, giving it to an agent, the tasks that used it, **History** and **Delete**.
+
 ### Download or print
 
 1. Open the document or note.
