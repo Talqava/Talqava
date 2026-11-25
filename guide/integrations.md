@@ -133,6 +133,7 @@ So agents can call a service that has no integration of its own, without seeing 
 ## If something goes wrong
 
 - **"WordPress refused that…"** The user name or application password is not accepted. Make a new application password under **Users › Profile** and paste it again. Some security plugins switch application passwords off; allow them for your user.
+- **"…did not receive your user name and password."** Your web host is dropping the sign-in details before they reach WordPress; this is common on some hosts. In WordPress, open **Settings › Permalinks** and press **Save Changes** without changing anything, then connect again. If it still fails, ask your host to "pass the Authorization header to PHP", or to add this line near the top of the site's `.htaccess` file: `SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1`
 - **"…sent the request on to another address."** Use the exact address your browser shows when you open your site, with or without `www`, starting with `https://`.
 - **"That address does not answer as a WordPress site."** Check the address. Some hosts or plugins switch off the site's REST API, which this needs.
 

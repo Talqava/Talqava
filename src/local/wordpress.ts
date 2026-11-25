@@ -58,6 +58,9 @@ async function wp<T>(site: Pick<WordPressSite, "url" | "user" | "password">, met
     throw new Error(/redirect/i.test(why) ? `${new URL(site.url).host} sent the request on to another address. Use the exact address your browser shows when you open your site (with or without www, and https).` : /ENOTFOUND|EAI_AGAIN/.test(why) ? `There is no website at ${new URL(site.url).host}. Check the spelling of the address.` : /timed? ?out|aborted/i.test(why) ? `${new URL(site.url).host} took too long to answer. Try again in a moment.` : `${new URL(site.url).host} could not be reached. Check the address and that the site is up.`);
   });
   const data = (await res.json().catch(() => null)) as { message?: string; code?: string } | null;
+  // "Not logged in" although a user name and password were sent means they never reached WordPress: the web host
+  // dropped them on the way. That is fixed on the site, so say how, in the owner's terms.
+  if (res.status === 401 && data?.code === "rest_not_logged_in") throw new Error(`${new URL(site.url).host} did not receive your user name and password: the web host is dropping them before they reach WordPress. To fix it, sign in to WordPress, open Settings › Permalinks and press Save Changes without changing anything (this refreshes a settings file so sign-in details get through), then try again here. If it still fails, ask your host to "pass the Authorization header to PHP".`);
   if (res.status === 401 || res.status === 403) throw new Error(`WordPress refused that: ${(data?.message ? stripTags(data.message) : "") || "the user name or application password is not accepted, or this user may not do this"}.`);
   if (res.status === 404 && !data) throw new Error("That address does not answer as a WordPress site. Check the address, and that the site's REST API is not switched off.");
   if (!res.ok) throw new Error(`WordPress answered ${res.status}${data?.message ? `: ${stripTags(data.message).slice(0, 200)}` : "."}`);
