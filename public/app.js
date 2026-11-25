@@ -180,10 +180,12 @@ async function showLogin() {
       },
     },
     h("div", { class: "brand", role: "img", "aria-label": "Talqava" }, brandLogo({ mark: 48, word: 18 })),
+    how.sso ? h("a", { class: "button primary ssobutton", href: "/api/sso/start" }, "Sign in with your company account") : null,
+    how.sso ? h("p", { class: "note small" }, how.ssoOnly ? "Passwords are switched off. The owner can still sign in with theirs below." : "Or sign in with your email and password:") : null,
     how.people ? email : null,
     password,
     code,
-    h("button", { class: "primary" }, "Sign in"),
+    h("button", { class: how.sso ? "" : "primary" }, "Sign in"),
   );
   fill(app, form);
   (how.people ? email : password).focus();
@@ -8040,10 +8042,59 @@ async function securityView() {
           ),
         )
       : null,
+    admin ? ssoSection() : null,
     sensitivitySection(admin),
     guardrailsSection(admin),
     securityOpsSection(admin),
   );
+}
+
+/** Security › Single sign-on: people sign in through the company's identity provider. */
+function ssoSection() {
+  const box = h("section", { class: "isec" }, h("h2", {}, "Single sign-on"));
+  const draw = async () => {
+    let d;
+    try {
+      d = await api("GET", "people/sso");
+    } catch (err) {
+      return fill(box, h("h2", {}, "Single sign-on"), h("div", { class: "banner error" }, err.message));
+    }
+    const c = d.sso ?? { issuer: "", clientId: "", domains: [], addPeople: false, role: "member", only: false, hasSecret: false };
+    const issuer = h("input", { type: "url", value: c.issuer, placeholder: "Issuer address, e.g. https://login.microsoftonline.com/<your tenant>/v2.0", "aria-label": "Issuer address" });
+    const client = h("input", { value: c.clientId, placeholder: "Client ID (also called Application ID)", "aria-label": "Client ID" });
+    const secret = h("input", { type: "password", autocomplete: "off", placeholder: c.hasSecret ? "A client secret is saved; type a new one to replace it" : "Client secret", "aria-label": "Client secret" });
+    const domains = h("input", { value: c.domains.join(", "), placeholder: "Only these email domains, e.g. yourcompany.com (optional)", "aria-label": "Allowed email domains" });
+    const add = h("input", { type: "checkbox", checked: c.addPeople });
+    const role = h("select", { "aria-label": "Role for new people" }, [["member", "Member"], ["manager", "Manager"], ["auditor", "Auditor"], ["admin", "Administrator"]].map(([v, t]) => h("option", { value: v, selected: c.role === v }, t)));
+    const only = h("input", { type: "checkbox", checked: c.only });
+    const save = () => attempt(async () => (await api("PUT", "people/sso", { issuer: issuer.value, clientId: client.value, clientSecret: secret.value || undefined, domains: domains.value, addPeople: add.checked, role: role.value, only: only.checked }), toast("Saved. The sign-in page now offers “Sign in with your company account”. Try it in a private window before you rely on it."), draw()), box);
+    const copy = h("button", { type: "button", class: "small" }, "Copy");
+    copy.addEventListener("click", () => navigator.clipboard?.writeText(d.redirect).then(() => ((copy.textContent = "Copied"), setTimeout(() => (copy.textContent = "Copy"), 1500))).catch(() => {}));
+    fill(
+      box,
+      h("h2", {}, "Single sign-on"),
+      h("p", { class: "note", style: "margin: 0" }, "People sign in through your company's identity provider (Microsoft Entra ID, Google Workspace, Okta, or any other that supports OpenID Connect). When someone leaves and you remove them there, they can no longer sign in here."),
+      h(
+        "form",
+        { class: "card form", onsubmit: (e) => (e.preventDefault(), save()) },
+        h("div", { class: "row" }, h("b", { class: "grow" }, c.issuer ? "Connected to your identity provider" : "Not set up"), h("span", { class: `chip ${c.issuer ? "on" : ""}` }, c.issuer ? "On" : "Off")),
+        h("ol", {}, h("li", {}, "In your identity provider, register a new web application called Talqava."), h("li", {}, "Give it this redirect address: ", h("code", {}, d.redirect), " ", copy), h("li", {}, "Copy its issuer address, client ID and client secret into the boxes below.")),
+        issuer,
+        client,
+        secret,
+        domains,
+        h("label", { class: "power" }, add, "Let anyone your provider signs in join Talqava the first time they sign in, as a"),
+        role,
+        h("p", { class: "note small" }, "Unticked, only people you have already added under People can sign in this way. Their email address here must match the one at your provider."),
+        h("label", { class: "power" }, only, "Only single sign-on: switch passwords off for everyone except the owner"),
+        h("p", { class: "note small" }, "The owner's password stays as the emergency way in, in case your identity provider is down. Keep it somewhere safe."),
+        h("div", { class: "row wrap" }, h("button", { class: "primary" }, c.issuer ? "Save" : "Turn on single sign-on"), c.issuer ? h("button", { type: "button", class: "plain danger", onclick: () => confirm("Turn off single sign-on? People sign in with their email and password again.") && attempt(async () => (await api("PUT", "people/sso", { issuer: "" }), draw()), box) }, "Turn off") : null),
+        h("p", { class: "note small" }, "This has been tested against a stand-in provider, not yet against a real one. Try it in a private window, staying signed in here, before you switch passwords off."),
+      ),
+    );
+  };
+  draw();
+  return box;
 }
 
 /** Security › watching: alerts, access reviews, and sending the audit record to a monitoring system. */

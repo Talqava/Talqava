@@ -110,6 +110,8 @@ export interface Config {
   planFirst?: "leads" | "all" | "never";
   /** The leads' daily check-in arrives in the Inbox each day (built from the tasks, at no cost). Default on. */
   checkIn?: boolean;
+  /** Single sign-on through the company's identity provider (see sso.ts). */
+  sso?: { issuer: string; clientId: string; clientSecret?: string; domains?: string[]; addPeople?: boolean; role?: string; only?: boolean };
   /** How long chats and finished task records are kept, and whether a legal hold stops every deletion (see retention.ts). */
   retention?: { days?: number; legalHold?: boolean };
   /** Where every audit entry is also sent as it is written: a monitoring system's https address, and a secret to sign with. */

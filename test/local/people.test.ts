@@ -123,7 +123,7 @@ test("in the running app: nothing without signing in, and a role's limits are en
     }
     assert.ok(up, "the app started");
     // Before people are set up, this computer is trusted as before.
-    assert.deepEqual((await call("GET", "login")).body, { people: false, password: false });
+    assert.deepEqual((await call("GET", "login")).body, { people: false, password: false, sso: false, ssoOnly: false });
     assert.equal((await call("GET", "state")).status, 200);
     const start = await call("POST", "people/start", { name: "Ada", email: "ada@example.com", password: "correct horse battery" });
     assert.equal(start.status, 200);
