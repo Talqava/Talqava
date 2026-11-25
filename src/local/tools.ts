@@ -179,7 +179,8 @@ function runBash(input: BashInput, signal: AbortSignal, cwd: string): Promise<st
     child.stdout.on("data", collect);
     child.stderr.on("data", collect);
     child.on("error", (err) => {
-      note = `\n[could not start: ${err.message}]`;
+      // On Windows the shell comes with Git for Windows; say so instead of a bare "not found".
+      note = (err as NodeJS.ErrnoException).code === "ENOENT" && process.platform === "win32" ? "\n[could not start: the bash shell was not found. Install Git for Windows from git-scm.com, then restart Talqava.]" : `\n[could not start: ${err.message}]`;
     });
     child.on("close", (code) => {
       clearTimeout(timer);

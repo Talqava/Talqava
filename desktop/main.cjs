@@ -1,4 +1,4 @@
-// Talqava for Mac. Starts the app's own server in the background, then
+// Talqava for the desktop (Mac, and builds for Windows and Linux). Starts the app's own server in the background, then
 // shows it in a window. Closing the window keeps it running (so scheduled jobs
 // and bots carry on); Quit from the menu or Dock stops everything.
 const { app, BrowserWindow, Menu, shell, dialog } = require("electron");
@@ -63,15 +63,19 @@ async function startServer() {
   const port = await choosePort();
   const log = fs.createWriteStream(logFile, { flags: "a" });
   log.write(`\n--- ${new Date().toISOString()} starting on port ${port} ---\n`);
-  // Apps opened from Finder get a bare PATH; add the usual places for tools the agent's shell uses.
-  const extra = ["/opt/homebrew/bin", "/usr/local/bin", path.join(app.getPath("home"), ".local", "bin")];
+  // Apps opened from Finder or the Start menu get a bare PATH; add the usual places for tools the agent's shell uses.
+  // On Windows that is Git for Windows, which brings the bash shell the agents' shell tool runs commands in.
+  const extra =
+    process.platform === "win32"
+      ? [path.join(process.env.ProgramFiles || "C:\\Program Files", "Git", "bin"), ...(process.env.LOCALAPPDATA ? [path.join(process.env.LOCALAPPDATA, "Programs", "Git", "bin")] : [])]
+      : ["/opt/homebrew/bin", "/usr/local/bin", path.join(app.getPath("home"), ".local", "bin")];
   const env = {
     ...process.env,
     ELECTRON_RUN_AS_NODE: "1", // run the bundled Electron as plain Node.js
     TALQAVA_DATA_DIR: dataDir,
     HOST,
     PORT: String(port),
-    PATH: [...extra, process.env.PATH || "/usr/bin:/bin:/usr/sbin:/sbin"].join(":"),
+    PATH: [...extra, process.env.PATH || (process.platform === "win32" ? "" : "/usr/bin:/bin:/usr/sbin:/sbin")].filter(Boolean).join(path.delimiter),
   };
   server = spawn(process.execPath, [path.join(serverDir, "src", "local", "main.ts")], { cwd: serverDir, env, stdio: ["ignore", "pipe", "pipe"] });
   server.stdout.pipe(log);
@@ -179,10 +183,8 @@ function buildMenu() {
           },
           { label: "Show Data Folder", click: () => shell.openPath(dataDir) },
           { label: "Show Log", click: () => shell.showItemInFolder(logFile) },
-          { type: "separator" },
-          { role: "hide" },
-          { role: "hideOthers" },
-          { role: "unhide" },
+          // Hide, Hide Others and Show All exist only on a Mac.
+          ...(process.platform === "darwin" ? [{ type: "separator" }, { role: "hide" }, { role: "hideOthers" }, { role: "unhide" }] : []),
           { type: "separator" },
           { role: "quit" },
         ],

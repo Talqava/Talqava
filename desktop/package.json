@@ -2,14 +2,16 @@
   "name": "talqava-desktop",
   "productName": "Talqava",
   "version": "0.1.0",
-  "description": "Talqava as a Mac app: run your organization with AI agents, in its own window, with nothing else to install.",
+  "description": "Talqava as a desktop app: run your organization with AI agents, in its own window, with nothing else to install.",
   "main": "main.cjs",
   "private": true,
   "scripts": {
     "start": "electron .",
     "prepare-server": "node prepare-server.mjs",
     "dist": "npm run prepare-server && electron-builder --mac",
-    "dist:test": "npm run prepare-server && electron-builder --mac dmg --arm64"
+    "dist:test": "npm run prepare-server && electron-builder --mac dmg --arm64",
+    "dist:win": "npm run prepare-server && electron-builder --win nsis --x64",
+    "dist:linux": "npm run prepare-server && electron-builder --linux AppImage --x64"
   },
   "devDependencies": {
     "electron": "45.4.1",
@@ -62,6 +64,35 @@
         }
       ]
     },
+    "win": {
+      "icon": "assets/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "shortcutName": "Talqava"
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "category": "Office",
+      "executableName": "talqava",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
     "afterPack": "after-pack.cjs"
   },
   "homepage": "https://talqava.com",
@@ -71,5 +102,9 @@
     "type": "git",
     "url": "git+https://github.com/Talqava/Talqava.git",
     "directory": "desktop"
+  },
+  "overrides": {
+    "minimatch@^10": "^11.0.1",
+    "minimatch@^9": "^11.0.1"
   }
 }
