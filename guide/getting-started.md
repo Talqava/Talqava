@@ -43,7 +43,7 @@ Start with two or three positions. You can always add more. See [Organization](o
 
 ### 4. Give your first task
 
-1. Open **Tasks** and press **+ New task**. (You can also give a task from **Work in progress**, or to one agent with **Give a task**.)
+1. Open **Tasks** and press **+ New task**. (You can also give a task from **Agents**, or to one agent with **Give a task**.)
 2. Under **Task**, write what you want in one line, for example "Find ten wholesale bakeries near us".
 3. Under **Details**, say what a good result looks like.
 4. Choose who to **Assign to** and the **Priority**, then press **Create task**.
@@ -60,47 +60,49 @@ That's it: you have run your first task. From here, add more agents, set budgets
 
 ## A tour of the menu
 
-The menu on the left is in groups. Every page also has a **Guide** button at the top right that opens the guide for that page.
+The menu on the left follows one idea: **you give work, agents do it, you stay in control.**
 
-**Chat**: Talk to your main agent directly, like a messaging app. Good for quick questions, drafts and ideas that do not need a formal task. See [Chat](chat.md).
+**Home**: Where Talqava opens. What needs you, what is being worked on, quick ways to start something, and the files you were last working on.
 
-**Inbox**: Your agents report to you here as messages, like email. It shows what needs you, what is being worked on and what got done. You approve or decline steps, answer questions and accept positions agents propose, right from the message. See [Inbox](inbox.md).
+**Chat**: Talk to your main agent directly, like a messaging app. Good for quick questions, drafts and ideas.
+
+**Inbox**: Everything that needs you, in one place: plans to approve, questions, finished work to review, changes agents want to make, and reminders.
 
 ### Work
 
-**Tasks**: Every task in your organization in one place: queued, working, needing you, to review and done. Create tasks, comment on them, send work back, and set goals and projects for tasks to serve. See [Tasks](tasks.md).
+**Tasks**: Every task in your organization: queued, working, needing you, to review and done.
 
-**Work in progress**: Your agents and what each is doing right now. Assign work, clear what is waiting on you, choose a repository for code tasks, and see how each department is doing. See [Work in progress](work-in-progress.md).
+**Projects**: One folder for each body of work, with its tasks and chats.
 
-**Routines**: Repeating work your agents do on their own, such as a morning news digest every weekday. Each run appears as a new chat. You can pause, resume, run now or delete a job. See [Routines](schedules.md).
+**Routines**: Repeating work your agents do on their own, such as a morning news digest every weekday.
 
 ### Team
 
-**Organization**: Your org chart. Add positions, draw who reports to whom, group positions into teams with a lead, a goal and a monthly budget, and copy an example structure. Every change can be undone. See [Organization](organization.md).
+**Agents**: Your agents and what each is doing right now. Assign work, clear what is waiting on you, and open any agent's page.
 
-**Marketplace**: Ready-made agents and teams for every department, free. Read every agent's full instructions, and what it can and cannot do, before you add it. See [Marketplace](marketplace.md).
+**Organization**: Your org chart. Add positions, draw who reports to whom, group them into teams with leads, and set budgets.
 
-### Knowledge
+**Marketplace**: Ready-made agents, teams, company templates, playbooks, page packs, Office templates and connectors, free.
 
-**Workspace**: Pages your agents work from: how your business runs, procedures, checklists and decisions. Agents read them before they start and suggest changes for you to accept. See [Workspace](workspace.md).
+### Make and know
 
-**Library**: Your organization's files, in folders, kept on your computer. For each file or folder you choose whether agents may use it or it stays private. Private files are never sent to any AI. See [Library](library.md).
+**Office**: What you and your agents make together. Its parts are tabs across the top: **Documents** (letters, proposals, reports), **Sheets** (budgets and forecasts that calculate), **Slides** (presentations) and **Notes** (quick, private notes). See [Office](office.md).
 
-**Memory**: Things your agents should always remember about you and your business. Keep separate memory for each client or project. See [Memory](memory.md).
+**Knowledge**: What your agents work from. Its parts are tabs across the top: **Workspace** (procedures, price lists and decisions as pages), **Library** (your files, in folders), **Memory** (what agents should always remember) and **Skills** (procedures agents wrote down for themselves).
 
-**Skills**: Procedures an agent has written down for itself after working out how to do something, so it can repeat it. Ask an agent to "save that as a skill" after a task you will want again. See [Skills](skills.md).
+### Admin
 
-### Oversight
+Fold this group away with the small arrow when you do not need it.
 
-**Audit log**: A full record of every operation, by you and by each agent: what was done, whether it worked and what it cost. Filter it, search it and export it. See [Audit log](audit-log.md).
+**Security**: Who can open Talqava and what each person may do, which AI services may receive sensitive information, rules every agent must follow, alerts, and backups. See [Security](security.md).
 
-### At the bottom
+**Audit log**: A full record of every operation, by you and by each agent, sealed so that changes to it show.
 
-**Integrations**: Connect the tools you already use: OpenRouter for many AI models in one account, Git and GitHub for code, and MCP to use your team from Claude or give agents tools from other services. See [Integrations](integrations.md).
+**Integrations**: Connect AI models, Git and GitHub, connectors to other services, and keys.
 
-**Settings**: Connect AI services and choose models and backups, and set approvals, budgets, cost saving, the look of the app and more. See [Settings](settings.md).
+**Settings**: Approvals, budgets, cost saving, privacy and how Talqava looks.
 
-**User guide**: Opens these guides.
+**User guide**: Opens these guides, at the page that explains the screen you are on.
 
 ## Good habits from day one
 

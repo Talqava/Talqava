@@ -119,7 +119,7 @@ Chats with Talqava itself keep working while agents are paused.
 3. Open the task: its panel says what to do, such as opening the work, trying again, giving it to someone else, or accepting it as it is.
 
 **Use the task board**
-1. Open a task's page (from **Work in progress** or the task's panel) and open **Task board**.
+1. Open a task's page (from **Agents** or the task's panel) and open **Task board**.
 2. Read what the agents on the task have posted: findings, decisions, questions, blockers and hand-overs. It opens by itself when one has a question or a blocker.
 3. To tell every agent on the task something at once, write a note, choose its kind and press **Post**. They see it the next time they read the board or start.
 
@@ -190,7 +190,7 @@ A project is a folder for a body of work, with its own page under **Projects** i
 - Use **Urgent** sparingly. If everything is urgent, nothing goes first.
 - Give projects a lead. When you add a task from a project, it goes to the lead by default.
 - Keep each goal's **Now at** number current. Agents see the progress, so a stale number misleads them.
-- The Done column only shows the last two weeks. Older finished work is still on **Work in progress** under **Completed work**, and in your Inbox.
+- The Done column only shows the last two weeks. Older finished work is still on **Agents** under **Completed work**, and in your Inbox.
 
 ## If something goes wrong
 
@@ -215,7 +215,7 @@ A project is a folder for a body of work, with its own page under **Projects** i
 ## Related guides
 
 - [Projects](projects.md)
-- [Work in progress](work-in-progress.md)
+- [Agents](work-in-progress.md)
 - [Inbox](inbox.md)
 - [Chat](chat.md)
 - [Organization](organization.md)

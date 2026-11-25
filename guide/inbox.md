@@ -116,7 +116,7 @@ Work handed between agents doesn't send you separate messages. Its progress show
 ## Related guides
 
 - [Tasks and goals](tasks.md)
-- [Work in progress](work-in-progress.md)
+- [Agents](work-in-progress.md)
 - [Chat](chat.md)
 - [Organization](organization.md)
 - [Settings and AI models](settings.md)

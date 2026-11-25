@@ -1965,3 +1965,19 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
   body.printingdeck .deckprint { display: block; }
   body.printingdeck .deckprint .slideface { width: 100%; font-size: 16pt; border: 0; break-after: page; page-break-after: always; }
 }
+
+/* Area tabs: the parts of Office and Knowledge, across the top. */
+.areatabs { display: flex; align-items: center; gap: 4px; padding: 6px 20px; border-bottom: 1px solid var(--line); background: var(--panel); overflow-x: auto; }
+.areatabs[hidden] { display: none; }
+.areatabs .areaname { font-weight: 600; margin-right: 10px; white-space: nowrap; }
+.areatab { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 999px; border: 1px solid transparent; background: transparent; color: var(--text); cursor: pointer; white-space: nowrap; min-height: 32px; }
+.areatab:hover { background: var(--raised); }
+.areatab.on { background: var(--raised); border-color: var(--line2, var(--line)); font-weight: 600; }
+.railfold { width: 100%; text-align: left; background: transparent; border: 0; cursor: pointer; font: inherit; }
+/* Home. */
+.startpage .startgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.startpage .starttile, .startpage .mapcard { display: grid; gap: 4px; text-align: left; padding: 14px 16px; }
+.startpage .startline { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; margin-top: 6px; padding: 10px 14px; }
+.startpage .startmap { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.security .sectabs { position: sticky; top: 0; z-index: 2; background: var(--bg, #f5f6f4); padding: 8px 0; }
+.security .secrow .secgo { order: 3; }

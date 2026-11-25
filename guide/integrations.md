@@ -52,7 +52,7 @@ A repository is a folder of code or documents with a full history of changes. Th
 
 ### Use a repository for a task
 
-1. On a connected repository's card, press **Use for new tasks**, or choose it in the **Repository** box at the top of **Work in progress**.
+1. On a connected repository's card, press **Use for new tasks**, or choose it in the **Repository** box at the top of **Agents**.
 2. Assign a task to an agent that can change files.
 3. When the task stops, its page shows the changes. Press **Keep the changes** or **Undo**.
 
@@ -125,7 +125,7 @@ So agents can call a service that has no integration of its own, without seeing 
 ## Related guides
 
 - [Settings](settings.md) (AI models, connectors, API keys)
-- [Work in progress](work-in-progress.md)
+- [Agents](work-in-progress.md)
 - [Tasks](tasks.md)
 - [Audit log](audit-log.md)
 - [Getting started](getting-started.md)

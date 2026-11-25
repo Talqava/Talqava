@@ -88,7 +88,7 @@ const GUIDES = [
   ["inbox", "Inbox"],
   ["tasks", "Tasks and goals"],
   ["projects", "Projects"],
-  ["work-in-progress", "Work in progress"],
+  ["work-in-progress", "Agents"],
   ["schedules", "Schedules"],
   ["organization", "Organization"],
   ["marketplace", "Marketplace"],

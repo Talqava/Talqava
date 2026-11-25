@@ -95,14 +95,14 @@ See [Integrations](integrations.md) for the details.
 On its Marketplace page you can:
 
 1. Press **Chat with** the agent to talk to it straight away.
-2. Press **Assign a task to the** agent to go to Work in progress with it chosen.
+2. Press **Assign a task to the** agent to go to the Agents page with it chosen.
 3. Press **Edit your copy** to change its name, look, instructions, model, approvals or budget.
 
 ## Tips
 
 - Start small. Add one or two agents for your most pressing work, try a task, then grow.
 - Read the **Will not do** list. It tells you where you still need a person.
-- If no agent matches, you can create your own from the **Work in progress** page with **+ Create an agent**.
+- If no agent matches, you can create your own from the **Agents** page with **+ Create an agent**.
 - Use **Copy** on the instructions if you want to start your own agent from a ready-made one.
 
 ## If something goes wrong
@@ -115,7 +115,7 @@ On its Marketplace page you can:
 ## Related guides
 
 - [Organization](organization.md)
-- [Work in progress](work-in-progress.md)
+- [Agents](work-in-progress.md)
 - [Chat](chat.md)
 - [Settings](settings.md)
 - [Getting started](getting-started.md)

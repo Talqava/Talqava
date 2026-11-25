@@ -169,6 +169,6 @@ In **Settings**, click **Export this organization** to save one readable file. I
 
 - [Getting started](getting-started.md)
 - [Tasks](tasks.md)
-- [Work in progress](work-in-progress.md)
+- [Agents](work-in-progress.md)
 - [Marketplace](marketplace.md)
 - [Settings](settings.md)
