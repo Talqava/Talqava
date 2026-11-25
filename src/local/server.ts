@@ -42,6 +42,7 @@ import { addKey, connect, disconnect, refreshHealth, serviceProblems, findLocal,
 import { board } from "./board.ts";
 import { accessGraph, accessGraphs } from "./access.ts";
 import { loadModelList } from "./modelprices.ts";
+import { COLUMN_TYPES, peopleOf, tables } from "./tables.ts";
 import { connectCatalog, connectorLabel, disconnectCatalog, listCatalog } from "./connector-catalog.ts";
 import { installKit, listKits, previewKit, runPlaybook, undoKit } from "./kits.ts";
 import { connectLangfuse, langfuseIntegration, recordStep, removeLangfuse } from "./langfuse.ts";
@@ -1162,6 +1163,20 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (area === "suggestions") {
       if (route === "GET workspace") return send(res, 200, workspace.suggestions(org, url.searchParams.get("page") ?? undefined, url.searchParams.get("all") ? "all" : "open"));
       if (route === "POST workspace" && id) return send(res, 200, await attempt(() => workspace.decide(org, id, body.decision, body.replace === true)));
+    }
+    // Tables on pages: typed columns, rows, changes agents asked for, CSV in and out.
+    if (area === "tables") {
+      if (route === "GET workspace" && id === "waiting") return send(res, 200, await attempt(() => tables.waiting(org)));
+      if (route === "GET workspace" && !id) return send(res, 200, await attempt(() => ({ tables: tables.onPage(org, url.searchParams.get("page") ?? "").map((t) => tables.get(org, t.id)), people: peopleOf(org), types: COLUMN_TYPES })));
+      if (route === "POST workspace" && !id) return send(res, 200, await attempt(() => tables.create(org, String(body.page ?? ""), body)));
+      if (route === "POST workspace" && id === "import") return send(res, 200, await attempt(() => tables.importCsv(org, body)));
+      if (route === "GET workspace" && id && sub === "csv") return send(res, 200, await attempt(() => tables.exportCsv(org, id)));
+      if (route === "GET workspace" && id && !sub) return send(res, 200, await attempt(() => tables.get(org, id)));
+      if (route === "PATCH workspace" && id && !sub) return send(res, 200, await attempt(() => tables.update(org, id, body)));
+      if (route === "DELETE workspace" && id && !sub) return send(res, 200, await attempt(() => tables.remove(org, id)));
+      if (route === "POST workspace" && id && sub === "rows") return send(res, 200, await attempt(() => (tables.setRow(org, null, id, { row: extra, values: body.values }), tables.get(org, id))));
+      if (route === "DELETE workspace" && id && sub === "rows" && extra) return send(res, 200, await attempt(() => (tables.deleteRow(org, id, extra), tables.get(org, id))));
+      if (route === "POST workspace" && id && sub === "changes" && extra) return send(res, 200, await attempt(() => tables.decide(org, id, extra, body.decision)));
     }
     if (area === "pages") {
       if (route === "POST workspace" && !id) return send(res, 200, await attempt(() => workspace.create(org, null, { parent: body.parent, title: body.title, markdown: body.markdown, icon: body.icon })));

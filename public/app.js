@@ -1670,8 +1670,9 @@ const agentWho = (bot) => (bot && state.mail?.names?.[bot.id] ? `${agentName(bot
 /** Changes agents suggested to workspace pages, waiting for the owner. */
 async function loadPageSuggestions() {
   const before = JSON.stringify((state.pageSuggestions ?? []).map((s) => s.id));
-  state.pageSuggestions = await api("GET", "workspace/suggestions").catch(() => state.pageSuggestions ?? []);
-  if (state.view === "inbox" && JSON.stringify(state.pageSuggestions.map((s) => s.id)) !== before) renderInbox();
+  const rowsBefore = JSON.stringify((state.rowChanges ?? []).map((c) => c.id));
+  [state.pageSuggestions, state.rowChanges] = await Promise.all([api("GET", "workspace/suggestions").catch(() => state.pageSuggestions ?? []), api("GET", "workspace/tables/waiting").catch(() => state.rowChanges ?? [])]);
+  if (state.view === "inbox" && (JSON.stringify(state.pageSuggestions.map((s) => s.id)) !== before || JSON.stringify(state.rowChanges.map((c) => c.id)) !== rowsBefore)) renderInbox();
 }
 
 async function loadMail() {
@@ -1731,6 +1732,11 @@ function mailMessages() {
   for (const sg of state.pageSuggestions ?? []) {
     const bot = state.crew?.bots.find((b) => b.id === sg.author) ?? null;
     out.push({ id: `page:${sg.id}`, kind: "pagechange", suggestion: sg, bot, subject: `Suggested change: “${sg.pageTitle}”`, snippet: sg.note || "A change to a workspace page, for you to accept or decline.", at: sg.createdAt, activityAt: sg.createdAt, label: "needs" });
+  }
+  // So does a change an agent asked for in a workspace table.
+  for (const ch of state.rowChanges ?? []) {
+    const bot = state.crew?.bots.find((b) => b.id === ch.author) ?? null;
+    out.push({ id: `row:${ch.id}`, kind: "rowchange", change: ch, bot, subject: `Table change: “${ch.tableName}”`, snippet: ch.words, at: ch.createdAt, activityAt: ch.createdAt, label: "needs" });
   }
   // A position an agent proposed waits in the inbox for the owner's answer.
   for (const org of state.orgs?.orgs ?? [])
@@ -1991,6 +1997,25 @@ function readMail(m) {
 
   const body = h("div", { class: "readbody" });
   const act = (fn) => attempt(async () => (await fn(), await Promise.all([loadQuests(), refreshList(), loadCrew(), loadMail()]), renderInbox(), syncInboxCount()), body);
+  if (m.kind === "rowchange") {
+    const ch = m.change;
+    const decide = (decision) =>
+      attempt(async () => {
+        await api("POST", `workspace/tables/${ch.table}/changes/${ch.id}`, { decision });
+        await loadPageSuggestions();
+        ui.mailOpen = null;
+        renderInbox();
+        syncInboxCount();
+      }, body);
+    fill(
+      body,
+      h("p", {}, `I'd like to change the table “${ch.tableName}” on the workspace page “${ch.pageTitle}”.${ch.note ? ` ${ch.note}` : ""}`),
+      h("p", { class: "card" }, ch.words),
+      h("p", { class: "note small" }, "The table stays as it is until you accept. To let agents change this table without asking, set its page to take agents' changes straight away."),
+      h("div", { class: "row" }, h("button", { class: "primary", onclick: () => decide("accept") }, "Accept"), h("button", { onclick: () => decide("decline") }, "Decline"), h("button", { class: "plain", onclick: () => openPage(ch.page) }, "Open the page")),
+    );
+    return [tools, h("h2", { class: "readsubject" }, m.subject, h("span", { class: `mlabel ${m.label}` }, LABEL_WORDS[m.label])), from, body];
+  }
   if (m.kind === "pagechange") {
     const sg = m.suggestion;
     const decide = (decision) =>
@@ -7105,6 +7130,9 @@ async function renderWsPage(col, id) {
       else if (quest?.queued) openTask(quest.queued.id);
     }, col);
 
+  const tablesBox = h("section", { class: "wstables", "aria-label": "Tables on this page" });
+  drawTables(tablesBox, id);
+
   const backlinksBox = h("div", { class: "wstasks" });
   api("GET", `workspace/pages/${id}/backlinks`).then((pages) => backlinksBox.isConnected && fill(backlinksBox, pages.length ? pages.map((p) => h("button", { class: "plain wstaskrow", onclick: () => openPage(p.id) }, h("span", {}, p.icon || "📄"), " ", h("span", { class: "grow" }, p.title))) : h("p", { class: "note small" }, "No page links here yet. Type [[ in a page to link to this one."))).catch(() => {});
   const tasksBox = h("div", { class: "wstasks" });
@@ -7145,6 +7173,7 @@ async function renderWsPage(col, id) {
         toolbar,
         surface,
         menu,
+        tablesBox,
       ),
       aside,
     ),
@@ -7163,6 +7192,151 @@ async function renderWsPage(col, id) {
     ui.ws.focusTitle = false;
     title.focus();
   }
+}
+
+/** A table's columns: names, types and choices. Saving keeps the values that still fit. */
+function columnsDialog(t, types, done) {
+  const dialog = h("dialog", { class: "aidialog" });
+  const close = () => (dialog.close(), dialog.remove());
+  const status = h("p", { class: "note", role: "status" });
+  const TYPE_WORDS = { text: "Text", number: "Number", date: "Date", choice: "Choice (pick one)", person: "Person (you or an agent)" };
+  const list = h("div", { class: "colrows" });
+  const addRow = (c = { name: "", type: "text" }) => {
+    const name = h("input", { value: c.name, placeholder: "Column name", "aria-label": "Column name" });
+    const type = h("select", { "aria-label": "Type" }, types.map((x) => h("option", { value: x, selected: x === c.type }, TYPE_WORDS[x] ?? x)));
+    const options = h("input", { value: (c.options ?? []).join(", "), placeholder: "Choices, separated by commas", "aria-label": "Choices", hidden: c.type !== "choice" });
+    type.addEventListener("change", () => (options.hidden = type.value !== "choice"));
+    const row = h("div", { class: "colrow" }, name, type, options, h("button", { type: "button", class: "plain small danger", "aria-label": "Remove this column", onclick: () => row.remove() }, "Remove"));
+    row.read = () => ({ id: c.id, name: name.value, type: type.value, options: options.value });
+    list.append(row);
+    return name;
+  };
+  t.columns.forEach((c) => addRow(c));
+  const save = h("button", { class: "primary" }, "Save columns");
+  save.addEventListener("click", async () => {
+    save.disabled = true;
+    try {
+      await api("PATCH", `workspace/tables/${t.id}`, { columns: [...list.children].map((r) => r.read()) });
+      close();
+      done();
+    } catch (err) {
+      status.textContent = err.message;
+      status.className = "note bad";
+      save.disabled = false;
+    }
+  });
+  fill(
+    dialog,
+    h("h3", {}, `Columns of “${t.name}”`),
+    h("p", { class: "note" }, "Each column holds one kind of value. If you change a column's type, values that no longer fit are emptied; removing a column removes its values."),
+    list,
+    h("div", {}, h("button", { type: "button", class: "small", onclick: () => addRow().focus() }, "+ Add a column")),
+    status,
+    h("div", { class: "row" }, save, h("button", { class: "plain", onclick: close }, "Cancel")),
+  );
+  document.body.append(dialog);
+  dialog.showModal();
+}
+
+/** The tables on a workspace page: rows you edit in place, changes agents asked for, CSV in and out. */
+async function drawTables(box, pageId) {
+  let data;
+  try {
+    data = await api("GET", `workspace/tables?page=${encodeURIComponent(pageId)}`);
+  } catch {
+    return;
+  }
+  if (ui.ws?.open !== pageId) return;
+  const again = () => drawTables(box, pageId);
+  const run = (fn) => attempt(async () => (await fn(), await again(), loadPageSuggestions()), box);
+  const pickCsv = (then) => {
+    const input = h("input", { type: "file", accept: ".csv,text/csv" });
+    input.addEventListener("change", async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      if (file.size > 5_000_000) return toast("That file is larger than 5 MB. Split it into smaller files.");
+      then(await file.text(), file.name.replace(/\.csv$/i, ""));
+    });
+    input.click();
+  };
+  const cell = (t, r, c) => {
+    const v = r.values[c.id] ?? "";
+    const set = (value) => attempt(async () => void (await api("POST", `workspace/tables/${t.id}/rows/${r.id}`, { values: { [c.id]: value } })), box).then(again);
+    const label = `${c.name}`;
+    if (c.type === "choice" || c.type === "person") {
+      const options = c.type === "choice" ? c.options ?? [] : data.people;
+      const sel = h("select", { "aria-label": label }, h("option", { value: "" }, ""), options.map((o) => h("option", { value: o, selected: o === v }, o)), v && !options.includes(v) ? h("option", { value: v, selected: true }, v) : null);
+      sel.addEventListener("change", () => set(sel.value));
+      return sel;
+    }
+    const input = h("input", { type: c.type === "number" ? "number" : c.type === "date" ? "date" : "text", value: String(v), step: "any", "aria-label": label });
+    input.addEventListener("change", () => set(input.value));
+    return input;
+  };
+  const one = (t) => {
+    const name = h("input", { class: "tblname", value: t.name, "aria-label": "Table name" });
+    name.addEventListener("change", () => run(() => api("PATCH", `workspace/tables/${t.id}`, { name: name.value })));
+    const exportCsv = () =>
+      attempt(async () => {
+        const f = await api("GET", `workspace/tables/${t.id}/csv`);
+        const a = h("a", { href: URL.createObjectURL(new Blob([f.csv], { type: "text/csv" })), download: f.name });
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      }, box);
+    const labelOf = (r) => String(t.columns.map((c) => r.values[c.id]).find((x) => x != null && x !== "") ?? "this row");
+    return h(
+      "div",
+      { class: "card tbl" },
+      h(
+        "div",
+        { class: "row wrap" },
+        h("div", { class: "grow" }, name, h("div", { class: "note small tblnote" }, `${t.rows.length} row${t.rows.length === 1 ? "" : "s"} · ${t.agentsChangeDirectly ? "agents change it straight away" : "agents' changes wait for you"}`)),
+        h("button", { class: "small", onclick: () => columnsDialog(t, data.types, again) }, "Columns"),
+        h("button", { class: "small", onclick: () => pickCsv((csv) => run(async () => toast(`${(await api("POST", "workspace/tables/import", { table: t.id, csv })).added} rows added.`))) }, "Import CSV"),
+        h("button", { class: "small", onclick: exportCsv }, "Export CSV"),
+        h("button", { class: "small plain danger", onclick: () => confirm(`Delete the table “${t.name}” and its ${t.rows.length} row${t.rows.length === 1 ? "" : "s"}? This cannot be undone. Export it first if you may need it.`) && run(() => api("DELETE", `workspace/tables/${t.id}`)) }, "Delete"),
+      ),
+      t.changes.length
+        ? h(
+            "div",
+            { class: "tblwaiting" },
+            h("div", { class: "label" }, `Waiting for you · ${t.changes.length}`),
+            t.changes.map((ch) => {
+              const target = ch.row ? t.rows.find((r) => r.id === ch.row) : null;
+              const words = `${ch.row ? `Change “${target ? labelOf(target) : "a deleted row"}”` : "Add a row"}: ${t.columns.filter((c) => c.id in ch.values).map((c) => `${c.name} = ${ch.values[c.id] ?? "(empty)"}`).join(", ")}`;
+              return h("div", { class: "row wrap" }, h("span", { class: "grow" }, h("b", {}, ch.authorName), ` · ${words}`, ch.note ? h("span", { class: "note small" }, ` · ${ch.note}`) : null), h("button", { class: "small primary", onclick: () => run(() => api("POST", `workspace/tables/${t.id}/changes/${ch.id}`, { decision: "accept" })) }, "Accept"), h("button", { class: "small", onclick: () => run(() => api("POST", `workspace/tables/${t.id}/changes/${ch.id}`, { decision: "decline" })) }, "Decline"));
+            }),
+          )
+        : null,
+      h(
+        "div",
+        { class: "tblscroll" },
+        h(
+          "table",
+          { class: "tblgrid" },
+          h("thead", {}, h("tr", {}, t.columns.map((c) => h("th", { scope: "col" }, c.name, h("span", { class: "note small" }, ` ${c.type}`))), h("th", { "aria-label": "Delete" }))),
+          h(
+            "tbody",
+            {},
+            t.rows.map((r) => h("tr", {}, t.columns.map((c) => h("td", {}, cell(t, r, c))), h("td", {}, h("button", { class: "plain small danger", "aria-label": `Delete the row ${labelOf(r)}`, title: "Delete this row", onclick: () => confirm(`Delete the row “${labelOf(r)}”?`) && run(() => api("DELETE", `workspace/tables/${t.id}/rows/${r.id}`)) }, "×")))),
+          ),
+        ),
+      ),
+      h("div", {}, h("button", { class: "small", onclick: () => run(() => api("POST", `workspace/tables/${t.id}/rows`, { values: {} })) }, "+ Add a row")),
+    );
+  };
+  fill(
+    box,
+    data.tables.length ? h("h3", {}, "Tables") : null,
+    data.tables.map(one),
+    h(
+      "div",
+      { class: "row wrap" },
+      h("button", { class: "small", onclick: () => run(() => api("POST", "workspace/tables", { page: pageId, name: "New table", columns: [{ name: "Name", type: "text" }, { name: "Status", type: "choice", options: ["To do", "Doing", "Done"] }, { name: "Owner", type: "person" }, { name: "Due", type: "date" }, { name: "Amount", type: "number" }] })) }, "+ Add a table"),
+      h("button", { class: "small", onclick: () => pickCsv((csv, name) => run(() => api("POST", "workspace/tables/import", { page: pageId, name, csv }))) }, "Import a CSV as a new table"),
+      data.tables.length ? null : h("span", { class: "note small" }, "A table holds records such as customers, stock or a tracker. Agents who can see this page can read it."),
+    ),
+  );
 }
 
 /** Which guide explains each page. */
