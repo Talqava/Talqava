@@ -38,7 +38,7 @@ import { execFile } from "node:child_process";
 import { needsFor } from "./preflight.ts";
 import { acceptSuggestion, suggestPositions } from "./suggest.ts";
 import { audit, readAudit, redact } from "./audit.ts";
-import { connect, disconnect, findLocal, gatewayState, listModels, setBackups } from "./gateway.ts";
+import { connect, disconnect, findLocal, gatewayState, listModels, setBackups, isLocalRef, memoryGb } from "./gateway.ts";
 import { board } from "./board.ts";
 import { accessGraph, accessGraphs } from "./access.ts";
 import { finishOpenRouterSignIn, openrouterIntegration, openrouterModels, removeOpenRouter, saveOpenRouterKey, startOpenRouterSignIn, useOpenRouterModel } from "./openrouter.ts";
@@ -696,8 +696,21 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     } catch (err) {
       throw new HttpError(400, (err as Error).message);
     }
-    const result = await checkModel(model, AbortSignal.timeout(180_000)).catch((err) => {
-      throw new HttpError(502, describeError(err));
+    // A model on this computer is loaded into memory by its first answer, which can take minutes: it is woken
+    // first, with time of its own, so the check measures the model rather than the loading.
+    const local = isLocalRef(model.ref);
+    const timedOut = (err: unknown) => (err as Error)?.name === "TimeoutError" || /timed? ?out|aborted due to timeout/i.test(String((err as Error)?.message));
+    const tooSlow = (what: string) =>
+      `${what} This computer has ${memoryGb()} GB of memory: the model may be too big for it, or still loading. Try again in a minute, or choose a smaller model (for example one with 4b in its name).`;
+    if (local) {
+      await model
+        .call({ system: "Answer with one word.", messages: [{ role: "user", content: "Say OK." }], tools: [], hostedTools: [], mcpServers: [], signal: AbortSignal.timeout(300_000) }, { onText() {}, onThinking() {}, onToolStart() {} })
+        .catch((err) => {
+          throw new HttpError(502, timedOut(err) ? tooSlow("The model did not answer within 5 minutes.") : describeError(err));
+        });
+    }
+    const result = await checkModel(model, AbortSignal.timeout(local ? 360_000 : 180_000)).catch((err) => {
+      throw new HttpError(502, timedOut(err) ? (local ? tooSlow("The check did not finish within 6 minutes.") : "The check did not finish within 3 minutes. The service may be busy: try again shortly.") : describeError(err));
     });
     saveConfig({ modelChecks: { ...getConfig().modelChecks, [model.ref]: result } });
     return send(res, 200, result);

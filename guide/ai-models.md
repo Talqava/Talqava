@@ -48,6 +48,13 @@ If the row says it has no models, download one in the model program first.
 
 Agents work through tools, so choose a model that **Works for agents**. Agents you gave a model of their own keep it. To test a model first, use **Check this model** in **Settings**.
 
+For models on your computer, Talqava also shows each model's size and whether it fits in your computer's memory:
+- **Too big for this computer's memory**: it would be very slow or not run. Choose a smaller one (models with 4b or 3b in the name are small). Talqava asks before using it.
+- **Only just fits**: it works, but close other apps while agents use it.
+- With Ollama, Talqava asks Ollama which models can use tools. With other local programs it recognises common families that can (Qwen 2.5 and 3, Llama 3.1 to 3.3, Mistral, GPT-OSS and others).
+
+Checking a model on your computer first loads it into memory, which can take a minute or two. If it doesn't answer within 5 minutes, Talqava says so and suggests a smaller model.
+
 ### Add backup models
 
 1. Connect at least one service. The **Backup models** box appears.
