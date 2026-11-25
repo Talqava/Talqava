@@ -21,7 +21,7 @@ import type { Level } from "./sensitivity.ts";
 export type Who = string | null;
 
 /** What a page is: a workspace page, an Office document, or a note. All three share the same rules and editor. */
-export const PAGE_KINDS = ["page", "doc", "note", "sheet"] as const;
+export const PAGE_KINDS = ["page", "doc", "note", "sheet", "deck"] as const;
 export type PageKind = (typeof PAGE_KINDS)[number];
 
 export interface PageInfo {
@@ -351,7 +351,7 @@ function info(org: Org, d: DatabaseSync, row: Row, byId: Map<string, Row>, open:
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     suggestions: open.get(row.id) ?? 0,
-    summary: row.kind === "sheet" ? sheetSummary(content(d, row.id).markdown) : summaryOf(content(d, row.id).markdown),
+    summary: row.kind === "sheet" ? sheetSummary(content(d, row.id).markdown) : row.kind === "deck" ? ((slides) => `${slides.length} slide${slides.length === 1 ? "" : "s"}: ${slides.map((x) => x.title).filter(Boolean).slice(0, 6).join(" · ")}`)(parseDeck(content(d, row.id).markdown)) : summaryOf(content(d, row.id).markdown),
   };
 }
 
@@ -385,7 +385,35 @@ const tagsOf = (text: string | null | undefined): string[] => {
     return [];
   }
 };
-const KIND_WORDS: Record<PageKind, string> = { page: "page", doc: "document", note: "note", sheet: "sheet" };
+const KIND_WORDS: Record<PageKind, string> = { page: "page", doc: "document", note: "note", sheet: "sheet", deck: "slides" };
+
+/** One slide of a deck: a title, its text in Markdown, and speaker notes. */
+export interface Slide {
+  title: string;
+  body: string;
+  notes: string;
+}
+/** A deck's slides from its text: slides are separated by a line of three dashes; "Notes:" starts the speaker notes. */
+export function parseDeck(text: string): Slide[] {
+  const slides = String(text ?? "")
+    .split(/^\s*---\s*$/m)
+    .map((part) => {
+      const lines = part.replace(/^\n+|\s+$/g, "").split("\n");
+      const at = lines.findIndex((l) => /^notes:/i.test(l.trim()));
+      const main = at < 0 ? lines : lines.slice(0, at);
+      const notes = at < 0 ? "" : [lines[at].trim().replace(/^notes:\s*/i, ""), ...lines.slice(at + 1)].join("\n").trim();
+      const head = main.findIndex((l) => /^#{1,2}\s+/.test(l));
+      const title = head < 0 ? "" : main[head].replace(/^#{1,2}\s+/, "").trim();
+      const body = (head < 0 ? main : [...main.slice(0, head), ...main.slice(head + 1)]).join("\n").trim();
+      return { title, body, notes };
+    })
+    .filter((s) => s.title || s.body || s.notes);
+  return slides.length ? slides : [{ title: "", body: "", notes: "" }];
+}
+/** A deck's text from its slides, always written the same way. */
+export function writeDeck(slides: Slide[]): string {
+  return `${slides.map((s) => [`# ${s.title.replace(/\s+/g, " ").trim() || "Untitled slide"}`, s.body.trim(), s.notes.trim() ? `Notes: ${s.notes.trim()}` : ""].filter(Boolean).join("\n\n")).join("\n\n---\n\n")}\n`;
+}
 /** A sheet file in a few words: its sheets' names and how many cells are filled. Its text is one line per cell. */
 function sheetSummary(text: string): string {
   const lines = text.split("\n");
@@ -852,6 +880,7 @@ export function workspaceTool(who: (conversationId: string) => string | null): T
       "\"suggest\" proposes a change to a page: give the page's whole new text in Markdown and a one-line note on what changed and why; the owner accepts or declines it, unless the page takes edits directly. " +
       "\"file\" saves your result as a new page under a page you may read (give a title and the Markdown), or, with kind \"document\", as an Office document the owner can open, edit and download (letters, proposals, reports; a folder is optional). " +
       "Documents the owner keeps in Office are listed, searched, read and suggested on in the same way as pages. " +
+      "For kind \"slides\", write the Markdown as slides separated by a line of three dashes (---): each slide starts with \"# Title\", then a few short bullet points or a small table, then optionally \"Notes: …\" with what the presenter should say. Keep each slide to one idea and at most five bullets. Existing slides are read and suggested on like pages, in the same form. " +
       "Read a page before suggesting a change to it.",
     properties: {
       action: { type: "string", enum: ["search", "read", "list", "suggest", "file"] },
@@ -863,7 +892,7 @@ export function workspaceTool(who: (conversationId: string) => string | null): T
       note: { type: "string", description: "For suggest: one line on what you changed and why, for the owner." },
       title: { type: "string", description: "For file: the new page's title." },
       parent: { type: "string", description: "For file: the id of the page to put it under." },
-      kind: { type: "string", enum: ["page", "document"], description: "For file: \"document\" saves an Office document instead of a workspace page." },
+      kind: { type: "string", enum: ["page", "document", "slides"], description: "For file: \"document\" saves an Office document instead of a workspace page; \"slides\" saves a presentation." },
       folder: { type: "string", description: "For file with kind document: the folder to put it in, e.g. Customers." },
     },
     required: ["action"],
@@ -888,6 +917,11 @@ export function workspaceTool(who: (conversationId: string) => string | null): T
         return r.applied ? `Changed “${r.page.title}”: this page takes agents' edits directly. Say so in your report.` : `Suggested a change to “${r.page.title}”. The owner will accept or decline it; the page stays as it was until then. Say so in your report.`;
       }
       if (input.action === "file") {
+        if (input.kind === "slides") {
+          const deck = workspace.create(org, agent, { kind: "deck", folder: input.folder, title: input.title, markdown: writeDeck(parseDeck(String(input.markdown ?? ""))), task });
+          workspace.used(org, task, deck.id, "filed");
+          return `Saved as the slides “${deck.title}” (page ${deck.id}) in Office, ${parseDeck(deck.markdown).length} slides. Say so in your report.`;
+        }
         if (input.kind === "document") {
           const doc = workspace.create(org, agent, { kind: "doc", folder: input.folder, title: input.title, markdown: input.markdown, task });
           workspace.used(org, task, doc.id, "filed");

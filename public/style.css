@@ -1935,3 +1935,33 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .officestart { text-align: left; padding: 14px 16px; }
 .officehomepage input[type="search"] { width: 100%; }
 .clipbtn { margin: 0 10px 6px; text-align: left; }
+
+/* Slides. */
+.deckwork { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 16px; margin-top: 12px; }
+@media (max-width: 900px) { .deckwork { grid-template-columns: 1fr; } }
+.sliderail { display: grid; gap: 6px; align-content: start; max-height: 70vh; overflow-y: auto; }
+.slidethumb { display: flex; gap: 6px; align-items: flex-start; text-align: left; padding: 6px; border: 1px solid var(--line); border-radius: var(--r-m, 8px); background: var(--panel, #fff); cursor: pointer; }
+.slidethumb.on { border-color: var(--green-text, #007a3d); box-shadow: 0 0 0 1px var(--green-text, #007a3d); }
+.slidethumb .thumbface { display: grid; gap: 2px; font-size: 11px; line-height: 14px; overflow: hidden; }
+.slidethumb .thumbface span { color: var(--muted, #5e615f); }
+.deckmain { display: grid; gap: 10px; }
+.deckmain label { display: grid; gap: 4px; font-size: 13px; font-weight: 500; }
+.slidestage { container-type: inline-size; }
+.slideface { position: relative; aspect-ratio: 16 / 9; box-sizing: border-box; padding: 6% 7%; background: #fff; color: #0a0a0a; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 4%; overflow: hidden; font-size: clamp(11px, 2.1cqw, 30px); }
+.slideface h2 { margin: 0; font-size: 1.9em; line-height: 1.15; font-weight: 600; }
+.slideface .slidebody { font-size: 1em; line-height: 1.45; }
+.slideface .slidebody ul, .slideface .slidebody ol { padding-left: 1.2em; margin: 0; }
+.slideface .slidebody li { margin: 0.3em 0; }
+.slideface .slidebody table { font-size: 0.85em; }
+.slideface .slidenum { position: absolute; right: 3%; bottom: 3%; font-size: 0.6em; color: #5e615f; }
+.present { position: fixed; inset: 0; z-index: 1000; background: #0a0a0a; display: grid; place-items: center; container-type: inline-size; outline: 0; }
+.present .slideface { width: min(100vw, 177.78vh); border: 0; font-size: min(2.1vw, 3.73vh); }
+.present .presentbar { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; opacity: 0.25; }
+.present .presentbar:hover, .present .presentbar:focus-within { opacity: 1; }
+.present .presentbar button { color: #f2f2f2; background: #1b1c1b; border: 1px solid #333; padding: 6px 12px; border-radius: 8px; }
+.deckprint { display: none; }
+@media print {
+  body.printingdeck > *:not(.deckprint) { display: none !important; }
+  body.printingdeck .deckprint { display: block; }
+  body.printingdeck .deckprint .slideface { width: 100%; font-size: 16pt; border: 0; break-after: page; page-break-after: always; }
+}
