@@ -131,6 +131,6 @@ A simple rule: if you would write it yourself and want it followed, make it a pa
 - [Library](library.md)
 - [Memory](memory.md)
 - [Skills](skills.md)
-- [Schedules](schedules.md)
+- [Routines](schedules.md)
 - [Settings](settings.md)
 - [Getting started](getting-started.md)

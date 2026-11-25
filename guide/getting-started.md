@@ -72,7 +72,7 @@ The menu on the left is in groups. Every page also has a **Guide** button at the
 
 **Work in progress**: Your agents and what each is doing right now. Assign work, clear what is waiting on you, choose a repository for code tasks, and see how each department is doing. See [Work in progress](work-in-progress.md).
 
-**Schedules**: Jobs your agent runs on its own, such as a morning news digest every weekday. Each run appears as a new chat. You can pause, resume, run now or delete a job. See [Schedules](schedules.md).
+**Routines**: Repeating work your agents do on their own, such as a morning news digest every weekday. Each run appears as a new chat. You can pause, resume, run now or delete a job. See [Routines](schedules.md).
 
 ### Team
 

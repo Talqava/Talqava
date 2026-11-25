@@ -84,6 +84,6 @@ Deleting a project deletes its memories for good. Its chats move to General.
 - [Workspace](workspace.md)
 - [Library](library.md)
 - [Skills](skills.md)
-- [Schedules](schedules.md)
+- [Routines](schedules.md)
 - [Settings](settings.md)
 - [Getting started](getting-started.md)

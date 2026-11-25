@@ -108,6 +108,8 @@ export interface Config {
   backups?: string[];
   /** When an agent writes a plan for the owner's approval before starting: tasks given to leads (the default), every task the owner gives, or never. */
   planFirst?: "leads" | "all" | "never";
+  /** The leads' daily check-in arrives in the Inbox each day (built from the tasks, at no cost). Default on. */
+  checkIn?: boolean;
   /** A stuck task tries once with a stronger model (the team's model or a backup) before stopping. Default on. */
   moveUp?: boolean;
   /** "mask": email addresses, phone numbers, card numbers and SSNs are hidden from AI services (not from models on this computer). */
@@ -192,6 +194,7 @@ export function publicConfig() {
     assistantSeesGroups: cfg.assistantSeesGroups !== false,
     planFirst: cfg.planFirst ?? "leads",
     moveUp: cfg.moveUp !== false,
+    checkIn: cfg.checkIn !== false,
     privacy: cfg.privacy ?? "off",
     budget: cfg.budget,
     monthlyBudget: cfg.monthlyBudget ?? null,

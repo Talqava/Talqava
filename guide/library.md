@@ -93,6 +93,6 @@ To lock one file quickly, open its preview and press **Private**.
 - [Workspace](workspace.md)
 - [Memory](memory.md)
 - [Skills](skills.md)
-- [Schedules](schedules.md)
+- [Routines](schedules.md)
 - [Settings](settings.md)
 - [Getting started](getting-started.md)

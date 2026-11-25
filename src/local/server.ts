@@ -323,6 +323,7 @@ async function updateSettings(body: any) {
   if (["leads", "all", "never"].includes(body.planFirst)) patch.planFirst = body.planFirst;
   if (body.privacy === "off" || body.privacy === "mask") patch.privacy = body.privacy;
   if (typeof body.moveUp === "boolean") patch.moveUp = body.moveUp;
+  if (typeof body.checkIn === "boolean") patch.checkIn = body.checkIn;
   if (["ask", "auto"].includes(body.approvalMode)) patch.approvalMode = body.approvalMode;
   if (typeof body.apiKey === "string") patch.apiKey = body.apiKey.trim();
 
@@ -1056,6 +1057,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     const org = orgs.active();
     const [, id, action] = parts;
     if (route === "GET work" && !id) return send(res, 200, { items: work.list(org), priorities: PRIORITIES, pausedAgents: work.pausedAgents(org) });
+    if (route === "GET work" && id === "checkin") return send(res, 200, getConfig().checkIn === false ? { since: "", groups: [] } : work.checkIn(org));
     // Pausing agents: one or more by id, or every agent on the chart ("Pause all work").
     if (route === "POST work" && id === "agents" && (action === "pause" || action === "resume")) {
       const ids = body.all === true ? org.members.map((m) => m.bot) : Array.isArray(body.agents) ? body.agents.map(String) : [];
@@ -1368,7 +1370,15 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (route === "POST orgs" && sub === "groups") return send(res, 200, await attempt(() => orgs.addGroup(orgId, body)));
     if (route === "PATCH orgs" && sub === "groups" && memberId) return send(res, 200, await attempt(() => orgs.updateGroup(orgId, memberId, body)));
     if (route === "DELETE orgs" && sub === "groups" && memberId) return send(res, 200, await attempt(() => orgs.removeGroup(orgId, memberId, url.searchParams.get("moveTo") ?? body.moveTo)));
-    if (route === "POST orgs" && sub === "members" && memberId && parts[4] === "agent") return send(res, 200, await attempt(() => orgs.swapAgent(orgId, memberId, body.to)));
+    if (route === "POST orgs" && sub === "members" && memberId && parts[4] === "agent") {
+      return send(res, 200, await attempt(async () => {
+        const org = orgs.swapAgent(orgId, memberId, body.to);
+        // A routine belongs to the position, not to the agent in it: it carries on with whoever fills the position now.
+        const to = String(body.to ?? "");
+        for (const job of await jobs.list()) if (job.owner === memberId && (job.org ?? orgId) === orgId && to) await jobs.edit(job.id, { owner: to, org: orgId });
+        return org;
+      }));
+    }
     if (route === "GET orgs" && sub === "memory") return send(res, 200, orgMemory.list(orgId));
     if (route === "POST orgs" && sub === "memory") {
       return send(res, 200, await attempt(() => {
