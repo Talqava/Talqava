@@ -57,6 +57,8 @@ export interface WorkItem {
   queue: number | null;
   /** When the owner paused this task (or a task above it); null when it is not paused itself. */
   pausedAt: string | null;
+  /** Why this task deserves a look now (no progress for a while, or waiting a long time), with what to do; else null. */
+  attention: { kind: "stalled" | "aging"; words: string } | null;
   subtasks: { total: number; open: number };
   comments: number;
   cost: number;
@@ -169,6 +171,39 @@ function statusOf(row: Row, rows: Row[], quest: Quest | null, pausedAgent?: stri
   if (open.length) return { status: "working", detail: `Waiting on ${open.length} sub-task${open.length === 1 ? "" : "s"}` };
   return row.review ? { status: "review", detail: "" } : { status: "done", detail: "" };
 }
+/** A run with no step for this long, while it says it is working, has probably stalled. */
+export const STALLED_MINUTES = 15;
+/** Work that has waited on the owner this long is pointed out. */
+export const AGING_HOURS = 24;
+/** An agent with this many started tasks that are stuck or waiting starts no more until some are cleared (see schedule). */
+export const FOCUS_LIMIT = 3;
+
+const ago = (iso: string, at = Date.now()) => at - Date.parse(iso);
+const span = (ms: number) => (ms >= 2 * 86_400_000 ? `${Math.floor(ms / 86_400_000)} days` : ms >= 3_600_000 ? `${Math.round(ms / 3_600_000)} hour${Math.round(ms / 3_600_000) === 1 ? "" : "s"}` : `${Math.round(ms / 60_000)} minutes`);
+
+/** Trouble spotted early: a run that has gone quiet, or work that has waited on the owner for a long time. */
+function attentionOf(row: Row, status: Status, quest: Quest | null, at = Date.now()): WorkItem["attention"] {
+  if (status === "working" && quest?.status === "running" && ago(quest.updatedAt, at) > STALLED_MINUTES * 60_000) {
+    return { kind: "stalled", words: `No progress for ${span(ago(quest.updatedAt, at))}. Open the work to see its last step; if it is stuck, stop it and try again.` };
+  }
+  const waited = ago(row.updated_at, at);
+  if (waited < AGING_HOURS * 3_600_000) return null;
+  if (status === "waiting") return { kind: "aging", words: `Waiting for your answer for ${span(waited)}.` };
+  if (status === "blocked") return { kind: "aging", words: `Stuck for ${span(waited)}. Try again, give it to someone else, or accept it as it is.` };
+  if (status === "review" && waited > 3 * 86_400_000) return { kind: "aging", words: `Finished ${span(waited)} ago and still waiting for your review.` };
+  return null;
+}
+
+/** Whether a started task is unfinished through no choice of the owner's: stuck, or waiting for an answer. */
+const unfinished = (r: Row, rows: Row[]) => r.state === "started" && !r.paused && ((st) => st === "blocked" || st === "waiting")(statusOf(r, rows, r.quest ? questStore.get(r.quest) : null).status);
+
+/** Agents that have reached the focus limit: finishing what they started comes before starting more. */
+function overFocus(rows: Row[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const r of rows) if (unfinished(r, rows)) counts.set(r.owner, (counts.get(r.owner) ?? 0) + 1);
+  return new Map([...counts].filter(([, n]) => n >= FOCUS_LIMIT));
+}
+
 /** A started task whose run ended well, with nothing left open under it. */
 const finishedRun = (r: Row) => ((q) => q?.status === "done" && !(q.check && !q.check.passed))(r.quest ? questStore.get(r.quest) : null);
 
@@ -181,11 +216,15 @@ function linksOf(org: Org): Links {
   }
 }
 
-function toItem(org: Org, row: Row, rows: Row[], crew = bots(), counts?: Map<string, number>, links: Links = linksOf(org), paused: Set<string> = pausedAgents(org)): WorkItem {
+function toItem(org: Org, row: Row, rows: Row[], crew = bots(), counts?: Map<string, number>, links: Links = linksOf(org), paused: Set<string> = pausedAgents(org), focus?: Map<string, number>): WorkItem {
   const project = row.project_id ? links.projects.get(row.project_id) : undefined;
   const goal = row.goal ?? project?.goal ?? null;
   const quest = row.quest ? questStore.get(row.quest) : null;
-  const { status, detail } = statusOf(row, rows, quest, paused.has(row.owner) ? nameOf(org, row.owner, crew) : undefined);
+  const known = statusOf(row, rows, quest, paused.has(row.owner) ? nameOf(org, row.owner, crew) : undefined);
+  const status = known.status;
+  // A queued task whose agent has too much unfinished work says why it waits, and how to start it anyway.
+  const held = status === "todo" && row.priority !== "urgent" ? (focus ?? overFocus(rows)).get(row.owner) : undefined;
+  const detail = held ? `Waits until the ${nameOf(org, row.owner, crew)} has fewer unfinished tasks (${held} are stuck or waiting). Clear those, or mark this one Urgent to start it now.` : known.detail;
   const subs = rows.filter((r) => r.parent === row.id);
   let queue: number | null = null;
   if (status === "todo") {
@@ -214,6 +253,7 @@ function toItem(org: Org, row: Row, rows: Row[], crew = bots(), counts?: Map<str
     project: row.project,
     queue,
     pausedAt: row.paused,
+    attention: attentionOf(row, status, quest),
     subtasks: { total: subs.length, open: subs.filter((r) => r.state !== "done" && r.state !== "cancelled").length },
     comments: counts?.get(row.id) ?? 0,
     cost: quest ? (conversations.get(quest.id)?.usage.cost ?? 0) : 0,
@@ -315,7 +355,8 @@ export const work = {
     const counts = new Map((d.prepare("select item, count(*) n from work_comments group by item").all() as unknown as { item: string; n: number }[]).map((r) => [r.item, r.n]));
     const links = linksOf(org);
     const paused = pausedAgents(org);
-    return rows.map((r) => toItem(org, r, rows, crew, counts, links, paused)).reverse();
+    const focus = overFocus(rows);
+    return rows.map((r) => toItem(org, r, rows, crew, counts, links, paused, focus)).reverse();
   },
 
   get(org: Org, id: string): WorkItem {
@@ -594,9 +635,12 @@ export const work = {
         let slots = MAX_RUNNING - runningQuests.length;
         const crew = bots();
         const paused = pausedAgents(org);
+        // Finish before starting more: an agent with several stuck or waiting tasks takes on only urgent work.
+        const focus = overFocus(rows);
         for (const row of rows.filter((r) => r.state === "todo" && !r.held && !r.paused).sort(order)) {
           if (slots <= 0) break;
           if (busyAgents.has(row.owner) || paused.has(row.owner)) continue;
+          if (focus.has(row.owner) && row.priority !== "urgent") continue;
           const bot = crew.get(row.owner);
           if (!bot) {
             d.prepare("update work_items set held = ? where id = ?").run("Its agent is no longer on your team.", row.id);

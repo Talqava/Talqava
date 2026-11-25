@@ -2813,3 +2813,69 @@ test("Langfuse gets each model call's model, tokens, cost and agent, never what 
     portkey.close();
   }
 });
+
+test("trouble is spotted early: a quiet run, work waiting a long time, and an agent that must finish before starting more", { timeout: 40_000 }, async () => {
+  const { orgs } = await import("../../src/local/orgs.ts");
+  const market = await import("../../src/local/marketplace.ts");
+  const { work, FOCUS_LIMIT } = await import("../../src/local/work.ts");
+  const quests = await import("../../src/local/quests.ts");
+  const crewMod = await import("../../src/local/crew.ts");
+  const { openOrgDb } = await import("../../src/local/library.ts");
+  const org0 = orgs.create("Focus Co", "Keep the books.", "custom");
+  const made: string[] = [];
+  try {
+    market.addTeam("finance-team");
+    const org = orgs.active();
+    const d = openOrgDb(org.id);
+    const keeper = crewMod.loadCrew().bots.find((b) => b.id === "bookkeeper")!;
+    const stamp = new Date().toISOString();
+    const long = new Date(Date.now() - 3 * 86_400_000).toISOString();
+    // Three tasks the Bookkeeper started and that failed: unfinished, through no choice of the owner's.
+    for (let i = 0; i < FOCUS_LIMIT; i++) {
+      const item = work.create(org, { title: `Stuck ${i}`, owner: "bookkeeper", createdBy: "owner" });
+      const q = { id: `${i}`.repeat(15) + "f", title: item.title, bot: keeper, status: "failed" as const, steps: 1, note: "It failed.", createdAt: stamp, updatedAt: stamp };
+      quests.questStore.save(q);
+      made.push(q.id);
+      d.prepare("update work_items set quest = ?, state = 'started', updated_at = ? where id = ?").run(q.id, i === 0 ? long : stamp, item.id);
+    }
+    const stuck = work.list(org).filter((t) => t.title.startsWith("Stuck"));
+    assert.ok(stuck.every((t) => t.status === "blocked"));
+    // One has been stuck for days: it is pointed out, with what to do.
+    assert.match(stuck.find((t) => t.title === "Stuck 0")!.attention!.words, /Stuck for 3 days\. Try again, give it to someone else, or accept it as it is\./);
+    assert.equal(stuck.find((t) => t.title === "Stuck 1")!.attention, null);
+
+    // A new normal task waits, and says why; an urgent one starts anyway.
+    script.length = 0;
+    const normal = work.create(org, { title: "Reconcile cards", description: "Reconcile.", owner: "bookkeeper", createdBy: "owner" });
+    await work.schedule();
+    const waiting = work.get(org, normal.id);
+    assert.equal(waiting.status, "todo");
+    assert.equal(waiting.quest, null);
+    assert.match(waiting.detail, /has fewer unfinished tasks \(3 are stuck or waiting\).*mark this one Urgent/);
+    script.push(say("Urgent done."));
+    const urgent = work.create(org, { title: "Pay the tax bill", description: "Pay it.", owner: "bookkeeper", priority: "urgent", createdBy: "owner" });
+    await work.schedule();
+    assert.ok(await until(() => work.get(org, urgent.id).status === "review"), work.get(org, urgent.id).status);
+
+    // A run that says it is working but has taken no step for a while has probably stalled.
+    const quiet = work.create(org, { title: "Quiet task", owner: "invoice-chaser", createdBy: "owner" });
+    const run = { id: "c".repeat(15) + "f", title: "Quiet task", bot: crewMod.loadCrew().bots.find((b) => b.id === "invoice-chaser")!, status: "running" as const, steps: 2, createdAt: stamp, updatedAt: stamp };
+    quests.questStore.save(run);
+    made.push(run.id);
+    d.prepare("update work_items set quest = ?, state = 'started' where id = ?").run(run.id, quiet.id);
+    assert.equal(work.get(org, quiet.id).attention, null);
+    // Forty minutes later, with no step taken since.
+    const realNow = Date.now;
+    Date.now = () => realNow() + 40 * 60_000;
+    try {
+      const a = work.get(org, quiet.id).attention!;
+      assert.equal(a.kind, "stalled");
+      assert.match(a.words, /No progress for 40 minutes/);
+    } finally {
+      Date.now = realNow;
+    }
+  } finally {
+    for (const id of made) quests.questStore.remove(id);
+    orgs.remove(org0.id);
+  }
+});
