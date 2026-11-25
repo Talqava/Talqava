@@ -6113,10 +6113,13 @@ function aiModelsSection(col) {
                   h(
                     "div",
                     { class: "note small" },
-                    [m.tools === true ? "Works for agents" : m.tools === false ? "Cannot use tools" : "Not known if it can use tools", m.contextTokens ? `holds ${Math.round(m.contextTokens / 1000)}k tokens` : null, m.prices ? (m.prices.input === 0 && m.prices.output === 0 ? "free" : `${money(m.prices.input)} in · ${money(m.prices.output)} out`) : null].filter(Boolean).join(" · "),
+                    [m.tools === true ? "Works for agents" : m.tools === false ? "Cannot use tools" : "Not known if it can use tools", m.contextTokens ? `holds ${Math.round(m.contextTokens / 1000)}k tokens` : null, m.memory ? `${(m.memory.bytes / 1024 ** 3).toFixed(1)} GB` : null, m.prices ? (m.prices.input === 0 && m.prices.output === 0 ? "free" : `${money(m.prices.input)} in · ${money(m.prices.output)} out`) : null].filter(Boolean).join(" · "),
                   ),
+                  m.memory?.fit === "too-big" ? h("div", { class: "note small bad" }, "Too big for this computer's memory: it would be very slow or not run. Choose a smaller one.") : m.memory?.fit === "tight" ? h("div", { class: "note small warn" }, "Only just fits in this computer's memory: close other apps while it works.") : null,
                 ),
-                g.model === `${c.id}/${m.id}` ? h("span", { class: "tag ok" }, "In use") : h("button", { class: "small", onclick: () => use(m.id) }, "Use for my team"),
+                g.model === `${c.id}/${m.id}`
+                  ? h("span", { class: "tag ok" }, "In use")
+                  : h("button", { class: "small", onclick: () => (m.memory?.fit !== "too-big" || confirm(`${m.id} is too big for this computer's memory, so it would be very slow or not run at all.\n\nUse it anyway?`)) && use(m.id) }, "Use for my team"),
               ),
             )
           : r.note
@@ -6223,7 +6226,7 @@ function settingsView() {
   checkButton.addEventListener("click", () =>
     attempt(async () => {
       checkButton.disabled = true;
-      checkButton.textContent = "Checking…";
+      checkButton.textContent = /^(local|ollama|lmstudio|llamacpp|jan|vllm)\//.test(ref()) ? "Checking… a model on this computer can take a minute to load" : "Checking…";
       try {
         showCheck(await api("POST", "model-check", { model: ref() }));
         state.config = await api("GET", "state");

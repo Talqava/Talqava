@@ -2403,6 +2403,42 @@ test("plans for approval: a lead plans first with look-up tools only, the owner 
   }
 });
 
+test("local models: which can use tools, whether they fit in this computer's memory", async () => {
+  const gateway = await import("../../src/local/gateway.ts");
+  // Families known to call tools are recognised by name, however a runner spells them.
+  for (const id of ["qwen3:4b", "lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF", "qwen/qwen3-8b", "Qwen2.5-7B-Instruct", "mistral-nemo", "gpt-oss:20b"]) assert.equal(gateway.localTools(id), true, id);
+  for (const id of ["gemma2:9b", "tinyllama", "llava:7b"]) assert.equal(gateway.localTools(id), null, id);
+  // An 8 GB computer: a 5.2 GB model is too big, a 3.6 GB one only just fits, a 2.5 GB one (qwen3:4b) is fine.
+  const gb = 1024 ** 3;
+  assert.deepEqual([5.2, 3.6, 2.5].map((n) => gateway.fitFor(n * gb, 8 * gb)), ["too-big", "tight", "ok"]);
+
+  // Ollama says for itself which models call tools, and how big each is; its answer wins over the name.
+  const http = await import("node:http");
+  const json = (res: import("node:http").ServerResponse, body: unknown) => (res.writeHead(200, { "content-type": "application/json" }), res.end(JSON.stringify(body)));
+  const server = http.createServer(async (req, res) => {
+    let raw = "";
+    for await (const chunk of req) raw += chunk;
+    if (req.url === "/v1/models") return json(res, { data: [{ id: "qwen3:4b" }, { id: "gemma3:4b" }, { id: "huge:70b" }] });
+    if (req.url === "/api/tags") return json(res, { models: [{ name: "qwen3:4b", size: 2.5 * gb }, { name: "gemma3:4b", size: 3.3 * gb }, { name: "huge:70b", size: 400 * gb }] });
+    if (req.url === "/api/show") return json(res, { capabilities: JSON.parse(raw).model === "gemma3:4b" ? ["completion", "vision"] : ["completion", "tools"] });
+    res.writeHead(404).end();
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  try {
+    const baseUrl = `http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}/v1`;
+    const listed = await gateway.listModels({ id: "ollama", kind: "openai", service: "ollama", name: "Ollama", baseUrl });
+    const byId = Object.fromEntries(listed.models.map((m) => [m.id, m]));
+    assert.equal(byId["qwen3:4b"].tools, true);
+    assert.equal(byId["gemma3:4b"].tools, false);
+    assert.equal(byId["huge:70b"].memory!.fit, "too-big");
+    assert.equal(byId["qwen3:4b"].memory!.bytes, 2.5 * gb);
+    // A model too big for this computer goes to the end of the list.
+    assert.equal(listed.models.at(-1)!.id, "huge:70b");
+  } finally {
+    server.close();
+  }
+});
+
 test("the owner can pause and resume a task (with what is under it), one agent, or all work, and nothing is lost", { timeout: 40_000 }, async () => {
   const { orgs } = await import("../../src/local/orgs.ts");
   const { work } = await import("../../src/local/work.ts");

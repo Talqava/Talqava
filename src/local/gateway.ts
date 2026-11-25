@@ -15,6 +15,7 @@ import type { OpenRouterModel } from "./openrouter.ts";
 import { audit } from "./audit.ts";
 import { MODELS } from "./store.ts";
 import type { Prices } from "../core/index.ts";
+import os from "node:os";
 
 export type ServiceGroup = "popular" | "open" | "makers" | "gateways" | "local";
 
@@ -145,6 +146,71 @@ export interface ListedModel {
   tools: boolean | null;
   contextTokens?: number;
   prices?: Prices;
+  /** For a model on this computer: its size, and whether it fits in this computer's memory. */
+  memory?: { bytes: number; fit: Fit };
+}
+
+/** Whether a local model fits in this computer's memory: comfortably, only just, or not at all. */
+export type Fit = "ok" | "tight" | "too-big";
+
+/**
+ * Local model families that can call tools, for runners that do not say (LM Studio, llama.cpp, Jan, vLLM). Ollama
+ * says for each model, and its answer is used instead.
+ */
+const LOCAL_TOOL_FAMILIES =
+  /^(qwen2\.5|qwen3|qwq|llama3\.[1-3]|llama4|mistral(-nemo|-small|-large|-medium)?|mixtral|ministral|devstral|magistral|command-r|firefunction|hermes3|granite3|granite4|gpt-oss|phi4-mini|smollm2|athene|nemotron|cogito|deepseek-v3|kimi-k2|glm-4)/;
+
+/** A local model's name as a family name: "lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF" → "llama3.1-8b-…". */
+function familyName(id: string): string {
+  return id
+    .toLowerCase()
+    .split("/")
+    .pop()!
+    .replace(/^meta-/, "")
+    .replace(/^llama-?(\d)[.-](\d)/, "llama$1.$2")
+    .replace(/^qwen-?(\d(?:\.\d)?)/, "qwen$1");
+}
+
+/** Whether a local model can call tools, from its name: true for a known family, otherwise not known. */
+export function localTools(id: string): boolean | null {
+  return LOCAL_TOOL_FAMILIES.test(familyName(id)) ? true : null;
+}
+
+/**
+ * Whether a model of this many bytes fits in memory. A model needs about its file size plus a fifth (for the
+ * conversation it holds) plus room for the system and other apps.
+ */
+export function fitFor(bytes: number, total = os.totalmem()): Fit {
+  const need = bytes * 1.2;
+  if (need > total * 0.7) return "too-big";
+  if (need > total * 0.5) return "tight";
+  return "ok";
+}
+
+/** What Ollama says about its models: each one's size, and whether it can call tools. */
+async function ollamaDetails(baseUrl: string): Promise<Map<string, { bytes?: number; tools?: boolean }>> {
+  const root = baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+  const details = new Map<string, { bytes?: number; tools?: boolean }>();
+  try {
+    const r = await fetch(`${root}/api/tags`, { signal: AbortSignal.timeout(3000) });
+    const data = (await r.json()) as { models?: { name: string; size?: number }[] };
+    await Promise.all(
+      (data.models ?? []).slice(0, 60).map(async (m) => {
+        const entry: { bytes?: number; tools?: boolean } = { bytes: typeof m.size === "number" ? m.size : undefined };
+        try {
+          const shown = await fetch(`${root}/api/show`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: m.name }), signal: AbortSignal.timeout(3000) });
+          const caps = ((await shown.json()) as { capabilities?: string[] }).capabilities;
+          if (Array.isArray(caps)) entry.tools = caps.includes("tools");
+        } catch {
+          // An older Ollama: its answer is left out, and the name decides.
+        }
+        details.set(m.name, entry);
+      }),
+    );
+  } catch {
+    // Not Ollama after all, or not answering: the names decide.
+  }
+  return details;
 }
 
 /** OpenRouter's public list, as a lookup. Kept for a day; an empty list when it cannot be reached. */
@@ -184,12 +250,18 @@ export async function listModels(provider: ProviderConfig): Promise<{ models: Li
     const data = (await r.json()) as { data?: { id: string; supports_tools?: boolean }[]; models?: { name?: string; id?: string }[] };
     const rows: { id: string; supports_tools?: boolean }[] = (data.data ?? data.models?.map((m) => ({ id: String(m.id ?? m.name ?? "") })) ?? []).filter((m) => m.id && !NOT_CHAT.test(m.id));
     const list = await catalog();
+    const local = service?.group === "local" || (provider.id === LEGACY_LOCAL && !provider.service);
+    // Ollama says what each of its models is; other runners are judged by the model's name.
+    const ollama = local && (service?.id ?? "ollama") === "ollama" ? await ollamaDetails(String(provider.baseUrl)) : new Map<string, { bytes?: number; tools?: boolean }>();
     const models = rows.map((m) => {
       const id = m.id.replace(/^models\//, "");
       const info = infoFor(service, id, list);
-      return { id, ...info, tools: typeof m.supports_tools === "boolean" ? m.supports_tools : info.tools };
+      const told = ollama.get(id) ?? ollama.get(`${id}:latest`);
+      const tools = typeof m.supports_tools === "boolean" ? m.supports_tools : typeof told?.tools === "boolean" ? told.tools : local ? localTools(id) : info.tools;
+      return { id, ...info, tools, ...(told?.bytes ? { memory: { bytes: told.bytes, fit: fitFor(told.bytes) } } : {}) };
     });
-    const rank = (m: ListedModel) => (m.tools === true ? 0 : m.tools === null ? 1 : 2);
+    // Models that can use tools and fit in memory first; those too big for this computer last.
+    const rank = (m: ListedModel) => (m.memory?.fit === "too-big" ? 3 : m.tools === true ? 0 : m.tools === null ? 1 : 2);
     models.sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id));
     return { models, reachable: true };
   } catch {
@@ -313,6 +385,17 @@ export function disconnect(providerId: string): { model: string } {
   audit({ actor: "owner", actorName: "You", kind: "integration", action: `Disconnected ${provider.name}`, detail: uses(cfg.model) ? "Your team went back to Claude, which it used before." : undefined });
   return { model };
 }
+
+/** Whether a model reference ("provider/model") runs on this computer. */
+export function isLocalRef(ref: string): boolean {
+  const provider = getConfig().providers.find((p) => ref.startsWith(`${p.id}/`));
+  if (!provider || provider.kind === "anthropic") return false;
+  const service = serviceOfProvider(provider);
+  return service?.group === "local" || (provider.id === LEGACY_LOCAL && !provider.service) || /localhost|127\.0\.0\.1/.test(String(provider.baseUrl));
+}
+
+/** This computer's memory, in gigabytes, for messages. */
+export const memoryGb = () => Math.round(os.totalmem() / 1024 ** 3);
 
 /** Looks for model runners on this computer and connects every one that is running. */
 export async function findLocal(): Promise<{ found: { service: string; name: string; models: number }[] }> {
