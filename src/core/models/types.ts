@@ -13,6 +13,8 @@ export interface ModelUsage {
   cacheWrite?: number;
   /** What the call cost in dollars, when the service reports it (OpenRouter does). Preferred over an estimate. */
   cost?: number;
+  /** Tokens the service cleared from this call (old tool outputs), so they were not read again. */
+  cleared?: number;
 }
 
 /** Prices in US dollars per million tokens. */
@@ -53,6 +55,8 @@ export interface Model {
   kind: "anthropic" | "openai";
   /** Known prices, or undefined when the cost of this model is unknown. Local models are free. */
   prices?: Prices;
+  /** True when the service itself clears old tool outputs, so the engine must not shorten them. */
+  trimsOnServer?: boolean;
   call(request: ModelRequest, callbacks: ModelCallbacks): Promise<ModelReply>;
 }
 

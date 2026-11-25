@@ -41,6 +41,16 @@ If no AI service is connected yet, a banner at the top links to **Integrations â
 
 A run stops before going over either limit, and you can say "continue" to carry on. Spend is estimated from list prices; your provider's bill is the real figure.
 
+### How Talqava keeps long tasks cheap
+
+Every step of a task sends the whole conversation to the AI service again, so long tasks cost more per step as they go. Talqava does three things for you, with nothing to switch on:
+
+- **Shortening old steps.** Once an agent has used a large result, such as a long web page or file, later steps send a short version of it: its start and end, and a note that it was shortened. The newest results always go whole, and the agent can run the step again if it needs all of it. With Claude, Anthropic does this on its side. You still see every result in full in the chat.
+- **Reading from cache.** The AI service remembers the parts of the conversation it has already read and charges about a tenth of the price for them.
+- **A size limit on each result.** No single result can fill the conversation.
+
+At the top of a chat, the line of tokens and cost shows how much was read **from cache**, and about how much shortening old steps **saved**. Point at the line for an explanation. A task's receipt shows the same for the whole task.
+
 ### Change the look
 
 1. Under **Look**, choose **Light**, **Dark** or **Match my computer**.

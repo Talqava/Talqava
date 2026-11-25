@@ -4,6 +4,8 @@
 import crypto from "node:crypto";
 import { describeAnthropicError, isServiceError } from "./models/anthropic.ts";
 import { costOf } from "./models/pricing.ts";
+import { trimOldResults } from "./context.ts";
+import { clip } from "./tooling.ts";
 import { ModelError } from "./models/types.ts";
 import type { ModelReply } from "./models/types.ts";
 import type {
@@ -93,6 +95,15 @@ export function outsideContentRead(messages: Conversation["messages"], names: st
         (b) => names.includes(b.name ?? "") && (b.type === "server_tool_use" || (b.type === "tool_use" && ok.has(b.id!))),
       ),
   );
+}
+
+/** Most characters one tool output may bring into the conversation, whatever tool it came from. */
+export const OUTPUT_CAP = 60_000;
+/** Shortens an over-long tool output (keeping its start and end), so one step cannot fill the conversation. */
+export function capOutput(content: ToolResult["content"]): ToolResult["content"] {
+  if (typeof content === "string") return clip(content, OUTPUT_CAP);
+  if (!Array.isArray(content)) return content;
+  return content.map((part) => (part.type === "text" && part.text.length > OUTPUT_CAP ? { ...part, text: clip(part.text, OUTPUT_CAP) } : part)) as ToolResult["content"];
 }
 
 const dollars = (n: number) => `$${n < 0.1 ? n.toFixed(3) : n.toFixed(2)}`;
@@ -221,7 +232,7 @@ export class Engine {
     // Written to the journal before running, so a restart knows this call may have partly happened.
     this.#emit(conversation.id, { type: "tool_start", id: call.id, name: call.name });
     try {
-      return result(await tool.run(call.input, { signal: run.abort.signal, conversation }));
+      return result(capOutput(await tool.run(call.input, { signal: run.abort.signal, conversation })));
     } catch (err) {
       return result(`Error: ${err instanceof Error ? err.message : String(err)}`, true);
     }
@@ -297,12 +308,14 @@ export class Engine {
         await this.#conversations.save(conversation);
       }
 
+      // Old, large tool outputs go shortened (the saved conversation keeps them whole).
+      const sent = spec.trimOutputs === false || spec.model.trimsOnServer ? { messages: conversation.messages, chars: 0 } : trimOldResults(conversation.messages, spec.trimOutputs === true ? {} : spec.trimOutputs);
       let reply: ModelReply;
       try {
         reply = await spec.model.call(
           {
             system: spec.system,
-            messages: conversation.messages,
+            messages: sent.messages,
             tools: spec.tools,
             hostedTools: spec.hostedTools,
             mcpServers: spec.mcpServers,
@@ -325,6 +338,14 @@ export class Engine {
 
       conversation.usage.input += reply.usage.input + (reply.usage.cacheRead ?? 0) + (reply.usage.cacheWrite ?? 0);
       conversation.usage.output += reply.usage.output;
+      if (reply.usage.cacheRead) conversation.usage.cached = (conversation.usage.cached ?? 0) + reply.usage.cacheRead;
+      // What the shortened outputs would have cost to send again: at the cache price where the service has one.
+      const shortened = Math.round(sent.chars / 3.5) + (reply.usage.cleared ?? 0);
+      if (shortened && prices) {
+        const tokens = shortened;
+        const saved = costOf(prices, prices.cacheRead !== undefined || reply.usage.cacheRead ? { input: 0, output: 0, cacheRead: tokens } : { input: tokens, output: 0 });
+        if (saved > 0) conversation.usage.saved = (conversation.usage.saved ?? 0) + saved;
+      }
       // The cost the service reported, or else an estimate from the model's list prices.
       const cost = reply.usage.cost ?? (prices ? costOf(prices, reply.usage) : undefined);
       if (cost !== undefined) {

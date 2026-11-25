@@ -3,6 +3,7 @@
 // happens before any of the reply has arrived, so a reply is never half from one
 // model and half from another.
 import { costOf } from "./pricing.ts";
+import { trimOldResults } from "../context.ts";
 import type { Model, ModelCallbacks, ModelReply, ModelRequest, Prices } from "./types.ts";
 
 /** Told about each switch, so it can be shown and logged. */
@@ -21,6 +22,7 @@ export class FallbackModel implements Model {
   readonly label: string;
   readonly kind: Model["kind"];
   readonly prices?: Prices;
+  readonly trimsOnServer?: boolean;
   readonly models: Model[];
   #onSwitch?: OnSwitch;
 
@@ -32,6 +34,7 @@ export class FallbackModel implements Model {
     this.label = first.label;
     this.kind = first.kind;
     this.prices = first.prices;
+    this.trimsOnServer = first.trimsOnServer;
     this.#onSwitch = onSwitch;
   }
 
@@ -47,7 +50,9 @@ export class FallbackModel implements Model {
       };
       try {
         // Tools that Anthropic runs on its side only work on Claude.
-        const reply = await model.call(model.kind === "anthropic" ? request : { ...request, hostedTools: [] }, watched);
+        // A backup that does not clear old outputs itself gets them shortened here, as the engine would have.
+        const sent = this.trimsOnServer && !model.trimsOnServer ? { ...request, messages: trimOldResults(request.messages).messages } : request;
+        const reply = await model.call(model.kind === "anthropic" ? sent : { ...sent, hostedTools: [] }, watched);
         // A backup's cost is counted at the backup's own prices.
         if (i > 0 && reply.usage.cost === undefined && model.prices) reply.usage = { ...reply.usage, cost: costOf(model.prices, reply.usage) };
         return reply;

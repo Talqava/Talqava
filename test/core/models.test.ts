@@ -212,6 +212,17 @@ test("a cost the service reports (as OpenRouter does) is used instead of an esti
   script.length = 0;
 });
 
+test("tokens the service read from its cache are counted apart, at the cheaper price", async () => {
+  run = { model: local({ input: 10, output: 10, cacheRead: 1 }), budget: { steps: 10 } };
+  script.push({ text: "hello", usage: { prompt_tokens: 1000, completion_tokens: 0, prompt_tokens_details: { cached_tokens: 800 } } });
+  const { saved } = await runOnce("say hello");
+  assert.equal(saved.usage.cached, 800);
+  assert.equal(saved.usage.input, 1000);
+  // 200 fresh tokens at $10 a million and 800 cached at $1: $0.0028, not the $0.01 of reading it all afresh.
+  assert.equal(Math.round(saved.usage.cost! * 1e6), 2800);
+  script.length = 0;
+});
+
 test("a model with no known prices still keeps to the budget when the service reports costs", async () => {
   run = { model: local(undefined), budget: { steps: 10, spend: 0.1 } };
   script.push({ calls: [{ name: "echo", args: { word: "a" } }], usage: { prompt_tokens: 10, completion_tokens: 2, cost: 0.2 } }, { text: "never reached" });
@@ -358,9 +369,14 @@ test("every loop has an exit: a repeated step, steps that keep failing, and a ti
   assert.equal(failing.ran.length, 4);
 
   // Past its time limit, it stops before the next step.
-  const slow = await stops({ minutes: 1e-7 }, [{ calls: [{ name: "echo", args: { word: "a" } }] }, { text: "late" }]);
+  // The clock moves a second each time it is read, so the test does not depend on how fast this computer is.
+  const realNow = Date.now;
+  let tick = realNow();
+  Date.now = () => (tick += 1000);
+  const slow = await stops({ minutes: 1.5 / 60 }, [{ calls: [{ name: "echo", args: { word: "a" } }] }, { text: "late" }]).finally(() => (Date.now = realNow));
   assert.deepEqual(slow.stopped.map((s) => s.reason), ["time"]);
   assert.match(slow.stopped[0].text, /time limit/);
+  assert.equal(slow.ran.length, 1); // the first step ran; the next would have been past the limit
 
   // The budget stops say so too.
   run = { model: local({ input: 0, output: 0 }), budget: { steps: 1 } } as typeof run;
