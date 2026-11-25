@@ -2579,3 +2579,54 @@ test("Amazon Bedrock connects with an API key and a region, and its models come 
     server.close();
   }
 });
+
+test("Google Vertex AI connects with a service account key file and signs in with a fresh token", async () => {
+  const gateway = await import("../../src/local/gateway.ts");
+  const auth = await import("../../src/local/googleauth.ts");
+  const crypto = await import("node:crypto");
+  const http = await import("node:http");
+  // A throwaway key, made for this test only.
+  const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const keyFile = JSON.stringify({ type: "service_account", project_id: "acme-ai", client_email: "talqava@acme-ai.iam.gserviceaccount.com", private_key: privateKey.export({ type: "pkcs8", format: "pem" }) });
+  let issued = 0;
+  const server = http.createServer(async (req, res) => {
+    let raw = "";
+    for await (const chunk of req) raw += chunk;
+    const json = (status: number, body: unknown) => (res.writeHead(status, { "content-type": "application/json" }), res.end(JSON.stringify(body)));
+    if (req.url === "/token") {
+      // The signed note is checked as Google would: signed by the account's key, for the right scope.
+      const [head, body, sig] = new URLSearchParams(raw).get("assertion")!.split(".");
+      const ok = crypto.verify("RSA-SHA256", Buffer.from(`${head}.${body}`), publicKey, Buffer.from(sig, "base64url"));
+      const claims = JSON.parse(Buffer.from(body, "base64url").toString());
+      if (!ok || claims.scope !== "https://www.googleapis.com/auth/cloud-platform") return json(400, { error_description: "Invalid JWT Signature." });
+      return json(200, { access_token: `token-${++issued}`, expires_in: 3600 });
+    }
+    json(404, {});
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  process.env.TALQAVA_GOOGLE_TOKEN_URL = `http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}/token`;
+  const before = store.getConfig().providers;
+  try {
+    assert.throws(() => auth.parseServiceAccount('{"type":"authorized_user"}'), /not a service account key/);
+    assert.throws(() => auth.parseServiceAccount("AIzaSy-some-key"), /not a Google Cloud key file/);
+    assert.equal(gateway.vertexAddress("acme-ai", ""), "https://aiplatform.googleapis.com/v1/projects/acme-ai/locations/global/endpoints/openapi");
+    assert.equal(gateway.vertexAddress("acme-ai", "us-central1"), "https://us-central1-aiplatform.googleapis.com/v1/projects/acme-ai/locations/us-central1/endpoints/openapi");
+    assert.throws(() => gateway.vertexAddress("acme-ai", "Iowa"), /Google Cloud region/);
+    await assert.rejects(gateway.connect("vertex", {}), /key file/);
+    const r = await gateway.connect("vertex", { key: keyFile, address: "us-central1" });
+    assert.equal(r.provider, "vertex");
+    const provider = store.getConfig().providers.find((p) => p.id === "vertex")!;
+    assert.match(provider.baseUrl!, /projects\/acme-ai\/locations\/us-central1/);
+    // Each request gets a token, kept until shortly before it runs out.
+    const key = gateway.keySource(provider)!;
+    assert.equal(await key(), "token-1");
+    assert.equal(await key(), "token-1");
+    auth.forgetTokens();
+    assert.equal(await key(), "token-2");
+  } finally {
+    store.saveConfig({ providers: before });
+    delete process.env.TALQAVA_GOOGLE_TOKEN_URL;
+    auth.forgetTokens();
+    server.close();
+  }
+});

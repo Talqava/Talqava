@@ -74,6 +74,8 @@ export interface ProviderConfig {
   baseUrl?: string;
   /** For "openai" providers. Anthropic's key is Config.apiKey. */
   apiKey?: string;
+  /** More keys for the same service; work is spread across them (see OpenAICompatibleOptions.moreKeys). */
+  moreKeys?: string[];
   /** Prices per million tokens, when known. Local runners are free. */
   prices?: Prices;
   /** How many tokens the model can hold; longer conversations are shortened to fit. */

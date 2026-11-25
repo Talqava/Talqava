@@ -38,7 +38,7 @@ import { execFile } from "node:child_process";
 import { needsFor } from "./preflight.ts";
 import { acceptSuggestion, suggestPositions } from "./suggest.ts";
 import { audit, readAudit, redact } from "./audit.ts";
-import { connect, disconnect, findLocal, gatewayState, listModels, setBackups, isLocalRef, memoryGb } from "./gateway.ts";
+import { addKey, connect, disconnect, findLocal, gatewayState, listModels, setBackups, isLocalRef, memoryGb } from "./gateway.ts";
 import { board } from "./board.ts";
 import { accessGraph, accessGraphs } from "./access.ts";
 import { loadModelList } from "./modelprices.ts";
@@ -997,6 +997,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (req.method === "POST" && parts[1] === "find-local") return send(res, 200, await attempt(() => findLocal()));
     if (req.method === "PUT" && parts[1] === "backups") return send(res, 200, await attempt(() => setBackups(body.backups)));
     if (req.method === "POST" && parts[1] && parts[2] === "connect") return send(res, 200, await attempt(() => connect(parts[1], body)));
+    if (req.method === "POST" && parts[1] && parts[2] === "keys") return send(res, 200, await attempt(() => addKey(parts[1], body.key)));
     if (req.method === "DELETE" && parts[1]) return send(res, 200, await attempt(() => disconnect(parts[1])));
   }
 

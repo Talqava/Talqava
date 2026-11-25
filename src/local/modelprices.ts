@@ -21,6 +21,7 @@ export interface KnownModel {
 export const LIST_NAMES: Record<string, string> = {
   openai: "openai",
   azure: "azure",
+  vertex: "vertex_ai-language-models",
   bedrock: "bedrock_mantle",
   gemini: "gemini",
   xai: "xai",
@@ -112,4 +113,16 @@ export function knownModel(serviceId: string | undefined, model: string): KnownM
 /** For tests: forgets the copy in memory. */
 export function forgetModelList() {
   memo = null;
+}
+
+/** The chat models the list knows for one of Talqava's services, by name: for services that do not list their own. */
+export function modelsOf(serviceId: string): { name: string; tools: boolean | null; contextTokens?: number; prices?: Prices }[] {
+  const listName = LIST_NAMES[serviceId];
+  const list = listName ? (memo ?? (memo = readJson<Kept | null>(keptFile(), null)))?.models[listName] : undefined;
+  return Object.entries(list ?? {}).map(([name, [input, output, cacheRead, context, tools]]) => ({
+    name,
+    tools,
+    ...(context ? { contextTokens: context } : {}),
+    ...(input !== null && output !== null ? { prices: { input, output, ...(cacheRead !== null && cacheRead > 0 ? { cacheRead } : {}) } } : {}),
+  }));
 }

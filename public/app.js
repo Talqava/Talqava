@@ -5929,8 +5929,7 @@ function aiModelsSection(col) {
                 h(
                   "div",
                   { class: "grow" },
-                  h("strong", {}, c.name),
-                  c.inUse ? h("span", { class: "tag ok" }, "Your team's model") : null,
+                  h("div", { class: "row" }, serviceTile(c.name), h("strong", {}, c.name), c.inUse ? h("span", { class: "tag ok" }, "Your team's model") : null),
                   // A model program on this computer is checked now: it may have been closed, or have no models yet.
                   c.live
                     ? h(
@@ -5938,9 +5937,16 @@ function aiModelsSection(col) {
                         { class: `note small ${c.live.running && c.live.models ? "" : "warnline"}` },
                         !c.live.running ? `Not running right now. Start ${c.name} to use it.` : c.live.models ? `Running · ${c.live.models} model${c.live.models === 1 ? "" : "s"} on this computer` : `Running, but no models downloaded yet. Download one in ${c.name}, then press Models.`,
                       )
-                    : h("div", { class: "note small" }, c.address ? short(c.address) : "Connected with your key"),
+                    : h("div", { class: "note small" }, [c.address ? short(c.address) : "Connected with your key", c.keys > 1 ? `${c.keys} keys, taking turns` : null].filter(Boolean).join(" · ")),
                 ),
                 h("button", { class: "small", onclick: () => modelsDialog(c) }, "Models"),
+                // More keys for the same service spread the work and keep going when one reaches its rate limit.
+                c.hasKey && !c.local && c.service !== "vertex" && c.service !== "anthropic"
+                  ? h("button", { class: "small plain", title: "Work is spread across the keys, and when one reaches its rate limit the others keep going.", onclick: () => {
+                      const key = prompt(`Paste another ${c.name} key.\n\nWork is spread across the keys, and when one reaches its rate limit the others keep going.`);
+                      if (key && key.trim()) attempt(async () => (await api("POST", `gateway/${encodeURIComponent(c.id)}/keys`, { key: key.trim() }), toast(`${c.name} now has another key.`), refresh()), col);
+                    } }, "+ Key")
+                  : null,
                 h("button", { class: "small plain danger", onclick: () => confirm(`Disconnect ${c.name}?\n\nIts key is forgotten on this computer.${c.inUse ? " Your team goes back to Claude." : ""}`) && attempt(async () => (await api("DELETE", `gateway/${encodeURIComponent(c.id)}`), refresh()), col) }, "Disconnect"),
               ),
             )
@@ -5964,7 +5970,7 @@ function aiModelsSection(col) {
                 return h(
                   "div",
                   { class: `aicard${on ? " on" : ""}` },
-                  h("div", { class: "aicardhead" }, h("strong", {}, s.name), on ? h("span", { class: "tag ok" }, "Connected") : null),
+                  h("div", { class: "aicardhead" }, serviceTile(s.name), h("strong", { class: "grow" }, s.name), on ? h("span", { class: "tag ok" }, "Connected") : null),
                   h("p", { class: "note small" }, s.about),
                   h(
                     "div",
@@ -6021,7 +6027,10 @@ function aiModelsSection(col) {
   };
 
   const connectDialog = (s) => {
-    const key = s.needsKey || s.id === "custom" || s.id === "litellm" ? h("input", { type: "password", autocomplete: "off", placeholder: s.keyPrefix ? `${s.keyPrefix}…` : s.needsKey ? "Paste the key" : "Key, if it needs one", "aria-label": "Key" }) : null;
+    // Google Vertex AI takes the service account's key file, not a pasted key: the file is read here and sent as text.
+    const keyFile = s.id === "vertex" ? h("input", { type: "file", accept: ".json,application/json", "aria-label": "Service account key file (.json)" }) : null;
+    const key = keyFile ? { value: "" } : s.needsKey || s.id === "custom" || s.id === "litellm" ? h("input", { type: "password", autocomplete: "off", placeholder: s.keyPrefix ? `${s.keyPrefix}…` : s.needsKey ? "Paste the key" : "Key, if it needs one", "aria-label": "Key" }) : null;
+    keyFile?.addEventListener("change", async () => (key.value = keyFile.files?.[0] ? await keyFile.files[0].text() : ""));
     const address = s.addressHint ? h("input", { placeholder: s.addressHint, "aria-label": "Address" }) : null;
     const name = s.id === "custom" ? h("input", { placeholder: "Its name, e.g. Portkey", "aria-label": "Name", maxlength: 60 }) : null;
     const status = h("p", { class: "note", role: "status" });
@@ -6057,7 +6066,8 @@ function aiModelsSection(col) {
           : null,
       name,
       address,
-      key,
+      keyFile ? h("label", {}, "Service account key file (.json)", keyFile) : key,
+      keyFile ? h("p", { class: "note small" }, "In Google Cloud: IAM → Service accounts → choose or create one with the Vertex AI User role → Keys → Add key → JSON. The file is kept on this computer; only a signed sign-in request goes to Google.") : null,
       status,
       h("div", { class: "row" }, h("button", { type: "button", class: "plain", onclick: close }, "Cancel"), go),
     );
@@ -6285,9 +6295,23 @@ function settingsView() {
   col.append(
     h("h3", {}, "About and legal"),
     h("p", { class: "note" }, "Talqava is open-source software under the MIT licence, developed by GR Investments LLC. It runs on your computer and sends nothing to us: your data goes only to the services you connect, such as your AI model provider."),
+    h("p", { class: "note small" }, TRADEMARKS),
     h("p", { class: "note small" }, "Files your agents work on are kept in ", h("code", {}, c.workspace), ". Everything else Talqava knows is in ", h("code", {}, c.dataDir), "."),
     legal,
   );
+}
+
+/** Said wherever other companies' services are named: their names are used only to say Talqava works with them. */
+const TRADEMARKS = "Product and company names are trademarks of their owners and are used only to say which services Talqava can connect to. Talqava is not affiliated with or endorsed by them.";
+
+/**
+ * A small tile for an AI service, in Talqava's own style: its initials on the brand's dark tile. Companies' own logos
+ * are not shown; most of their brand rules allow their names in text, but not their logos without permission.
+ */
+function serviceTile(name) {
+  const words = String(name).replace(/\(.*\)/, "").trim().split(/\s+/).filter(Boolean);
+  const letters = (words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? "?").slice(0, 2)).toUpperCase();
+  return h("span", { class: "svctile", "aria-hidden": "true" }, letters);
 }
 
 boot();

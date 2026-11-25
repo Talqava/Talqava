@@ -9,6 +9,8 @@ export interface ChatReply {
   usage?: { prompt_tokens: number; completion_tokens: number; cost?: number; prompt_tokens_details?: { cached_tokens: number } };
   /** Answer with this HTTP status instead of a stream. */
   status?: number;
+  /** Extra response headers, e.g. Retry-After with a status of 429. */
+  headers?: Record<string, string>;
 }
 
 export function startMockChat(script: ChatReply[]) {
@@ -19,7 +21,7 @@ export function startMockChat(script: ChatReply[]) {
     requests.push({ headers: req.headers, body: JSON.parse(raw) });
     const reply = script.shift() ?? { text: "(script ended)" };
     if (reply.status) {
-      res.writeHead(reply.status, { "content-type": "application/json" });
+      res.writeHead(reply.status, { "content-type": "application/json", ...reply.headers });
       res.end(JSON.stringify({ error: { message: "scripted failure" } }));
       return;
     }

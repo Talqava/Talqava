@@ -13,6 +13,12 @@ export interface OpenAICompatibleOptions {
   /** e.g. http://localhost:11434/v1 */
   baseUrl: string;
   apiKey?: string;
+  /** For services whose key is a short-lived token (Google Vertex AI): asked for the key before each request. */
+  getKey?: () => Promise<string>;
+  /** More keys for the same service: work is spread across them, and a key at its rate limit rests while the others work. */
+  moreKeys?: string[];
+  /** Told when a key reached its rate limit, and whether another key took over or the request waited. */
+  onRateLimit?: (info: { keys: number; switched: boolean; waitedSeconds: number }) => void;
   model: string;
   prices?: Prices;
   maxTokens?: number;
@@ -199,6 +205,39 @@ async function* events(body: ReadableStream<Uint8Array>): AsyncGenerator<string>
 }
 
 /** The key, in the header the service wants. */
+// Keys at their rate limit, and until when they rest; and where each service's turn-taking is. Shared by every model
+// object, since a new one is made for each run.
+const resting = new Map<string, number>();
+const turns = new Map<string, number>();
+/** Longest a request waits for a rate limit to pass before it gives up (and a backup model, if any, takes over). */
+export const MAX_WAIT_SECONDS = 20;
+
+/** How long a service asks to wait, from its Retry-After or rate-limit reset header; 30 seconds when it doesn't say. */
+export function waitFrom(headers: Headers): number {
+  const after = headers.get("retry-after");
+  if (after) {
+    const seconds = Number(after);
+    if (Number.isFinite(seconds)) return Math.max(1, seconds);
+    const at = Date.parse(after);
+    if (Number.isFinite(at)) return Math.max(1, (at - Date.now()) / 1000);
+  }
+  for (const name of ["x-ratelimit-reset-requests", "x-ratelimit-reset-tokens", "x-ratelimit-reset"]) {
+    const value = headers.get(name);
+    if (!value) continue;
+    // "1s", "6m0s", "250ms", or plain seconds.
+    let total = 0;
+    for (const [, n, unit] of value.matchAll(/([\d.]+)(ms|s|m|h)?/g)) total += Number(n) * (unit === "ms" ? 0.001 : unit === "m" ? 60 : unit === "h" ? 3600 : 1);
+    if (total > 0) return Math.max(1, total);
+  }
+  return 30;
+}
+
+const sleep = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => (clearTimeout(timer), reject(signal.reason)), { once: true });
+  });
+
 function keyHeaders(apiKey: string | undefined, keyHeader: OpenAICompatibleOptions["keyHeader"]): Record<string, string> {
   if (!apiKey) return {};
   return keyHeader === "api-key" ? { "api-key": apiKey } : { authorization: `Bearer ${apiKey}` };
@@ -222,7 +261,14 @@ export class OpenAICompatibleModel implements Model {
   }
 
   async call(request: ModelRequest, callbacks: ModelCallbacks): Promise<ModelReply> {
-    const { baseUrl, apiKey, model, providerName } = this.#options;
+    const { baseUrl, model, providerName } = this.#options;
+    // The keys take turns, request by request; a key resting after its rate limit is passed over.
+    const keys = [this.#options.apiKey, ...(this.#options.moreKeys ?? [])].filter((k, i, all): k is string => Boolean(k) && all.indexOf(k) === i);
+    const turn = turns.get(baseUrl) ?? 0;
+    turns.set(baseUrl, turn + 1);
+    const order = keys.map((_, i) => keys[(turn + i) % keys.length]);
+    const restingFor = (k: string) => Math.max(0, (resting.get(`${baseUrl}|${k}`) ?? 0) - Date.now());
+    let apiKey = this.#options.getKey ? await this.#options.getKey() : (order.find((k) => !restingFor(k)) ?? order[0]);
     const doFetch = this.#options.fetch ?? fetch;
     const tools = toChatTools(request.tools);
     // Room is left for the reply and the tool descriptions.
@@ -256,20 +302,40 @@ export class OpenAICompatibleModel implements Model {
       });
 
     let response: Response;
+    let limit = limitName;
+    let withUsage = !known.noUsage;
     try {
-      let limit = limitName;
-      let usage = !known.noUsage;
-      response = await send(limit, usage);
+      response = await send(limit, withUsage);
       // Services differ in small ways. When one refuses a setting by name, the other form is tried once, and remembered.
       if (response.status === 400 || response.status === 422) {
         const detail = await response.clone().text().catch(() => "");
         const other = limit === "max_tokens" ? "max_completion_tokens" : "max_tokens";
         if (detail.includes(limit)) limit = other;
-        else if (usage && /stream_options|include_usage/.test(detail)) usage = false;
-        if (limit !== limitName || usage !== !known.noUsage) {
-          response = await send(limit, usage);
-          if (response.ok) learned.set(`${baseUrl}|${model}`, { tokenLimit: limit as "max_tokens" | "max_completion_tokens", noUsage: !usage });
+        else if (withUsage && /stream_options|include_usage/.test(detail)) withUsage = false;
+        if (limit !== limitName || withUsage !== !known.noUsage) {
+          response = await send(limit, withUsage);
+          if (response.ok) learned.set(`${baseUrl}|${model}`, { tokenLimit: limit as "max_tokens" | "max_completion_tokens", noUsage: !withUsage });
         }
+      }
+      // A rate limit: that key rests, and another takes over at once; when every key is resting, the request waits for
+      // the soonest one, if that is short. Nothing has been answered yet, so trying again repeats nothing.
+      let waited = 0;
+      for (let tries = 0; response.status === 429 && !this.#options.getKey && tries < keys.length + 1; tries++) {
+        if (apiKey) resting.set(`${baseUrl}|${apiKey}`, Date.now() + waitFrom(response.headers) * 1000);
+        const free = order.find((k) => !restingFor(k));
+        let switched = false;
+        if (free) {
+          apiKey = free;
+          switched = true;
+        } else {
+          const soonest = Math.min(...order.map(restingFor));
+          if (soonest / 1000 > MAX_WAIT_SECONDS - waited) break;
+          await sleep(soonest, request.signal);
+          waited += soonest / 1000;
+          apiKey = order.find((k) => !restingFor(k)) ?? order[0];
+        }
+        this.#options.onRateLimit?.({ keys: keys.length, switched, waitedSeconds: Math.round(waited) });
+        response = await send(limit, withUsage);
       }
     } catch (err) {
       if (request.signal.aborted) throw err;
@@ -280,7 +346,7 @@ export class OpenAICompatibleModel implements Model {
       if (response.status === 401 || response.status === 403) throw new ModelError(`${providerName} rejected the API key. Connect it again under Integrations → AI models.`, response.status);
       if (response.status === 402) throw new ModelError(`${providerName} says the account has no credit left. Add credit on the ${providerName} website, or choose another model. ${detail}`.trim(), 402);
       if (response.status === 404) throw new ModelError(`${providerName} does not know the model "${model}". ${detail}`.trim(), 404);
-      if (response.status === 429) throw new ModelError(`${providerName} is busy or the account's rate limit was reached. ${detail}`.trim(), 429);
+      if (response.status === 429) throw new ModelError(`${providerName} is busy or the account's rate limit was reached${keys.length > 1 ? ` on all ${keys.length} keys` : ""}. ${detail}`.trim(), 429);
       throw new ModelError(`${providerName} returned an error (${response.status}). ${detail}`.trim(), response.status);
     }
 
@@ -386,7 +452,8 @@ export class OpenAICompatibleModel implements Model {
     const first = clip(messages[1].content ?? "", 2000);
     const ask = `How the conversation started:\n${first}\n\n${known ? `Summary so far:\n${known.summary}\n\n` : ""}What happened next:\n${said}\n\nWrite the updated summary of everything so far.`;
 
-    const { baseUrl, apiKey, model } = this.#options;
+    const { baseUrl, model } = this.#options;
+    const apiKey = this.#options.getKey ? await this.#options.getKey() : this.#options.apiKey;
     const response = await (this.#options.fetch ?? fetch)(`${baseUrl.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json", ...this.#options.headers, ...keyHeaders(apiKey, this.#options.keyHeader) },

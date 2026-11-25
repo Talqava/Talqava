@@ -16,7 +16,8 @@ import { audit } from "./audit.ts";
 import { MODELS } from "./store.ts";
 import type { Prices } from "../core/index.ts";
 import os from "node:os";
-import { knownModel, loadModelList } from "./modelprices.ts";
+import { knownModel, loadModelList, modelsOf } from "./modelprices.ts";
+import { accessToken, parseServiceAccount } from "./googleauth.ts";
 
 export type ServiceGroup = "popular" | "open" | "makers" | "gateways" | "local";
 
@@ -33,6 +34,8 @@ export interface Service {
   addressHint?: string;
   /** What "{resource}" in the address is: an Azure resource name (the default) or an AWS region. */
   resource?: "azure" | "aws-region";
+  /** The key is a Google Cloud service account file, traded for a token that lasts an hour (Vertex AI). */
+  serviceAccount?: boolean;
   /** Where to get a key. */
   keyUrl?: string;
   /** What a key looks like, to catch a key pasted into the wrong service. */
@@ -71,6 +74,7 @@ export const SERVICES: Service[] = [
   { id: OPENROUTER_ID, name: "OpenRouter", about: "One account for hundreds of models from every major maker, paid from one balance. Sign in with your browser: no key to copy.", group: "gateways", kind: "openai", baseUrl: "https://openrouter.ai/api/v1", keyUrl: "https://openrouter.ai/keys", keyPrefix: "sk-or-", needsKey: true, ownSetup: "openrouter" },
   { id: "azure", name: "Microsoft Azure OpenAI", about: "OpenAI's models on your company's Azure account. Give your resource's name and key.", group: "gateways", kind: "openai", baseUrl: "https://{resource}.openai.azure.com/openai/v1", addressHint: "Your Azure resource name (the first part of its address), or its full address", keyUrl: "https://portal.azure.com", needsKey: true, keyHeader: "api-key", tokenLimit: "max_completion_tokens", priceFrom: "openai/" },
   { id: "bedrock", name: "Amazon Bedrock", about: "Claude, GPT-OSS, Llama, Mistral, Qwen, DeepSeek and more on your company's AWS account. Give a Bedrock API key and your region.", group: "gateways", kind: "openai", baseUrl: "https://bedrock-mantle.{resource}.api.aws/v1", resource: "aws-region", addressHint: "Your AWS region, e.g. us-east-1", keyUrl: "https://console.aws.amazon.com/bedrock/home#/api-keys", needsKey: true },
+  { id: "vertex", name: "Google Vertex AI", about: "Google's Gemini models on your company's Google Cloud account. Give the service account's key file, and the region if it isn't global.", group: "gateways", kind: "openai", baseUrl: "https://aiplatform.googleapis.com/v1/projects/{project}/locations/global/endpoints/openapi", addressHint: "Region, if not global (e.g. us-central1)", keyUrl: "https://console.cloud.google.com/iam-admin/serviceaccounts", needsKey: true, serviceAccount: true },
   { id: "litellm", name: "LiteLLM gateway", about: "Your company's own LiteLLM gateway, which can reach Amazon Bedrock, Google Vertex and others.", group: "gateways", kind: "openai", baseUrl: "", addressHint: "The gateway's address, e.g. http://localhost:4000", needsKey: true },
   { id: "custom", name: "Another service", about: "Any other service or gateway that offers the common chat completions format (Portkey, vLLM on a server, and many more).", group: "gateways", kind: "openai", baseUrl: "", addressHint: "Its address, usually ending in /v1", needsKey: false },
   // On this computer: free, private, nothing leaves the computer.
@@ -102,6 +106,14 @@ function serviceOfProvider(p: ProviderConfig): Service | undefined {
 }
 
 // ---------- addresses and keys ----------
+
+/** Vertex AI's address, from the project in the key file and the region (global when none is typed). */
+export function vertexAddress(project: string, typed?: unknown): string {
+  const region = String(typed ?? "").trim().toLowerCase() || "global";
+  if (region !== "global" && !/^[a-z]+-[a-z]+\d+$/.test(region)) throw new Error("That does not look like a Google Cloud region. It looks like us-central1 or europe-west4; leave it empty for global.");
+  const host = region === "global" ? "aiplatform.googleapis.com" : `${region}-aiplatform.googleapis.com`;
+  return `https://${host}/v1/projects/${encodeURIComponent(project)}/locations/${region}/endpoints/openapi`;
+}
 
 /** The address to use, from the service and what the person typed. */
 export function addressFor(service: Service, typed?: unknown): string {
@@ -250,6 +262,14 @@ export async function listModels(provider: ProviderConfig): Promise<{ models: Li
   if (provider.kind === "anthropic") return { models: MODELS.map((m) => ({ id: m.id, tools: true })), reachable: true };
   if (provider.id === OPENROUTER_ID) return { models: (await catalog()).map((m) => ({ id: m.id, tools: true, contextTokens: m.contextTokens, prices: m.prices })), reachable: true };
   const service = serviceOfProvider(provider);
+  if (service?.serviceAccount) {
+    await loadModelList();
+    const models = modelsOf(service.id)
+      .filter((m) => m.tools !== false && /^gemini/.test(m.name))
+      .map((m) => ({ id: `google/${m.name}`, tools: m.tools, ...(m.contextTokens ? { contextTokens: m.contextTokens } : {}), ...(m.prices ? { prices: m.prices } : {}) }))
+      .sort((a, b) => a.id.localeCompare(b.id));
+    return { models, reachable: true, ...(models.length ? {} : { note: "Type the model's name, for example google/gemini-2.5-flash." }) };
+  }
   try {
     const r = await fetch(`${String(provider.baseUrl).replace(/\/+$/, "")}/models`, {
       headers: headersFor(service ?? ({ keyHeader: provider.keyHeader } as Service), provider.apiKey),
@@ -339,6 +359,7 @@ export async function connect(serviceId: string, input: ConnectInput): Promise<{
   const id = service.id === "custom" ? customId(String(input.name ?? ""), cfg) : providerIdFor(service, cfg);
   const existing = cfg.providers.find((p) => p.id === id);
   const keyToUse = key ?? (service.kind === "anthropic" ? cfg.apiKey || undefined : existing?.apiKey);
+  if (service.serviceAccount && !keyToUse) throw new Error(`Choose the service account's key file (.json) for ${service.name}.`);
   if (service.needsKey && !keyToUse) throw new Error(`Paste your ${service.name} key${service.keyUrl ? `. You can get one at ${service.keyUrl.replace(/^https:\/\//, "")}` : ""}.`);
   if (key) {
     // A key from another service is caught before it is sent anywhere: it would only be refused.
@@ -346,8 +367,10 @@ export async function connect(serviceId: string, input: ConnectInput): Promise<{
     if (other) throw new Error(`That looks like a key for ${other.name}, not ${service.name}.${service.keyPrefix ? ` A key for ${service.name} starts with ${service.keyPrefix}` : ""}`.replace(/\.?$/, "."));
     if (service.keyPrefix && !key.startsWith(service.keyPrefix)) throw new Error(`A key for ${service.name} starts with ${service.keyPrefix}. Check you copied the right one.`);
   }
-  const baseUrl = service.kind === "anthropic" ? service.baseUrl : addressFor(service, input.address);
-  const result = await tryConnection(service, baseUrl, keyToUse);
+  const account = service.serviceAccount ? parseServiceAccount(keyToUse) : null;
+  const baseUrl = service.kind === "anthropic" ? service.baseUrl : account ? vertexAddress(account.project_id, input.address) : addressFor(service, input.address);
+  // A key file is checked by signing in with it; Vertex AI does not list its models, so Talqava's list is used.
+  const result = account ? (await accessToken(account), { models: modelsOf(service.id).length }) : await tryConnection(service, baseUrl, keyToUse);
 
   if (service.kind === "anthropic") {
     if (key) saveConfig({ apiKey: key });
@@ -379,6 +402,24 @@ function customId(name: string, cfg = getConfig()): string {
 }
 
 /** Disconnects a service. Its key is forgotten; agents using one of its models go back to Claude. */
+/** Adds another key to a connected service, after checking it with the service. Up to five keys. */
+export async function addKey(providerId: string, typed: unknown): Promise<{ keys: number }> {
+  const cfg = getConfig();
+  const provider = cfg.providers.find((p) => p.id === providerId);
+  if (!provider || provider.kind === "anthropic") throw new Error("That AI service is not connected.");
+  const service = serviceOfProvider(provider);
+  if (!service || service.group === "local" || service.serviceAccount) throw new Error(`${provider.name} takes one key.`);
+  const key = String(typed ?? "").trim();
+  if (!key) throw new Error("Paste the key.");
+  const keys = [provider.apiKey, ...(provider.moreKeys ?? [])].filter(Boolean);
+  if (keys.includes(key)) throw new Error("That key is already there.");
+  if (keys.length >= 5) throw new Error("Up to five keys for one service.");
+  await tryConnection(service, String(provider.baseUrl), key);
+  saveConfig({ providers: cfg.providers.map((p) => (p.id === providerId ? { ...p, moreKeys: [...(p.moreKeys ?? []), key] } : p)) });
+  audit({ actor: "owner", actorName: "You", kind: "integration", action: `Added another key to ${provider.name}`, detail: `${keys.length + 1} keys` });
+  return { keys: keys.length + 1 };
+}
+
 export function disconnect(providerId: string): { model: string } {
   const cfg = getConfig();
   const provider = cfg.providers.find((p) => p.id === providerId);
@@ -472,6 +513,7 @@ export async function gatewayState({ live = true } = {}) {
         group: service?.group ?? "gateways",
         address: p.kind === "anthropic" ? null : p.baseUrl,
         hasKey: p.kind === "anthropic" ? true : Boolean(p.apiKey),
+        keys: p.kind === "anthropic" ? 1 : [p.apiKey, ...(p.moreKeys ?? [])].filter(Boolean).length,
         inUse: cfg.model.startsWith(`${p.id}/`),
         // The standard local entry is there from the start; it only counts once something answers.
         standard: p.id === LEGACY_LOCAL && !p.service,
@@ -489,4 +531,12 @@ export async function gatewayState({ live = true } = {}) {
     model: cfg.model,
     backups: cfg.backups ?? [],
   };
+}
+
+/** For a service whose key is a service account file: a way to get a fresh token before each request. */
+export function keySource(provider: ProviderConfig): (() => Promise<string>) | undefined {
+  const service = serviceOfProvider(provider);
+  if (!service?.serviceAccount || !provider.apiKey) return undefined;
+  const account = parseServiceAccount(provider.apiKey);
+  return () => accessToken(account);
 }
