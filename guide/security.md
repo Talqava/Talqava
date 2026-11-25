@@ -40,6 +40,8 @@ These limits are enforced by the app itself. A person who tries something their 
 
 **Sensitivity levels decide what may reach an AI service.** Every page, document, note, sheet and Library document has a level: **Public**, **Internal** (the starting level), **Confidential** or **Restricted**. Under **Sensitive information** you decide, for each level, where it may be sent: any connected AI service, only approved services, only models on this computer, or no AI model at all. An agent whose AI service may not receive a level is not given those items; it is told why, so it says so in its report, and the attempt is logged. A **Restricted** item is also hidden from every agent you have not named on it. Until you change these rules, every level may go to any service, as before.
 
+**Alerts and reviews.** Under **Alerts and reviews**, Talqava lists what deserves a look from the last 7 days: a run of refused sign-ins, changes to people or rules, and agents refused again and again. Alerts are shown here and in your monitoring system if you connect one; Talqava does not send email.
+
 **Agent guardrails are rules above every agent.** Under **Agent guardrails** you set rules for the whole installation: whether changes always ask a person, whether agents may run commands, use connected services or the web, which sites are approved, and the most a task may spend or run. An agent's own settings can be stricter than these, never looser. They work whether or not people and sign-in are turned on, and apply to tasks that start after you change them.
 
 ## How to…
@@ -96,6 +98,19 @@ A page made inside a sensitive page starts at the same level. Tables follow thei
 1. Open **Security** and find **Sensitive information**.
 2. For each level, choose where it may be sent. **Use the recommended settings** sets Confidential to approved services only and Restricted to models on this computer only.
 3. Under **Approved AI services**, tick the services you trust. Check each service's terms first: that it does not train on your data, and where it processes it.
+
+### Do an access review
+
+1. Under **Alerts and reviews**, press **Start a review**. Talqava lists every person and every agent with what each can do.
+2. For each line, press **Still right** or **Needs a change**, and add a note if you like.
+3. Make any changes on the usual pages (**People**, or the agent's page); marking a line only records your answer.
+4. Press **Finish the review**. It is recorded in the audit log, and the next one is due in 90 days.
+
+### Send events to your monitoring system
+
+1. In your monitoring system, create an address that accepts events over HTTPS (often called a webhook or HTTP collector).
+2. Under **Alerts and reviews**, paste it into **Send every event to your monitoring system**, add a signing secret if your system checks one, and press **Start sending**.
+3. Every audit entry is then also sent there as it is written. If a delivery fails, the page says why and tries again with the next event.
 
 ### Hold agents to approved websites
 

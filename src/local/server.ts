@@ -46,6 +46,7 @@ import { COLUMN_TYPES, peopleOf, tables } from "./tables.ts";
 import { sheets } from "./sheets.ts";
 import { describeGuardrails, guardrails, guardrailsFrom } from "./guardrails.ts";
 import { securityOverview, securityReport } from "./securitycenter.ts";
+import { REVIEW_EVERY_DAYS, alerts, feedStatus, reviews, setFeed, startAuditFeed } from "./auditfeed.ts";
 import { LEVELS, LEVEL_WORDS, RECOMMENDED, WHERE, WHERE_WORDS, describePolicy, policy, policyFrom } from "./sensitivity.ts";
 import { ROLES, ROLE_WORDS, mayDo, people } from "./people.ts";
 import type { Person } from "./people.ts";
@@ -180,6 +181,7 @@ function describeRequest(method: string, parts: string[], body: any, url: URL): 
   const [area, id, action] = parts;
   const words = (b: unknown) => JSON.stringify(redact(b ?? {})).slice(0, 400);
   if (area === "login" || area === "logout") return area === "logout" ? { kind: "security", action: "Signed out" } : people.enabled() ? null : { kind: "settings", action: "Signed in" };
+  if (area === "security-ops") return id === "feed" ? { kind: "security", action: body.url ? "Set where the audit record is also sent" : "Stopped sending the audit record elsewhere" } : null;
   if (area === "me") return { kind: "security", action: id === "password" ? "Changed their own password" : action === "confirm" ? "Turned on their second step" : "Started setting up their second step" };
   if (area === "people") return { kind: "security", action: id === "start" ? "Set up people" : id === "settings" ? "Changed the sign-in rules" : id === "sign-out-all" ? "Signed everyone out" : method === "POST" && !id ? `Added a person: ${String(body.name ?? "").slice(0, 60)} as ${String(body.role ?? "member")}` : method === "DELETE" ? "Removed a person" : action === "password" ? "Set a new password for a person" : action === "clear-second-step" ? "Took off a person's second step" : `Changed a person${body.role ? `: role ${String(body.role)}` : ""}` };
   if (area === "quests" && !id && method === "POST") return null; // the route records it, knowing whether the task started
@@ -721,7 +723,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   // A file dropped into the library arrives as it is, not as JSON; it is read after the sign-in check below.
   const upload = route === "POST library" && parts[1] === "upload";
   const body = upload ? {} : ["POST", "PUT", "PATCH"].includes(req.method ?? "") ? await readBody(req) : {};
-  (req as { auditBody?: unknown }).auditBody = route === "POST login" || parts[0] === "me" || parts[0] === "people" ? { name: body.name, role: body.role } : body;
+  (req as { auditBody?: unknown }).auditBody = route === "POST login" || parts[0] === "me" || parts[0] === "people" || parts[0] === "security-ops" ? { name: body.name, role: body.role } : body;
 
   const secureCookie = req.headers["x-forwarded-proto"] === "https" ? "; Secure" : "";
   const sessionCookie = (token: string, maxAge: number) => ({ "set-cookie": `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secureCookie}` });
@@ -816,6 +818,17 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     throw new HttpError(404, "Not found.");
   }
 
+  // The audit feed, alerts and access reviews (owners and administrators change them; auditors read them).
+  if (parts[0] === "security-ops") {
+    const by = me ? `${me.name} (${ROLE_WORDS[me.role].name})` : "You";
+    if (me && req.method !== "GET" && me.role !== "owner" && me.role !== "admin") throw new HttpError(403, `Your role (${ROLE_WORDS[me.role].name}) does not allow that. Ask an administrator.`);
+    if (route === "GET security-ops") return send(res, 200, { feed: feedStatus(), alerts: alerts(), reviews: reviews.list().slice(0, 5), due: reviews.due(), every: REVIEW_EVERY_DAYS });
+    if (req.method === "PUT" && parts[1] === "feed") return send(res, 200, await tryIt(() => setFeed(body.url ? body : null)));
+    if (req.method === "POST" && parts[1] === "reviews" && !parts[2]) return send(res, 200, await tryIt(() => reviews.start(orgs.active(), by)));
+    if (req.method === "POST" && parts[1] === "reviews" && parts[2] && parts[3] === "finish") return send(res, 200, await tryIt(() => reviews.finish(parts[2], by)));
+    if (req.method === "PATCH" && parts[1] === "reviews" && parts[2]) return send(res, 200, await tryIt(() => reviews.decide(parts[2], String(body.item ?? ""), body.decision, body.note)));
+    throw new HttpError(404, "Not found.");
+  }
   if (route === "GET security-center") return send(res, 200, parts[1] === "report" ? { name: `talqava-security-report-${new Date().toISOString().slice(0, 10)}.md`, text: securityReport() } : securityOverview());
   if (route === "GET sensitivity") {
     const cfg = getConfig();
@@ -1661,6 +1674,7 @@ export function start() {
   }
   initStore();
   getConfig();
+  startAuditFeed();
   const server = http.createServer(handle);
   server.listen(PORT, HOST, () => {
     // If Talqava was added to the Claude app from an older copy of this app (it was renamed), point Claude at this one.
