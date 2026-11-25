@@ -81,6 +81,8 @@ A repository is a folder of code or documents with a full history of changes. Th
 
 Agents with the **connected services** power can then read your posts and pages, save drafts, and update a post or page. They never delete anything, and WordPress keeps earlier versions under **Revisions**. On a drafts-only site an agent cannot change a post that is already public.
 
+A post can be given **categories**, **tags** and a **featured image**. Agents choose only from the categories your site already has (add new ones yourself in WordPress), make tags as needed, and pick the featured image from pictures already in your site's media library. They do not upload pictures.
+
 ### Have an agent write a blog post every day
 
 1. On the **WordPress** page, find your site and **Have an agent write a blog post on a schedule**.
