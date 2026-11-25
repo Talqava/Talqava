@@ -6223,7 +6223,7 @@ function settingsView() {
   syncList();
   const ref = () => `${provider.value}/${modelName.value.trim()}`;
   const effort = select(c.efforts.map((e) => [e, e]), c.effort);
-  const savings = select([["off", "Off: every agent uses my model"], ["balanced", "On: match the model to the work"]], c.savings ?? "off");
+  const savings = select([["off", "Off: every agent uses my model"], ["balanced", "Balanced: match the model to the work"], ["cheapest", "Cheapest: cheaper models wherever they can do it"]], c.savings ?? "off");
   const checkFirst = select([["on", "Check first, and ask me if something is missing"], ["off", "Start straight away"]], c.checkFirst === false ? "off" : "on");
   const privacy = select([["off", "Off: send conversations as they are"], ["mask", "On: hide email addresses, phone and card numbers"]], c.privacy ?? "off");
   const moveUp = select([["on", "On: try once with a stronger model I set up"], ["off", "Off: stop and leave a hand-over note"]], c.moveUp === false ? "off" : "on");
@@ -6293,7 +6293,7 @@ function settingsView() {
       h("label", {}, "Plans for your approval", planFirst),
       h("p", { class: "note small" }, "With plans on, the agent first looks into the task and sends you a plan: the steps, who does each, and its cost estimate. It changes nothing and hands nothing on until you approve it, or ask for changes. A lead is an agent with people reporting to it."),
       h("p", { class: "note small" }, "With this on, an agent first checks it has what your task needs (information, a repository, documents, access). If something is missing, it asks you in your Inbox instead of spending money guessing. The check costs a few cents at most and shows on the receipt."),
-      h("p", { class: "note small" }, "With cost saving on, and Claude Opus or Fable as your model: managers who plan and check keep your model, team members doing their own part use Claude Sonnet 5.5 (about half the price), and quick questions between agents use Claude Haiku 5.5 (about a fortieth). An agent you gave a model of its own keeps it. Off uses your model for everything."),
+      h("p", { class: "note small" }, "Balanced, with Claude Opus or Fable as your model: managers who plan and check keep your model, team members doing their own part use Claude Sonnet 5.5 (about half the price), and quick questions between agents use Claude Haiku 5.5 (about a fortieth). Cheapest also gives managers Sonnet. With another service, the cheaper models come from your backup models, so Talqava never uses a model you didn't choose. An agent you gave a model of its own keeps it, a stuck task can still move up, and the receipt shows which model did each step. Off uses your model for everything."),
       h("label", {}, "When a task gets stuck", moveUp),
       h("p", { class: "note small" }, "Stuck means trying the same step again and again, or every step failing. With this on, the task first carries on once with the strongest model you set up (your team's model or a backup) that costs clearly more than the one in use, within the same budget. A model on this computer never moves up to one online. The receipt shows which model did each step."),
       h("label", {}, "Privacy: hide personal details from AI services", privacy),

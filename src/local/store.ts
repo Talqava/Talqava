@@ -121,7 +121,7 @@ export interface Config {
   mcpServers: McpServer[];
   secrets: Record<string, Secret>;
   /** Cost saving for an organization's agents: "balanced" gives routine work to cheaper models, "off" uses the main model for everything. */
-  savings?: "balanced" | "off";
+  savings?: "balanced" | "cheapest" | "off";
   /** Whether an agent checks it has what a task needs, and asks the owner if not, before starting. On unless switched off. */
   checkFirst?: boolean;
   /** The Client ID of the GitHub app that "Connect GitHub" signs in through. Not a secret. */

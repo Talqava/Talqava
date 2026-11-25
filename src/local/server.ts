@@ -310,7 +310,7 @@ async function updateSettings(body: any) {
     patch.model = `${providerId}/${model}`;
   }
   if (EFFORTS.includes(body.effort)) patch.effort = body.effort;
-  if (body.savings === "balanced" || body.savings === "off") patch.savings = body.savings;
+  if (body.savings === "balanced" || body.savings === "cheapest" || body.savings === "off") patch.savings = body.savings;
   if (typeof body.checkFirst === "boolean") patch.checkFirst = body.checkFirst;
   if (typeof body.assistantSeesGroups === "boolean") patch.assistantSeesGroups = body.assistantSeesGroups;
   if (["leads", "all", "never"].includes(body.planFirst)) patch.planFirst = body.planFirst;
