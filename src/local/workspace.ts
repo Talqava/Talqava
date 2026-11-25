@@ -189,7 +189,21 @@ function content(d: DatabaseSync, page: string): { markdown: string; rev: number
 }
 
 /** Saves a page's new text as the next revision, keeps its history short, and refreshes search. */
-function write(d: DatabaseSync, row: Row, md: string, author: string, task: string | null = null): number {
+/**
+ * "[[Page name]]" written anywhere (by an agent through the workspace tool, or pasted) becomes a link to the page with
+ * that name, when there is one. The link points at the page's id, so it keeps working when the page is renamed.
+ */
+function linkTitles(d: DatabaseSync, markdown: string, self: string): string {
+  if (!markdown.includes("[[")) return markdown;
+  const byTitle = new Map((d.prepare("select id, title from pages where archived = 0").all() as unknown as { id: string; title: string }[]).filter((p) => p.id !== self).map((p) => [p.title.trim().toLowerCase(), p]));
+  return markdown.replace(/\[\[([^\[\]\n]{1,80})\]\]/g, (whole, name: string) => {
+    const page = byTitle.get(name.trim().toLowerCase());
+    return page ? `[${escapeLinkText(page.title)}](${pageHref(page.id)})` : whole;
+  });
+}
+
+function write(d: DatabaseSync, row: Row, typed: string, author: string, task: string | null = null): number {
+  const md = linkTitles(d, typed, row.id);
   const { rev, markdown } = content(d, row.id);
   if (rev && markdown === md) return rev;
   const next = rev + 1;
@@ -304,7 +318,7 @@ function visible(org: Org, d: DatabaseSync, id: string, who: Who): { row: Row; b
 }
 
 const cleanTitle = (t: unknown) => String(t ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
-const cleanIcon = (t: unknown) => [...String(t ?? "").trim()].slice(0, 2).join("");
+const cleanIcon = (t: unknown) => [...new Intl.Segmenter("en", { granularity: "grapheme" }).segment(String(t ?? "").trim())].slice(0, 1).map((g) => g.segment).join("");
 const MAX_PAGE = 400_000;
 
 function accessFrom(input: unknown): Access | null {
@@ -313,6 +327,13 @@ function accessFrom(input: unknown): Access | null {
   if (a.private) return { everyone: false, private: true, departments: [], agents: [] };
   return { everyone: a.everyone === true, private: false, departments: Array.isArray(a.departments) ? a.departments.map(String).slice(0, 50) : [], agents: Array.isArray(a.agents) ? a.agents.map(String).slice(0, 100) : [] };
 }
+
+/** Where a link to another page points, in a page's Markdown; the app opens it. The same form as the editor's. */
+export const pageHref = (id: string) => `#page/${id}`;
+const escapeLinkText = (t: string) => t.replace(/[\[\]]/g, "");
+
+/** How long a deleted page can still be restored. */
+export const KEEP_DELETED_DAYS = 30;
 
 export const workspace = {
   /** Every page `who` may see, in tree order. */
@@ -378,6 +399,14 @@ export const workspace = {
       const title = cleanTitle(patch.title) || "Untitled";
       d.prepare("update pages set title = ? where id = ?").run(title, row.id);
       reindex(d, row.id, title, content(d, row.id).markdown);
+      // Links to this page show its new name: their text is updated where it still showed the old one.
+      if (title !== row.title) {
+        const from = `[${escapeLinkText(row.title)}](${pageHref(row.id)})`;
+        const to = `[${escapeLinkText(title)}](${pageHref(row.id)})`;
+        for (const c of d.prepare("select page, markdown from page_content where instr(markdown, ?) > 0").all(from) as unknown as { page: string; markdown: string }[]) {
+          d.prepare("update page_content set markdown = ? where page = ?").run(c.markdown.split(from).join(to), c.page);
+        }
+      }
     }
     if (patch.icon !== undefined) d.prepare("update pages set icon = ? where id = ?").run(cleanIcon(patch.icon), row.id);
     if (patch.parent !== undefined) {
@@ -409,8 +438,28 @@ export const workspace = {
     return { archived: gone.size };
   },
 
-  deleted(org: Org): { id: string; title: string; updatedAt: string }[] {
-    return rows(db(org.id), true).map((r) => ({ id: r.id, title: r.title, updatedAt: r.updated_at }));
+  /** Deleted pages, newest first. Ones deleted more than 30 days ago are removed for good first. */
+  deleted(org: Org): { id: string; title: string; updatedAt: string; daysLeft: number }[] {
+    this.purge(org, { olderThanDays: KEEP_DELETED_DAYS });
+    return rows(db(org.id), true).map((r) => ({ id: r.id, title: r.title, updatedAt: r.updated_at, daysLeft: Math.max(0, KEEP_DELETED_DAYS - Math.floor((Date.now() - Date.parse(r.updated_at)) / 86_400_000)) }));
+  },
+
+  /**
+   * Removes deleted pages for good, with their history, suggestions and search text: every deleted page (Empty
+   * deleted), or those deleted more than `olderThanDays` ago. Pages that are not deleted are never touched.
+   */
+  purge(org: Org, { olderThanDays }: { olderThanDays?: number } = {}): { removed: number } {
+    const d = db(org.id);
+    const cutoff = olderThanDays === undefined ? null : new Date(Date.now() - olderThanDays * 86_400_000).toISOString();
+    const gone = (d.prepare("select id, updated_at from pages where archived = 1").all() as unknown as { id: string; updated_at: string }[])
+      .filter((r) => cutoff === null || r.updated_at < cutoff)
+      .map((r) => r.id);
+    for (const id of gone) {
+      for (const table of ["page_revisions", "page_suggestions", "page_passages"]) d.prepare(`delete from ${table} where page = ?`).run(id);
+      d.prepare("delete from page_content where page = ?").run(id);
+      d.prepare("delete from pages where id = ?").run(id);
+    }
+    return { removed: gone.length };
   },
 
   restore(org: Org, id: string): Page {
@@ -421,6 +470,15 @@ export const workspace = {
     const parentGone = row.parent ? Boolean((d.prepare("select archived from pages where id = ?").get(row.parent) as { archived: number } | undefined)?.archived ?? 1) : false;
     d.prepare("update pages set archived = 0, parent = ? where id = ?").run(parentGone ? null : row.parent, row.id);
     return this.get(org, row.id);
+  },
+
+  /** The pages that link to this one, among those `who` may see. */
+  backlinks(org: Org, id: string, who: Who = OWNER): { id: string; title: string; icon: string }[] {
+    const d = db(org.id);
+    const { row } = visible(org, d, id, who);
+    const linking = d.prepare("select c.page from page_content c join pages p on p.id = c.page where p.archived = 0 and c.page != ? and instr(c.markdown, ?) > 0").all(row.id, `](${pageHref(row.id)})`) as unknown as { page: string }[];
+    const shown = new Map(this.tree(org, who).map((p) => [p.id, p]));
+    return linking.flatMap((l) => (shown.has(l.page) ? [{ id: l.page, title: shown.get(l.page)!.title, icon: shown.get(l.page)!.icon }] : []));
   },
 
   revisions(org: Org, id: string): { rev: number; title: string; author: string; at: string; words: number }[] {

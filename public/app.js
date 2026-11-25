@@ -6485,7 +6485,16 @@ function renderWsTree(side) {
     side,
     h("div", { class: "wssidehead", ...dropZone(null) }, h("button", { class: `plain wshome ${ui.ws.open ? "" : "on"}`, onclick: () => openPage(null) }, h("span", { class: "wsicon", "aria-hidden": "true" }, "🏠"), "Workspace"), h("button", { class: "small", onclick: () => newPage(null), title: "A new page at the top" }, "+ Page")),
     tree.length ? h("ul", { class: "wstree" }, (kids.get(null) ?? []).map((p) => row(p, 0))) : h("p", { class: "note small" }, "No pages yet. Add one, or start from a template."),
-    deleted.length ? h("details", { class: "wsdeleted" }, h("summary", { class: "note small" }, `Deleted (${deleted.length})`), deleted.map((d) => h("div", { class: "row" }, h("span", { class: "grow small" }, d.title), h("button", { class: "plain small", onclick: () => attempt(async () => (await api("POST", `workspace/pages/${d.id}/restore`), workspaceView()), side) }, "Restore")))) : null,
+    deleted.length
+      ? h(
+          "details",
+          { class: "wsdeleted" },
+          h("summary", { class: "note small" }, `Deleted (${deleted.length})`),
+          h("p", { class: "note small" }, "Deleted pages can be restored for 30 days, then they are removed for good."),
+          deleted.map((d) => h("div", { class: "row" }, h("span", { class: "grow small", title: `${d.daysLeft} day${d.daysLeft === 1 ? "" : "s"} left to restore it` }, d.title), h("button", { class: "plain small", onclick: () => attempt(async () => (await api("POST", `workspace/pages/${d.id}/restore`), workspaceView()), side) }, "Restore"))),
+          h("button", { class: "plain small danger", onclick: () => confirm(`Remove all ${deleted.length} deleted page${deleted.length === 1 ? "" : "s"} for good?\n\nTheir text and history are gone, and they cannot be restored.`) && attempt(async () => (await api("DELETE", "workspace/pages/deleted"), workspaceView()), side) }, "Empty deleted"),
+        )
+      : null,
   );
 }
 
@@ -6542,8 +6551,59 @@ function renderWsHome(col) {
 function accessWords(a) {
   if (a.private) return "Private: no agent sees it";
   if (a.everyone) return "Every agent";
-  const parts = [...a.departments, ...a.agents.map((id) => state.crew?.bots.find((b) => b.id === id)?.name ?? id)];
+  const parts = [...a.departments, ...a.agents.map((id) => activeOrg()?.members?.find((m) => m.bot === id)?.title ?? state.crew?.bots.find((b) => b.id === id)?.name ?? id)];
   return parts.length ? `Only ${parts.join(", ")}` : "Nobody but you";
+}
+
+/** Icons for pages, each with words to find it by. */
+const PAGE_ICONS = [
+  ["📄", "page document"], ["📝", "note memo write"], ["📋", "checklist procedure clipboard"], ["✅", "done check task"], ["📌", "pin important"],
+  ["📎", "attachment clip"], ["📚", "library books handbook"], ["📖", "guide manual read"], ["🗂️", "folder files index"], ["🗃️", "archive records"],
+  ["📊", "report chart numbers"], ["📈", "growth sales up"], ["📉", "down decline"], ["💰", "money finance budget"], ["💳", "payment card billing"],
+  ["🧾", "receipt invoice"], ["🏦", "bank accounts"], ["🛒", "shop order cart"], ["📦", "product shipping stock inventory"], ["🚚", "delivery logistics"],
+  ["🤝", "deal partner customer"], ["👥", "team people staff"], ["🧑‍💼", "hiring employee manager"], ["🎓", "training learning onboarding"], ["💬", "chat support conversation"],
+  ["📞", "call phone contact"], ["✉️", "email letter"], ["📣", "marketing announce"], ["🎯", "goal target"], ["🗓️", "calendar schedule plan"],
+  ["⏰", "deadline time"], ["⚖️", "legal law policy contract"], ["🔒", "private security"], ["🛡️", "safety risk compliance"], ["⚙️", "settings operations process"],
+  ["🛠️", "tools fix maintenance"], ["💻", "software computer it"], ["🧪", "test experiment research"], ["💡", "idea"], ["🏠", "home start"],
+  ["🏢", "company office"], ["🌍", "world international"], ["🍽️", "restaurant menu food"], ["☕", "cafe coffee"], ["🏥", "health medical"],
+  ["❤️", "nonprofit care donors"], ["⭐", "favourite star quality"], ["🚀", "launch project"], ["🔥", "urgent priority"], ["❓", "question faq help"],
+];
+
+/**
+ * A small picker of page icons: search by words, choose with the mouse or the keyboard (arrows, Enter, Escape),
+ * or type any emoji into the search box and press Enter.
+ */
+function iconPicker(anchor, current, choose) {
+  document.querySelector(".iconpicker")?.remove();
+  const search = h("input", { type: "search", placeholder: "Find an icon, or type an emoji", "aria-label": "Find an icon" });
+  const grid = h("div", { class: "icongrid", role: "listbox", "aria-label": "Icons" });
+  const box = h("div", { class: "iconpicker", role: "dialog", "aria-label": "Choose an icon" }, search, grid, h("div", { class: "row" }, h("button", { class: "plain small", onclick: () => done("") }, "No icon"), h("span", { class: "grow" }), h("button", { class: "plain small", onclick: () => close() }, "Cancel")));
+  let shown = PAGE_ICONS;
+  let at = 0;
+  const close = () => (box.remove(), document.removeEventListener("pointerdown", outside, true), anchor.focus());
+  const done = (icon) => (close(), choose(icon));
+  const outside = (e) => !box.contains(e.target) && e.target !== anchor && close();
+  const draw = () => {
+    const q = search.value.trim().toLowerCase();
+    shown = q ? PAGE_ICONS.filter(([icon, words]) => words.includes(q) || icon === q) : PAGE_ICONS;
+    at = Math.min(at, Math.max(0, shown.length - 1));
+    fill(grid, shown.length ? shown.map(([icon, words], i) => h("button", { class: `iconcell ${i === at ? "on" : ""} ${icon === current ? "current" : ""}`, role: "option", "aria-selected": String(i === at), title: words, onclick: () => done(icon) }, icon)) : h("p", { class: "note small" }, "None match. Press Enter to use what you typed."));
+  };
+  search.addEventListener("input", () => ((at = 0), draw()));
+  search.addEventListener("keydown", (e) => {
+    const cols = 8;
+    if (e.key === "Escape") return e.preventDefault(), close();
+    if (e.key === "Enter") return e.preventDefault(), shown.length ? done(shown[at][0]) : search.value.trim() && done(search.value.trim());
+    const move = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols }[e.key];
+    if (move) e.preventDefault(), (at = Math.max(0, Math.min(shown.length - 1, at + move))), draw();
+  });
+  const r = anchor.getBoundingClientRect();
+  box.style.top = `${r.bottom + window.scrollY + 6}px`;
+  box.style.left = `${Math.max(8, Math.min(r.left + window.scrollX, window.innerWidth - 340))}px`;
+  document.body.append(box);
+  document.addEventListener("pointerdown", outside, true);
+  draw();
+  search.focus();
 }
 
 async function renderWsPage(col, id) {
@@ -6603,18 +6663,34 @@ async function renderWsPage(col, id) {
   }, col);
   title.addEventListener("change", saveTitle);
   title.addEventListener("keydown", (e) => e.key === "Enter" && (e.preventDefault(), saveTitle(), ui.wsEditor?.focus("start")));
-  const iconBtn = h("button", { class: "plain wspageicon", title: "Change the icon", "aria-label": "Change the page's icon", onclick: () => {
-    const next = prompt("Type or paste an emoji for this page (leave empty for none):", page.icon || "");
-    if (next === null) return;
-    attempt(async () => (await api("PATCH", `workspace/pages/${id}`, { icon: next }), workspaceView()), col);
-  } }, page.icon || "📄");
+  const iconBtn = h("button", { class: "plain wspageicon", title: "Change the icon", "aria-label": "Change the page's icon", "aria-haspopup": "dialog", onclick: () =>
+    iconPicker(iconBtn, page.icon || "", (next) => attempt(async () => (await api("PATCH", `workspace/pages/${id}`, { icon: next }), workspaceView()), col)),
+  }, page.icon || "📄");
 
   // ----- the editor, its toolbar and the slash menu -----
   const surface = h("div", { class: "wseditor md" });
   const menu = h("div", { class: "wsslash", role: "listbox", "aria-label": "Blocks", hidden: true });
   let menuItems = [];
   let menuAt = 0;
+  // The same menu offers blocks after "/" and pages after "[[".
+  let menuKind = "block";
+  const pickItem = (item) => (menuKind === "page" ? ui.wsEditor.linkPage(item.id, item.label) : ui.wsEditor.block(item.id));
+  const drawLinkMenu = (query, at) => {
+    menuKind = "page";
+    menuItems = (ui.ws.data?.tree ?? [])
+      .filter((p) => p.id !== id && (!query || p.title.toLowerCase().includes(query)))
+      .slice(0, 8)
+      .map((p) => ({ id: p.id, label: p.title || "Untitled", hint: p.icon || "📄" }));
+    if (!menuItems.length) return (menu.hidden = true);
+    menuAt = Math.min(menuAt, menuItems.length - 1);
+    fill(menu, h("div", { class: "note small wsslashhead" }, "Link to a page"), menuItems.map((p, i) => h("button", { class: `wsslashitem ${i === menuAt ? "on" : ""}`, role: "option", "aria-selected": String(i === menuAt), onmousedown: (e) => (e.preventDefault(), pickItem(p)) }, h("span", {}, p.hint), " ", h("b", {}, p.label))));
+    const box = col.getBoundingClientRect();
+    menu.style.left = `${Math.max(0, at.left - box.left)}px`;
+    menu.style.top = `${at.bottom - box.top + col.scrollTop + 6}px`;
+    menu.hidden = false;
+  };
   const drawMenu = (query, at) => {
+    menuKind = "block";
     menuItems = BLOCKS.filter((b) => !query || b.label.toLowerCase().includes(query) || b.words.includes(query));
     if (!menuItems.length) return (menu.hidden = true);
     menuAt = Math.min(menuAt, menuItems.length - 1);
@@ -6633,11 +6709,11 @@ async function renderWsPage(col, id) {
         e.preventDefault();
         e.stopPropagation();
         menuAt = (menuAt + (e.key === "ArrowDown" ? 1 : menuItems.length - 1)) % menuItems.length;
-        [...menu.children].forEach((c, i) => (c.classList.toggle("on", i === menuAt), c.setAttribute("aria-selected", String(i === menuAt))));
+        [...menu.querySelectorAll(".wsslashitem")].forEach((c, i) => (c.classList.toggle("on", i === menuAt), c.setAttribute("aria-selected", String(i === menuAt))));
       } else if (e.key === "Enter") {
         e.preventDefault();
         e.stopPropagation();
-        ui.wsEditor.block(menuItems[menuAt].id);
+        pickItem(menuItems[menuAt]);
       } else if (e.key === "Escape") {
         menu.hidden = true;
       }
@@ -6645,7 +6721,7 @@ async function renderWsPage(col, id) {
     true,
   );
   const tool = (kind, label, name) => h("button", { class: "plain small wstool", title: name, "aria-label": name, onmousedown: (e) => e.preventDefault(), onclick: () => (kind === "link" ? ((url) => url !== null && ui.wsEditor.format("link", url.trim()))(prompt("Link to (leave empty to remove the link):", "https://")) : ui.wsEditor.format(kind)) }, label);
-  const toolbar = h("div", { class: "wstoolbar" }, tool("bold", h("b", {}, "B"), "Bold"), tool("italic", h("i", {}, "I"), "Italic"), tool("strike", h("s", {}, "S"), "Strike through"), tool("code", h("code", {}, "<>"), "Code"), tool("link", "🔗", "Link"), h("span", { class: "note small wshintkey" }, "Type / for headings, lists, checklists and tables"), h("span", { class: "grow" }), status);
+  const toolbar = h("div", { class: "wstoolbar" }, tool("bold", h("b", {}, "B"), "Bold"), tool("italic", h("i", {}, "I"), "Italic"), tool("strike", h("s", {}, "S"), "Strike through"), tool("code", h("code", {}, "<>"), "Code"), tool("link", "🔗", "Link"), h("span", { class: "note small wshintkey" }, "Type / for headings and lists, [[ to link a page"), h("span", { class: "grow" }), status);
 
   // ----- agents' suggestions -----
   const suggestBox = h("div", { class: "wssuggestions" });
@@ -6689,13 +6765,20 @@ async function renderWsPage(col, id) {
     { "aria-label": "Who can see this page", onchange: (e) => (e.target.value === "some" ? fill(pick, groupBoxes()) : patch({ access: e.target.value === "inherit" ? null : e.target.value === "private" ? { private: true } : { everyone: true } })) },
     h("option", { value: "inherit", selected: mode === "inherit" }, page.parent ? `Same as “${byId.get(page.parent)?.title ?? "the page above"}”` : "Every agent (the default)"),
     h("option", { value: "everyone", selected: mode === "everyone" }, "Every agent"),
-    h("option", { value: "some", selected: mode === "some" }, "Only some groups"),
+    h("option", { value: "some", selected: mode === "some" }, "Only some groups or agents"),
     h("option", { value: "private", selected: mode === "private" }, "Private: no agent sees it"),
   );
   const pick = h("div", { class: "wsgroups" });
+  // Groups, and named agents (a position from another group, say), may see the page.
   const groupBoxes = () => {
     const boxes = groups.map((g) => [g, h("input", { type: "checkbox", checked: page.access.departments.includes(g) })]);
-    return [h("div", { class: "wsgroupchecks" }, boxes.map(([g, box]) => h("label", { class: "power" }, box, g))), h("button", { class: "small", onclick: () => patch({ access: { everyone: false, departments: boxes.filter(([, b]) => b.checked).map(([g]) => g), agents: [] } }) }, "Save")];
+    const people = org.members.map((m) => [m.bot, m.title, h("input", { type: "checkbox", checked: (page.access.agents ?? []).includes(m.bot) })]);
+    return [
+      h("div", { class: "label small" }, "Groups"),
+      h("div", { class: "wsgroupchecks" }, boxes.map(([g, box]) => h("label", { class: "power" }, box, g))),
+      people.length ? [h("div", { class: "label small" }, "Agents"), h("div", { class: "wsgroupchecks" }, people.map(([, title, box]) => h("label", { class: "power" }, box, title)))] : null,
+      h("button", { class: "small", onclick: () => patch({ access: { everyone: false, departments: boxes.filter(([, b]) => b.checked).map(([g]) => g), agents: people.filter(([, , b]) => b.checked).map(([id]) => id) } }) }, "Save"),
+    ];
   };
   if (mode === "some") fill(pick, groupBoxes());
   const edit = h(
@@ -6717,6 +6800,8 @@ async function renderWsPage(col, id) {
       else if (quest?.queued) openTask(quest.queued.id);
     }, col);
 
+  const backlinksBox = h("div", { class: "wstasks" });
+  api("GET", `workspace/pages/${id}/backlinks`).then((pages) => backlinksBox.isConnected && fill(backlinksBox, pages.length ? pages.map((p) => h("button", { class: "plain wstaskrow", onclick: () => openPage(p.id) }, h("span", {}, p.icon || "📄"), " ", h("span", { class: "grow" }, p.title))) : h("p", { class: "note small" }, "No page links here yet. Type [[ in a page to link to this one."))).catch(() => {});
   const tasksBox = h("div", { class: "wstasks" });
   api("GET", `workspace/pages/${id}/tasks`).then((tasks) => tasksBox.isConnected && fill(tasksBox, tasks.length ? tasks.slice(0, 8).map((t) => h("button", { class: "plain wstaskrow", onclick: () => go("quest", t.task) }, h("span", { class: "grow" }, t.title), h("span", { class: "note small" }, `${t.agent ?? ""} ${t.how === "filed" ? "filed it" : t.how === "suggested" ? "suggested" : t.how === "changed" ? "changed it" : "read it"}`))) : h("p", { class: "note small" }, "No task has used this page yet."))).catch(() => {});
 
@@ -6732,6 +6817,8 @@ async function renderWsPage(col, id) {
     h("label", { class: "power" }, protect, "Protected: agents never change it directly"),
     h("p", { class: "note small" }, "Use Protected for prices, legal and people policies."),
     org.members.length ? [h("div", { class: "label" }, "Give this page to an agent"), giveTo, giveWhat, h("button", { class: "small", onclick: give }, "Give the task")] : null,
+    h("div", { class: "label" }, "Linked from"),
+    backlinksBox,
     h("div", { class: "label" }, "Used by"),
     tasksBox,
     h("div", { class: "row wrap wspanelend" }, h("button", { class: "small", onclick: () => pageHistory(page) }, "History"), h("button", { class: "small danger", onclick: () => confirm(`Delete “${page.title}”${ui.ws.data.tree.some((p) => p.parent === id) ? " and the pages inside it" : ""}? You can restore it from Deleted.`) && attempt(async () => (await api("DELETE", `workspace/pages/${id}`), (ui.ws.open = page.parent), workspaceView()), col) }, "Delete")),
@@ -6757,7 +6844,16 @@ async function renderWsPage(col, id) {
       aside,
     ),
   );
-  ui.wsEditor = createEditor(surface, { markdown: page.markdown, placeholder: "Write here, or type / for headings, lists, checklists and tables", onChange: changed, onSlash: (q, at) => drawMenu(q, at), onSlashEnd: () => ((menu.hidden = true), (menuAt = 0)) });
+  ui.wsEditor = createEditor(surface, { markdown: page.markdown, placeholder: "Write here, type / for headings, lists and tables, or [[ to link a page", onChange: changed, onSlash: (q, at) => drawMenu(q, at), onSlashEnd: () => ((menu.hidden = true), (menuAt = 0)), onLink: (q, at) => drawLinkMenu(q, at), onLinkEnd: () => ((menu.hidden = true), (menuAt = 0)) });
+  // A link to another page opens it here; other links open in the browser.
+  surface.addEventListener("click", (e) => {
+    const a = e.target.closest?.("a[href]");
+    if (!a) return;
+    const href = a.getAttribute("href") ?? "";
+    e.preventDefault();
+    if (href.startsWith("#page/")) openPage(href.slice(6));
+    else if (/^https?:\/\//.test(href) && (e.metaKey || e.ctrlKey || !ui.wsEditor)) window.open(href, "_blank", "noopener");
+  });
   if (ui.ws.focusTitle) {
     ui.ws.focusTitle = false;
     title.focus();

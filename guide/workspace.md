@@ -19,7 +19,7 @@ The Workspace is where you write down how your business runs: procedures, checkl
 **Who can see a page.** Each page is set to one of:
 
 - **Every agent**.
-- **Only some groups**: only the agents in the groups (departments) you tick.
+- **Only some groups or agents**: only the agents in the groups (departments) you tick, and any agents you tick by name, such as one position from another group.
 - **Private: no agent sees it**. No agent can find, list or read it, and it is never sent to any AI model. Only you see it, in this app.
 - **Same as** the page above it. This is the starting setting for a page inside another page, so a whole section follows one choice. A page at the top starts as **Every agent (the default)**.
 
@@ -63,7 +63,14 @@ A simple rule: if you would write it yourself and want it followed, make it a pa
 ### Change a page's icon
 
 1. Click the icon next to the title.
-2. Type or paste an emoji, and confirm. Leave it empty for no icon.
+2. Pick one, or type a word to find it (money, legal, team…). The arrow keys and Enter work too. You can also type any emoji and press Enter, or choose **No icon**.
+
+### Link one page to another
+
+1. In a page, type **[[** and the start of the other page's name.
+2. Pick the page from the list (the arrow keys and Enter work too). A link to it appears.
+3. Click a link to open that page. The link keeps working if the page is renamed, and shows its new name.
+4. Each page lists the pages that link to it under **Linked from**. Agents can write **[[Page name]]** too, and it becomes a link.
 
 ### Start from a template
 
@@ -76,7 +83,7 @@ A simple rule: if you would write it yourself and want it followed, make it a pa
 
 1. Open the page.
 2. Under **Who can see it**, pick an option.
-3. For **Only some groups**, tick the groups and press **Save**.
+3. For **Only some groups or agents**, tick the groups and the agents, and press **Save**.
 
 ### Accept or decline an agent's suggestion
 
@@ -102,7 +109,7 @@ A simple rule: if you would write it yourself and want it followed, make it a pa
 1. To move a page, drag it onto another page to put it inside. Drag it onto the **Workspace** line at the top to bring it back to the top level.
 2. To find something, type in **Search every page** on the home screen.
 3. To see older versions, open the page and press **History**. Click a version to read it; press **Put back** to restore it. The current text stays in the history.
-4. To delete, press **Delete**. Pages inside it are deleted too. Bring them back from **Deleted** at the bottom of the list.
+4. To delete, press **Delete**. Pages inside it are deleted too. Bring them back from **Deleted** at the bottom of the list within 30 days; after that they are removed for good. **Empty deleted** removes them all now, after asking.
 
 ## Tips
 
