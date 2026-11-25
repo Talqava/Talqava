@@ -3323,6 +3323,8 @@ async function libraryView() {
         ),
         h("p", { class: "note small" }, d.access.private ? "Locked. No agent can find, list or read this file." : `${accessLabel(d, bots)} can search and read it.${d.accessSet ? "" : d.accessFrom ? ` Follows the folder “${libBase(d.accessFrom)}”.` : " Follows its folder."}`),
         d.accessSet && d.path.includes("/") ? h("button", { class: "plain small", onclick: () => act(() => api("PATCH", `library/${d.id}`, { mode: "inherit" }), "It follows its folder again.") }, "Use its folder's setting") : null,
+        h("label", { class: "liblevel" }, "Sensitivity", h("select", { "aria-label": "Sensitivity", onchange: (e) => act(() => api("PATCH", `library/${d.id}`, { level: e.target.value }), `Marked ${LEVEL_NAMES[e.target.value]}.`) }, Object.entries(LEVEL_NAMES).map(([v, t]) => h("option", { value: v, selected: (d.level ?? "internal") === v }, t)))),
+        h("p", { class: "note small" }, "Decides which AI services may receive it (set under Security). A Restricted document is hidden from every agent not named on it."),
       ),
       h("div", { class: "pfacts" }, fact("Where", d.path.includes("/") ? libParent(d.path) : "Library"), fact("Size", sizeWords(d.size)), fact("Changed", d.modified ? new Date(d.modified).toLocaleString() : "—"), fact("Read for agents", d.readable ? `${d.passages} part${d.passages === 1 ? "" : "s"}` : "Name only"), d.problem ? h("p", { class: "note small" }, d.problem) : null),
       h("div", { class: "row wrap" }, h("button", { class: "plain small", onclick: () => rename(target) }, "Rename"), h("button", { class: "plain small", onclick: () => moveTo([target]) }, "Move"), h("button", { class: "plain small danger", onclick: () => remove([target]) }, "Delete")),
@@ -7881,6 +7883,7 @@ async function securityView() {
     return fill(
       col,
       head,
+      securityCenter(),
       h("div", { class: "card form" }, h("b", {}, "Right now: one person, no sign-in"), h("p", { class: "note" }, "Anyone who can use this computer can open Talqava and do everything. That is fine for one owner on their own computer.")),
       h(
         "form",
@@ -7969,6 +7972,7 @@ async function securityView() {
   fill(
     col,
     head,
+    securityCenter(),
     mine,
     h(
       "section",
@@ -8001,6 +8005,31 @@ async function securityView() {
   );
 }
 
+/** Security › the center: which protections are on, what needs attention, and a report to download. */
+function securityCenter() {
+  const box = h("section", { class: "isec seccenter" });
+  api("GET", "security-center")
+    .then((o) => {
+      const word = { on: "On", partly: "Partly", off: "Off" };
+      const report = () =>
+        attempt(async () => {
+          const f = await api("GET", "security-center/report");
+          const a = h("a", { href: URL.createObjectURL(new Blob([f.text], { type: "text/markdown" })), download: f.name });
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        }, box);
+      fill(
+        box,
+        h("div", { class: "row wrap" }, h("h2", { class: "grow" }, `Where you stand · ${o.on} of ${o.of} protections on`), h("button", { onclick: report }, "Download a security report")),
+        o.attention.length ? h("div", { class: "card form" }, h("b", {}, "Needs you now"), o.attention.map((a) => h("div", { class: "row" }, h("span", { class: `chip ${a.level === "high" ? "bad" : "warn"}` }, a.level === "high" ? "High" : "Soon"), h("div", { class: "grow" }, a.words, h("div", { class: "note small" }, a.next))))) : null,
+        h("div", { class: "card form" }, o.protections.map((x) => h("div", { class: "row secrow" }, h("span", { class: `chip ${x.state === "on" ? "on" : x.state === "partly" ? "warn" : ""}` }, word[x.state]), h("div", { class: "grow" }, h("b", {}, x.name), h("div", { class: "note small" }, x.words, x.next ? h("span", {}, " ", h("b", {}, x.next)) : null))))),
+        h("p", { class: "note small" }, "The report states the settings in force. It supports an audit; it is not a certificate."),
+      );
+    })
+    .catch(() => {});
+  return box;
+}
+
 const LEVEL_NAMES = { public: "Public", internal: "Internal", confidential: "Confidential", restricted: "Restricted" };
 /** In a page's, document's, note's or sheet's panel: how sensitive it is. */
 function levelPicker(page, id) {
@@ -8028,7 +8057,7 @@ function sensitivitySection(canEdit) {
     fill(
       box,
       h("h2", {}, "Sensitive information"),
-      h("p", { class: "note", style: "margin: 0" }, "Every page, document, note and sheet has a sensitivity level, set in its side panel. Here you decide which AI services may receive each level. An agent whose AI service may not receive a level is not given those items, is told why, and it is logged."),
+      h("p", { class: "note", style: "margin: 0" }, "Every page, document, note and sheet has a sensitivity level, set in its side panel; Library documents have one too. Here you decide which AI services may receive each level. An agent whose AI service may not receive a level is not given those items, is told why, and it is logged."),
       h(
         "div",
         { class: "card officetable" },
@@ -8051,7 +8080,8 @@ function sensitivitySection(canEdit) {
         outside.length ? outside.map((x) => h("label", { class: "power" }, h("input", { type: "checkbox", disabled: !canEdit, checked: d.policy.approved.includes(x.id), onchange: (e) => save({ approved: e.target.checked ? [...d.policy.approved, x.id] : d.policy.approved.filter((a) => a !== x.id) }) }), x.name)) : h("p", { class: "note small" }, "No AI service outside this computer is connected."),
         canEdit ? h("div", { class: "row wrap" }, h("button", { onclick: () => confirm("Use the recommended settings?\n\nPublic and Internal: any connected AI service.\nConfidential: only approved services and models on this computer.\nRestricted: only models on this computer.\n\nAgents on a service that is not approved will stop being given Confidential items.") && save({ services: d.recommended }) }, "Use the recommended settings")) : h("p", { class: "note small" }, "Only owners and administrators change these rules."),
       ),
-      h("div", { class: "card form" }, h("b", {}, "In plain words, right now"), h("ul", {}, d.words.map((w) => h("li", {}, w))), h("p", { class: "note small" }, "A task can fall back to a backup model, so it is only given what every model it might use may receive. Library files and Memory do not have levels yet.")),
+      h("div", { class: "card form" }, h("label", {}, "Memory (what your agents remember) counts as", h("select", { disabled: !canEdit, onchange: (e) => save({ memory: e.target.value }) }, d.levels.map((l) => h("option", { value: l.id, selected: d.policy.memory === l.id }, l.name)))), h("p", { class: "note small" }, "Memory has one level as a whole. An agent whose AI service may not receive that level works without the organization's memory.")),
+      h("div", { class: "card form" }, h("b", {}, "In plain words, right now"), h("ul", {}, d.words.map((w) => h("li", {}, w))), h("p", { class: "note small" }, "A task can fall back to a backup model, so it is only given what every model it might use may receive.")),
     );
   };
   draw();

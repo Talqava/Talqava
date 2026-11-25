@@ -6,6 +6,7 @@
 // hand is put in its prompt; the rest is one search away, so memory can grow
 // large without every task paying for all of it. It is kept in each organization's own database, with the same
 // full-text search as the Library.
+import { mayReceive, policy } from "./sensitivity.ts";
 import path from "node:path";
 import { defineTool, rank } from "../core/index.ts";
 import type { Tool } from "../core/index.ts";
@@ -103,6 +104,8 @@ export const orgMemory = {
 
   /** What an agent may see: the organization's shelf, its department's and its own. */
   visibleTo(org: Org, botId: string | null): OrgMemoryEntry[] {
+    // Memory as a whole has one sensitivity level, set by the owner; a run whose AI service may not receive it gets none.
+    if (!mayReceive(policy().memory)) return [];
     const me = botId ? memberOf(org, botId) : null;
     return this.list(org.id).filter((e) => e.shelf === "org" || (!botId ? true : (e.shelf === "dept" && e.key === me?.department) || (e.shelf === "agent" && e.key === botId)));
   },

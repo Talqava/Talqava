@@ -5,6 +5,7 @@ Security is where you decide who can open Talqava, how they prove who they are, 
 ## What you'll see
 
 - **Security** in the menu on the left, under **Oversight**.
+- **Where you stand**, at the top: how many protections are on, anything that needs you now, each protection in plain words with what to do next, and **Download a security report**. The report states your settings for your records or an auditor; it is not a certificate.
 - **Before you turn it on:** a note that one person uses Talqava without signing in, and a form to make your own account.
 - **After you turn it on:**
   - **Your sign-in**: your name, role, whether your second step is on, and a form to change your password.
@@ -37,7 +38,7 @@ These limits are enforced by the app itself. A person who tries something their 
 
 **The audit log names people.** Once people are set up, each entry in the **Audit log** says who did it and their role.
 
-**Sensitivity levels decide what may reach an AI service.** Every page, document, note and sheet has a level: **Public**, **Internal** (the starting level), **Confidential** or **Restricted**. Under **Sensitive information** you decide, for each level, where it may be sent: any connected AI service, only approved services, only models on this computer, or no AI model at all. An agent whose AI service may not receive a level is not given those items; it is told why, so it says so in its report, and the attempt is logged. A **Restricted** item is also hidden from every agent you have not named on it. Until you change these rules, every level may go to any service, as before.
+**Sensitivity levels decide what may reach an AI service.** Every page, document, note, sheet and Library document has a level: **Public**, **Internal** (the starting level), **Confidential** or **Restricted**. Under **Sensitive information** you decide, for each level, where it may be sent: any connected AI service, only approved services, only models on this computer, or no AI model at all. An agent whose AI service may not receive a level is not given those items; it is told why, so it says so in its report, and the attempt is logged. A **Restricted** item is also hidden from every agent you have not named on it. Until you change these rules, every level may go to any service, as before.
 
 **Agent guardrails are rules above every agent.** Under **Agent guardrails** you set rules for the whole installation: whether changes always ask a person, whether agents may run commands, use connected services or the web, which sites are approved, and the most a task may spend or run. An agent's own settings can be stricter than these, never looser. They work whether or not people and sign-in are turned on, and apply to tasks that start after you change them.
 
@@ -88,7 +89,7 @@ These limits are enforced by the app itself. A person who tries something their 
 2. In its side panel, under **Sensitivity**, choose **Confidential** or **Restricted**.
 3. For **Restricted**, also name the agents who may read it: under **Who can see it**, choose **Only some groups or agents** and tick those agents by name. Being in a ticked group is not enough for a Restricted item.
 
-A page made inside a sensitive page starts at the same level. Tables follow their page.
+A page made inside a sensitive page starts at the same level. Tables follow their page. A Library document's level is set in its details in the **Library**. Memory has one level as a whole, set under **Sensitive information**.
 
 ### Decide which AI services may receive each level
 
@@ -127,7 +128,7 @@ A page made inside a sensitive page starts at the same level. Tables follow thei
 
 - Signing in with your company account (single sign-on).
 - Approved sites hold page reading, including redirects, and the AI service's own web search. Calls to web services with saved keys and the built-in browser are checked at the address the agent gives; a redirect or a link clicked inside the browser is not checked yet.
-- Sensitivity levels on Library files and Memory; whether an item may leave by email or a connector; suggesting a higher level when card numbers or payroll figures are spotted; and a view of exactly what was sent to AI services.
+- Whether an item may leave by email or a connector; suggesting a higher level when card numbers or payroll figures are spotted; and a view of exactly what was sent to AI services.
 - Rules by kind of action (send, pay, delete) with named approvers, and a list of approved connectors and Marketplace items.
 - Limiting a manager or member to their own groups: a manager can change the whole chart.
 - Handing the Owner role to someone else.

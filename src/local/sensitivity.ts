@@ -31,18 +31,20 @@ export interface Policy {
   services: Record<Level, Where>;
   /** Ids of the connected AI services the owner approved. */
   approved: string[];
+  /** The level of the organization's Memory as a whole. */
+  memory: Level;
 }
-export const OPEN_POLICY: Policy = { services: { public: "any", internal: "any", confidential: "any", restricted: "any" }, approved: [] };
+export const OPEN_POLICY: Policy = { services: { public: "any", internal: "any", confidential: "any", restricted: "any" }, approved: [], memory: "internal" };
 /** A sensible starting point, offered as one button. */
 export const RECOMMENDED: Policy["services"] = { public: "any", internal: "any", confidential: "approved", restricted: "local" };
 
 export const levelOf = (v: unknown): Level => (LEVELS.includes(v as Level) ? (v as Level) : "internal");
 
 export function policyFrom(input: unknown, before: Policy = OPEN_POLICY): Policy {
-  const p = (input ?? {}) as { services?: Record<string, unknown>; approved?: unknown };
+  const p = (input ?? {}) as { services?: Record<string, unknown>; approved?: unknown; memory?: unknown };
   const services = { ...before.services };
   for (const level of LEVELS) if (WHERE.includes(p.services?.[level] as Where)) services[level] = p.services![level] as Where;
-  return { services, approved: p.approved === undefined ? before.approved : Array.isArray(p.approved) ? [...new Set(p.approved.map(String))].slice(0, 100) : [] };
+  return { services, approved: p.approved === undefined ? before.approved : Array.isArray(p.approved) ? [...new Set(p.approved.map(String))].slice(0, 100) : [], memory: LEVELS.includes(p.memory as Level) ? (p.memory as Level) : before.memory };
 }
 export const policy = (cfg: Config = getConfig()): Policy => policyFrom(cfg.sensitivity ?? {});
 
