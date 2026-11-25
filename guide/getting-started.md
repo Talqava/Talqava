@@ -113,6 +113,10 @@ Fold this group away with the small arrow when you do not need it.
 - **Glance at the Audit log** now and then to see what your agents did.
 - **Back up your data.** Everything Talqava knows is in its data folder on your computer. Copy that folder and you have backed up everything.
 
+## Words
+
+Every word Talqava uses, in one place: [Words Talqava uses](glossary.md).
+
 ## Where to get help
 
 - Press **Guide** at the top right of any page for that page's guide, or open **User guide** in the menu.

@@ -530,25 +530,65 @@ function renderSpent() {
 
 // ---------- the command box ----------
 const COMMANDS = [
+  ["Home", () => go("start")],
   ["New chat", () => go("chat")],
-  ["User guide", () => showGuide(guideFor(state.view) ?? "getting-started")],
   ["Inbox", () => go("inbox")],
-  ["Bots", () => go("home")],
+  ["Tasks", () => go("tasks")],
+  ["Projects", () => go("projects")],
+  ["Routines", () => go("jobs")],
+  ["Agents", () => go("home")],
+  ["Create an agent", () => go("bot", "new")],
   ["Organization", () => go("team")],
   ["Marketplace", () => go("market")],
-  ["Create an agent", () => go("bot", "new")],
+  ["Office", () => go("office")],
+  ["Documents", () => go("docs")],
+  ["Sheets", () => go("sheets")],
+  ["Slides", () => go("slides")],
+  ["Notes", () => go("notes")],
+  ["Workspace (pages)", () => go("workspace")],
+  ["Library (files)", () => go("library")],
   ["Memory", () => go("memory")],
   ["Skills", () => go("skills")],
-  ["Routines", () => go("jobs")],
+  ["Security: people and sign-in", () => ((ui.securityTab = "people"), go("security"))],
+  ["Security: sensitive information", () => ((ui.securityTab = "info"), go("security"))],
+  ["Security: rules for agents (guardrails)", () => ((ui.securityTab = "agents"), go("security"))],
+  ["Security: alerts, reviews and retention", () => ((ui.securityTab = "watching"), go("security"))],
+  ["Security: backups", () => ((ui.securityTab = "backups"), go("security"))],
+  ["Audit log", () => go("audit")],
+  ["Integrations: AI models", () => ((ui.integration = "ai-models"), go("integrations"))],
+  ["Integrations: connectors", () => ((ui.integration = "mcp"), go("integrations"))],
   ["Settings", () => go("settings")],
+  ["User guide", () => showGuide(guideFor(state.view) ?? "getting-started")],
 ];
 
+/** What "find anything" turned up for the words in the box, fetched a moment after typing stops. */
+const FOUND_WORDS = { page: "Page", doc: "Document", sheet: "Sheet", deck: "Slides", note: "Note", library: "Library", task: "Task", chat: "Chat", agent: "Agent" };
+function openFound(r) {
+  if (["page", "doc", "sheet", "deck", "note"].includes(r.kind)) return openPage(r.id);
+  if (r.kind === "task") return openTask(r.id);
+  if (r.kind === "chat") return go("chat", r.id);
+  if (r.kind === "agent") return go("bot", r.id);
+  return go("library");
+}
+function findSoon(box) {
+  clearTimeout(findSoon.timer);
+  const text = ui.palette?.value.trim() ?? "";
+  if (text.length < 2 || text.startsWith("@")) return (ui.found = null);
+  if (ui.found?.query === text) return;
+  findSoon.timer = setTimeout(async () => {
+    const r = await api("GET", `find?q=${encodeURIComponent(text)}`).catch(() => null);
+    if (!r || (ui.palette?.value.trim() ?? "") !== text) return;
+    ui.found = r;
+    if (document.activeElement === ui.palette) openPalette(box);
+  }, 220);
+}
+
 function paletteBox() {
-  ui.palette = h("input", { type: "text", placeholder: paletteHint(), "aria-label": "Ask something, assign an agent, or run a command", autocomplete: "off" });
+  ui.palette = h("input", { type: "text", placeholder: paletteHint(), "aria-label": "Find anything, ask something, or give an agent a task", autocomplete: "off" });
   ui.paletteList = null;
   ui.paletteAt = 0;
   const box = h("div", { class: "palette" }, ui.palette, h("span", { class: "keys" }, navigator.platform.includes("Mac") ? "⌘K" : "Ctrl K"));
-  ui.palette.addEventListener("input", () => openPalette(box));
+  ui.palette.addEventListener("input", () => (findSoon(box), openPalette(box)));
   ui.palette.addEventListener("focus", () => openPalette(box));
   ui.palette.addEventListener("blur", () => setTimeout(closePalette, 150));
   ui.palette.addEventListener("keydown", (e) => {
@@ -570,7 +610,7 @@ function paletteBox() {
 function paletteHint() {
   const bot = state.crew?.bots.find((b) => b.id === state.selectedBot);
   if (state.view === "home" && bot) return `Assign a task to ${bot.name}, or type @name, or a command`;
-  return "Ask in a new chat, type @name to assign an agent, or run a command";
+  return "Find anything, ask in a new chat, or type @name to give an agent a task";
 }
 
 function paletteItems() {
@@ -593,8 +633,10 @@ function paletteItems() {
     ...(state.templates ?? []).map((t) => [`Standard task: ${t.name}`, () => (go("home"), openCoreQuest(t.id))]),
     ...bots.map((b) => [`Edit ${b.name}`, () => go("bot", b.id)]),
   ];
-  for (const [label, run] of commands) if (!needle || label.toLowerCase().includes(needle)) items.push({ label, what: "", run });
-  return items.slice(0, 12);
+  // What was found for these words, across files, pages, the library, tasks, chats and agents.
+  if (ui.found?.query === text) for (const r of ui.found.results) items.push({ label: r.title, what: `${FOUND_WORDS[r.kind] ?? ""}${r.note ? ` · ${r.note}` : ""}`, run: () => openFound(r) });
+  for (const [label, run] of commands) if (!needle || label.toLowerCase().includes(needle)) items.push({ label, what: needle ? "Go to" : "", run });
+  return items.slice(0, needle ? 24 : 12);
 }
 
 function openPalette(box) {
@@ -3918,7 +3960,7 @@ async function integrationsView() {
           ),
         ),
       ),
-    h("p", { class: "note" }, "More integrations will be added here. Any service that offers a connector (an MCP server) can already be added under ", h("button", { class: "plain link", onclick: () => ((ui.integration = "mcp"), again()) }, "MCP"), "."),
+    h("p", { class: "note" }, "More integrations will be added here. Any service that offers a connector (an MCP server) can already be added under ", h("button", { class: "plain link", onclick: () => ((ui.integration = "mcp"), again()) }, "Connectors and AI apps"), "."),
   );
 }
 
@@ -4109,7 +4151,7 @@ function mcpIntegrationPage(mcp, act, col, again) {
   const token = h("input", { type: "password", placeholder: "Access token (only if it needs one)", autocomplete: "off", "aria-label": "Access token" });
   return [
     back,
-    h("div", { class: "ihero" }, integrationMark("mcp"), h("div", { class: "grow" }, h("div", { class: "row" }, h("h1", {}, "MCP"), h("span", { class: `chip ${STATE_WORDS[mcp.state][1]}` }, STATE_WORDS[mcp.state][0])), h("p", { class: "lead" }, mcp.summary))),
+    h("div", { class: "ihero" }, integrationMark("mcp"), h("div", { class: "grow" }, h("div", { class: "row" }, h("h1", {}, "Connectors and AI apps"), h("span", { class: `chip ${STATE_WORDS[mcp.state][1]}` }, STATE_WORDS[mcp.state][0])), h("p", { class: "lead" }, mcp.summary))),
     h(
       "section",
       { class: "isec" },

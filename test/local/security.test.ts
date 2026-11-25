@@ -60,3 +60,30 @@ test("the Security center says which protections are on and makes a report that 
   assert.match(report, /not a certificate/);
   assert.doesNotMatch(report, /SOC 2 compliant|certified/i);
 });
+
+test("find anything: one search across files, pages, tasks, chats and agents, in the running app", { timeout: 60_000 }, async () => {
+  const port = 20000 + Math.floor(Math.random() * 20000);
+  const child = spawn(process.execPath, [path.join(import.meta.dirname, "../../src/local/main.ts")], { env: { ...process.env, PORT: String(port), TALQAVA_DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), "talqava-find-")), TALQAVA_GITHUB_API: "http://127.0.0.1:9", TALQAVA_PASSWORD: "" }, stdio: "ignore" });
+  const base = `http://127.0.0.1:${port}`;
+  const call = async (method: string, route: string, body?: unknown) => (await fetch(`${base}/api/${route}`, { method, headers: { ...(body ? { "content-type": "application/json" } : {}), origin: base }, body: body ? JSON.stringify(body) : undefined })).json() as Promise<any>;
+  try {
+    let up = false;
+    for (let i = 0; i < 100 && !up; i++) {
+      await new Promise((r) => setTimeout(r, 200));
+      up = await fetch(`${base}/api/login`).then((r) => r.ok, () => false);
+    }
+    assert.ok(up);
+    await call("POST", "workspace/pages", { kind: "doc", title: "Harbor Dental proposal", markdown: "A monthly service for two clinics." });
+    await call("POST", "workspace/pages", { kind: "note", title: "Call notes", markdown: "Harbor wants one invoice a month." });
+    await call("POST", "workspace/sheets", { title: "Harbor forecast" });
+    await call("POST", "workspace/pages", { title: "Unrelated page", markdown: "Nothing to see." });
+    const r = await call("GET", "find?q=harbor");
+    const kinds = r.results.map((x: any) => `${x.kind}:${x.title}`).sort();
+    assert.deepEqual(kinds, ["doc:Harbor Dental proposal", "note:Call notes", "sheet:Harbor forecast"]);
+    assert.match(r.results.find((x: any) => x.kind === "note").note, /one invoice a month/);
+    assert.deepEqual((await call("GET", "find?q=h")).results, [], "one letter is too little to search");
+    assert.deepEqual((await call("GET", "find?q=zzzzqqq")).results, []);
+  } finally {
+    child.kill();
+  }
+});
