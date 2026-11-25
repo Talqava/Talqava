@@ -34,6 +34,8 @@ These limits are enforced by the app itself. A person who tries something their 
 
 **A second step.** With a second step on, signing in needs a 6-digit code from an authenticator app on the person's phone as well as the password. A stolen password alone is then not enough.
 
+**Sensitive changes ask for your password again.** Changing people, roles, the rules for agents or sensitive information, or where the audit record is sent asks you to type your password again, unless you did in the last 10 minutes. This stops someone at an unlocked computer from changing your security. You can turn it off under **Rules for everyone**.
+
 **Wrong passwords lock the account.** After 5 wrong passwords an account is locked for 15 minutes. An administrator can set a new password to unlock it sooner.
 
 **The audit log names people.** Once people are set up, each entry in the **Audit log** says who did it and their role.
@@ -99,6 +101,23 @@ A page made inside a sensitive page starts at the same level. Tables follow thei
 2. For each level, choose where it may be sent. **Use the recommended settings** sets Confidential to approved services only and Restricted to models on this computer only.
 3. Under **Approved AI services**, tick the services you trust. Check each service's terms first: that it does not train on your data, and where it processes it.
 
+### Limit sign-in to your networks
+
+1. Under **Rules for everyone**, type your office or VPN network ranges under **Only allow signing in from these networks**, one on each line, such as `203.0.113.0/24`.
+2. Press **Save the networks**. Signing in, and using Talqava, from anywhere else is refused. The computer Talqava runs on is always allowed, so you cannot lock yourself out of it.
+
+### Keep records for a set time, or stop all deleting
+
+1. Under **Alerts and reviews**, find **Keeping and deleting records**.
+2. Choose how long chats and finished tasks are kept. Once a day, older ones are deleted for good. Pinned chats, running work and tasks with changes you have not kept or undone are never deleted.
+3. Tick **Legal hold** when records must be kept for a dispute or investigation. While it is on, the daily deletion stops and every **Delete** button is refused.
+
+### Answer someone who asks what you hold about them
+
+1. Under **Keeping and deleting records**, type their name or email under **Find everything about one person** and press **Search**.
+2. Talqava lists every page, document, note, sheet, Library document, memory, chat and task where it appears. **Download this list** for your records.
+3. Open each place to correct or delete it. Talqava does not erase it for you, because a name can sit inside text you still need.
+
 ### Do an access review
 
 1. Under **Alerts and reviews**, press **Start a review**. Talqava lists every person and every agent with what each can do.
@@ -142,6 +161,8 @@ A page made inside a sensitive page starts at the same level. Tables follow thei
 ## What is not built yet
 
 - Signing in with your company account (single sign-on).
+- Limiting sign-in to computers your company manages, and needing two administrators for a security change.
+- Approved networks are checked against the address the connection comes from. Behind a proxy or tunnel that hides it, every connection looks the same.
 - Approved sites hold page reading, including redirects, and the AI service's own web search. Calls to web services with saved keys and the built-in browser are checked at the address the agent gives; a redirect or a link clicked inside the browser is not checked yet.
 - Whether an item may leave by email or a connector; suggesting a higher level when card numbers or payroll figures are spotted; and a view of exactly what was sent to AI services.
 - Rules by kind of action (send, pay, delete) with named approvers, and a list of approved connectors and Marketplace items.
