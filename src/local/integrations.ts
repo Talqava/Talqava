@@ -10,6 +10,7 @@ import os from "node:os";
 import { DATA, getConfig, saveConfig } from "./store.ts";
 import { loadCrew } from "./crew.ts";
 import { questStore } from "./quests.ts";
+import { COMING_SERVICES, DIRECTORY_CATEGORIES, FILED_UNDER } from "./directory.ts";
 
 export interface IntegrationInfo {
   id: string;
@@ -17,13 +18,15 @@ export interface IntegrationInfo {
   category: string;
   summary: string;
   /** "connected" once it can be used, "needs-setup" when a step is missing, "unavailable" when it cannot work on this computer. */
-  state: "connected" | "needs-setup" | "unavailable";
+  state: "connected" | "needs-setup" | "unavailable" | "coming";
   /** One line on where it stands. */
   status: string;
+  /** Set for a service from the connector catalogue: its id there. It connects with a pasted key, from the list itself. */
+  connector?: string;
 }
 
 /** The categories integrations are filed under, in the order they are shown. */
-export const INTEGRATION_CATEGORIES = ["AI models", "Websites", "Code and repositories", "AI apps and connectors", "Other services"];
+export const INTEGRATION_CATEGORIES: readonly string[] = DIRECTORY_CATEGORIES;
 
 const run = (cwd: string, args: string[], timeout = 15_000): Promise<{ ok: boolean; out: string; err: string }> =>
   new Promise((resolve) => {
@@ -147,7 +150,28 @@ export async function listIntegrations(): Promise<{ categories: string[]; integr
     state: wpSites.length ? "connected" : "needs-setup",
     status: wpSites.length ? `${wpSites.length} site${wpSites.length === 1 ? "" : "s"} connected` : "Connect your site",
   };
-  return { categories: INTEGRATION_CATEGORIES, integrations: [aiModels, wordpress, line(openrouter), line(git), line(mcp), apiKeys, line(langfuseIntegration())] };
+  const own = [aiModels, wordpress, line(openrouter), line(git), line(mcp), apiKeys, line(langfuseIntegration())].map((i) => ({ ...i, category: FILED_UNDER[i.id] ?? "Advanced" }));
+  // Services from the connector catalogue stand in the same list, each under its own category.
+  const { listCatalog } = await import("./connector-catalog.ts");
+  const services: IntegrationInfo[] = listCatalog().connectors.map((c) => ({
+    id: `connector:${c.id}`,
+    connector: c.id,
+    name: c.name,
+    category: FILED_UNDER[c.id] ?? "Advanced",
+    summary: c.about,
+    state: c.connected ? "connected" : "needs-setup",
+    status: c.connected ? "Connected with your key" : "Connects with a key you paste",
+  }));
+  const taken = new Set([...own, ...services].map((i) => i.name.toLowerCase()));
+  const coming: IntegrationInfo[] = COMING_SERVICES.filter((c) => !taken.has(c.name.toLowerCase())).map((c) => ({
+    id: `coming:${c.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    name: c.name,
+    category: c.category,
+    summary: c.about,
+    state: "coming",
+    status: "Not available yet",
+  }));
+  return { categories: [...DIRECTORY_CATEGORIES], integrations: [...own, ...services, ...coming] };
 }
 
 /**
