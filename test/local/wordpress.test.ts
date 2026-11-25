@@ -27,6 +27,7 @@ before(async () => {
       const u = new URL(req.url!, "http://x");
       if (u.pathname === "/wp-json/") return json(200, { name: "Ada&#8217;s Bakery" });
       if (!u.pathname.startsWith("/wp-json/wp/v2/")) return (res.writeHead(404), res.end("not found"));
+      if (!req.headers.authorization || req.headers["x-drop-auth"]) return json(401, { code: "rest_not_logged_in", message: "You are not currently logged in.", data: { status: 401 } });
       if (req.headers.authorization !== GOOD) return json(401, { code: "incorrect_password", message: "The provided password is an invalid application password." });
       const route = u.pathname.slice("/wp-json/wp/v2/".length);
       const body = raw ? JSON.parse(raw) : null;
@@ -107,4 +108,15 @@ test("the owner's rule for publishing is held: ask each time, or publish without
 test("Markdown becomes the plain HTML WordPress stores, with anything that looks like a tag made harmless", () => {
   assert.equal(W.markdownToHtml("# Title\n\nA *short* line\nthat continues.\n\n1. One\n2. Two\n\n> Quoted\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n[Link](https://example.com) and <script>alert(1)</script>"), '<h1>Title</h1>\n<p>A <em>short</em> line that continues.</p>\n<ol><li>One</li><li>Two</li></ol>\n<blockquote><p>Quoted</p></blockquote>\n<table><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table>\n<p><a href="https://example.com">Link</a> and &lt;script&gt;alert(1)&lt;/script&gt;</p>');
   assert.equal(W.markdownToHtml("[bad](javascript:alert(1))"), "<p>[bad](javascript:alert(1))</p>");
+});
+
+test("when the host drops the sign-in details, the owner is told what to do on the site", async () => {
+  // A site that never sees the Authorization header answers as if nobody signed in.
+  const dropping = http.createServer((req, res) => (res.writeHead(401, { "content-type": "application/json" }), res.end(JSON.stringify({ code: "rest_not_logged_in", message: "You are not currently logged in.", data: { status: 401 } }))));
+  await new Promise<void>((r) => dropping.listen(0, "127.0.0.1", r));
+  try {
+    await assert.rejects(W.connectSite({ url: `http://127.0.0.1:${(dropping.address() as AddressInfo).port}`, user: "ada", password: "abcd efgh ijkl mnop" }), /did not receive your user name and password.*Settings › Permalinks and press Save Changes/s);
+  } finally {
+    dropping.close();
+  }
 });
