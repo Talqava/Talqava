@@ -21,6 +21,7 @@ export interface KnownModel {
 export const LIST_NAMES: Record<string, string> = {
   openai: "openai",
   azure: "azure",
+  bedrock: "bedrock_mantle",
   gemini: "gemini",
   xai: "xai",
   mistral: "mistral",

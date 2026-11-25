@@ -31,6 +31,8 @@ export interface Service {
   baseUrl: string;
   /** What to ask for when the address depends on the person's account. */
   addressHint?: string;
+  /** What "{resource}" in the address is: an Azure resource name (the default) or an AWS region. */
+  resource?: "azure" | "aws-region";
   /** Where to get a key. */
   keyUrl?: string;
   /** What a key looks like, to catch a key pasted into the wrong service. */
@@ -68,6 +70,7 @@ export const SERVICES: Service[] = [
   // One account for many models, or a company's own gateway or cloud.
   { id: OPENROUTER_ID, name: "OpenRouter", about: "One account for hundreds of models from every major maker, paid from one balance. Sign in with your browser: no key to copy.", group: "gateways", kind: "openai", baseUrl: "https://openrouter.ai/api/v1", keyUrl: "https://openrouter.ai/keys", keyPrefix: "sk-or-", needsKey: true, ownSetup: "openrouter" },
   { id: "azure", name: "Microsoft Azure OpenAI", about: "OpenAI's models on your company's Azure account. Give your resource's name and key.", group: "gateways", kind: "openai", baseUrl: "https://{resource}.openai.azure.com/openai/v1", addressHint: "Your Azure resource name (the first part of its address), or its full address", keyUrl: "https://portal.azure.com", needsKey: true, keyHeader: "api-key", tokenLimit: "max_completion_tokens", priceFrom: "openai/" },
+  { id: "bedrock", name: "Amazon Bedrock", about: "Claude, GPT-OSS, Llama, Mistral, Qwen, DeepSeek and more on your company's AWS account. Give a Bedrock API key and your region.", group: "gateways", kind: "openai", baseUrl: "https://bedrock-mantle.{resource}.api.aws/v1", resource: "aws-region", addressHint: "Your AWS region, e.g. us-east-1", keyUrl: "https://console.aws.amazon.com/bedrock/home#/api-keys", needsKey: true },
   { id: "litellm", name: "LiteLLM gateway", about: "Your company's own LiteLLM gateway, which can reach Amazon Bedrock, Google Vertex and others.", group: "gateways", kind: "openai", baseUrl: "", addressHint: "The gateway's address, e.g. http://localhost:4000", needsKey: true },
   { id: "custom", name: "Another service", about: "Any other service or gateway that offers the common chat completions format (Portkey, vLLM on a server, and many more).", group: "gateways", kind: "openai", baseUrl: "", addressHint: "Its address, usually ending in /v1", needsKey: false },
   // On this computer: free, private, nothing leaves the computer.
@@ -108,7 +111,10 @@ export function addressFor(service: Service, typed?: unknown): string {
     if (!text) throw new Error(`${service.name} needs ${service.addressHint?.toLowerCase() ?? "an address"}.`);
     if (/^https?:\/\//i.test(text)) {
       const url = new URL(text);
-      address = `${url.origin}/openai/v1`;
+      address = service.resource === "aws-region" ? `${url.origin}/v1` : `${url.origin}/openai/v1`;
+    } else if (service.resource === "aws-region") {
+      if (!/^[a-z]{2}(-gov)?-[a-z]+-\d$/i.test(text)) throw new Error("That does not look like an AWS region. It looks like us-east-1 or eu-west-2: you can see it at the top right of the AWS console.");
+      address = service.baseUrl.replace("{resource}", text.toLowerCase());
     } else {
       if (!/^[a-z0-9][a-z0-9-]{1,62}$/i.test(text)) throw new Error("That does not look like an Azure resource name. It is the first part of the resource's address, e.g. my-company in my-company.openai.azure.com.");
       address = service.baseUrl.replace("{resource}", text.toLowerCase());

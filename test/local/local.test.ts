@@ -2538,3 +2538,35 @@ test("every connected service's models get prices, size and tool support from th
     server.close();
   }
 });
+
+test("Amazon Bedrock connects with an API key and a region, and its models come with prices", async () => {
+  const gateway = await import("../../src/local/gateway.ts");
+  const prices = await import("../../src/local/modelprices.ts");
+  const bedrock = gateway.serviceOf("bedrock")!;
+  assert.equal(gateway.addressFor(bedrock, "us-east-1"), "https://bedrock-mantle.us-east-1.api.aws/v1");
+  assert.throws(() => gateway.addressFor(bedrock, "virginia"), /does not look like an AWS region/);
+  const http = await import("node:http");
+  const server = http.createServer((req, res) => {
+    const json = (status: number, body: unknown) => (res.writeHead(status, { "content-type": "application/json" }), res.end(JSON.stringify(body)));
+    if (req.url === "/prices.json") return json(200, { "bedrock_mantle/anthropic.claude-test": { litellm_provider: "bedrock_mantle", mode: "chat", input_cost_per_token: 3e-6, output_cost_per_token: 1.5e-5, supports_function_calling: true } });
+    if (req.url === "/v1/models") return req.headers.authorization === "Bearer bedrock-key" ? json(200, { data: [{ id: "anthropic.claude-test" }, { id: "openai.gpt-oss-test" }] }) : json(403, {});
+    json(404, {});
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const address = `http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}`;
+  process.env.TALQAVA_MODEL_PRICES = `${address}/prices.json`;
+  const before = store.getConfig().providers;
+  try {
+    await assert.rejects(gateway.connect("bedrock", { address, key: "wrong" }), /did not accept that key/);
+    assert.deepEqual(await gateway.connect("bedrock", { address, key: "bedrock-key" }), { provider: "bedrock", models: 2 });
+    // A fresh copy of the list (another test may have kept its own today).
+    await prices.loadModelList(true);
+    const listed = await gateway.listModels(store.getConfig().providers.find((p) => p.id === "bedrock")!);
+    assert.deepEqual(listed.models[0], { id: "anthropic.claude-test", tools: true, prices: { input: 3, output: 15 } });
+  } finally {
+    store.saveConfig({ providers: before });
+    delete process.env.TALQAVA_MODEL_PRICES;
+    prices.forgetModelList();
+    server.close();
+  }
+});
