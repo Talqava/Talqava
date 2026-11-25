@@ -46,6 +46,7 @@ import { COLUMN_TYPES, peopleOf, tables } from "./tables.ts";
 import { sheets } from "./sheets.ts";
 import { describeGuardrails, guardrails, guardrailsFrom } from "./guardrails.ts";
 import { securityOverview, securityReport } from "./securitycenter.ts";
+import { RETENTION_CHOICES, findPerson, retention, retentionFrom, sweep } from "./retention.ts";
 import { REVIEW_EVERY_DAYS, alerts, feedStatus, reviews, setFeed, startAuditFeed } from "./auditfeed.ts";
 import { LEVELS, LEVEL_WORDS, RECOMMENDED, WHERE, WHERE_WORDS, describePolicy, policy, policyFrom } from "./sensitivity.ts";
 import { ROLES, ROLE_WORDS, mayDo, people } from "./people.ts";
@@ -182,6 +183,7 @@ function describeRequest(method: string, parts: string[], body: any, url: URL): 
   const words = (b: unknown) => JSON.stringify(redact(b ?? {})).slice(0, 400);
   if (area === "login" || area === "logout") return area === "logout" ? { kind: "security", action: "Signed out" } : people.enabled() ? null : { kind: "settings", action: "Signed in" };
   if (area === "security-ops") return id === "feed" ? { kind: "security", action: body.url ? "Set where the audit record is also sent" : "Stopped sending the audit record elsewhere" } : null;
+  if (area === "me" && id === "confirm") return null;
   if (area === "me") return { kind: "security", action: id === "password" ? "Changed their own password" : action === "confirm" ? "Turned on their second step" : "Started setting up their second step" };
   if (area === "people") return { kind: "security", action: id === "start" ? "Set up people" : id === "settings" ? "Changed the sign-in rules" : id === "sign-out-all" ? "Signed everyone out" : method === "POST" && !id ? `Added a person: ${String(body.name ?? "").slice(0, 60)} as ${String(body.role ?? "member")}` : method === "DELETE" ? "Removed a person" : action === "password" ? "Set a new password for a person" : action === "clear-second-step" ? "Took off a person's second step" : `Changed a person${body.role ? `: role ${String(body.role)}` : ""}` };
   if (area === "quests" && !id && method === "POST") return null; // the route records it, knowing whether the task started
@@ -355,6 +357,11 @@ async function updateSettings(body: any) {
   if (["leads", "all", "never"].includes(body.planFirst)) patch.planFirst = body.planFirst;
   if (body.privacy === "off" || body.privacy === "mask") patch.privacy = body.privacy;
   if (typeof body.moveUp === "boolean") patch.moveUp = body.moveUp;
+  if (body.retention && typeof body.retention === "object") {
+    const next = retentionFrom(body.retention);
+    patch.retention = next;
+    audit({ actor: "system", actorName: "Talqava", kind: "security", action: "The rules for keeping records were changed", detail: `${next.days ? `Chats and finished tasks are deleted after ${next.days} days` : "Chats and tasks are kept until deleted by hand"}. Legal hold ${next.legalHold ? "on" : "off"}.` });
+  }
   if (body.sensitivity && typeof body.sensitivity === "object") {
     const next = policyFrom(body.sensitivity, policy());
     patch.sensitivity = next;
@@ -732,7 +739,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   if (route === "POST login" && people.enabled()) {
     let result: ReturnType<typeof people.signIn>;
     try {
-      result = people.signIn(body, String(req.headers["user-agent"] ?? ""));
+      result = people.signIn(body, String(req.headers["user-agent"] ?? ""), req.socket.remoteAddress);
     } catch (err) {
       await new Promise((r) => setTimeout(r, 1000)); // slows password guessing
       audit({ actor: "system", actorName: "Talqava", kind: "security", ok: false, action: "A sign-in was refused", detail: `${String(body.email ?? "").slice(0, 80)}: ${(err as Error).message}` });
@@ -784,12 +791,19 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   (req as { person?: Person | null }).person = me;
   if (me) {
     const area = parts[0] || "";
+    if (!people.networkAllowed(req.socket.remoteAddress)) throw new HttpError(403, "Talqava can only be used from your organization's approved networks.");
+    // The most sensitive changes ask the person to type their password again, unless they did so in the last few minutes.
+    const sensitive = req.method !== "GET" && ((area === "people" && parts[1] !== "start") || (area === "security-ops" && parts[1] === "feed") || (route === "PUT settings" && (body.guardrails || body.sensitivity || body.retention)));
+    if (sensitive && !people.confirmedRecently(cookieOf(req))) throw Object.assign(new HttpError(403, "Type your password again to make this change."), { confirm: true });
     if (people.mustSetUpSecondStep(me) && !["me", "state", "people"].includes(area)) throw new HttpError(403, "Set up your second step first: your organization requires it. Open Security.");
     if (!mayDo(me.role, req.method ?? "GET", area, parts[1] ?? "")) throw new HttpError(403, `Your role (${ROLE_WORDS[me.role].name}) does not allow that. Ask an administrator.`);
   }
+  // A legal hold: nothing is deleted while it is on, by anyone.
+  if (req.method === "DELETE" && retention().legalHold && parts[0] !== "people") throw new HttpError(403, "A legal hold is on, so nothing can be deleted. An owner or administrator can turn it off under Security.");
   if (parts[0] === "me") {
     if (route === "GET me") return send(res, 200, { person: me, role: me ? ROLE_WORDS[me.role] : null, mustSetUpSecondStep: me ? people.mustSetUpSecondStep(me) : false });
     if (!me) throw new HttpError(400, "People are not set up.");
+    if (req.method === "POST" && parts[1] === "confirm") return send(res, 200, await tryIt(() => people.confirm(cookieOf(req), body.password, body.code)));
     if (req.method === "POST" && parts[1] === "password") return send(res, 200, await tryIt(() => people.setPassword(me.id, body.password, me, body.current)));
     if (req.method === "POST" && parts[1] === "second-step" && !parts[2]) return send(res, 200, await tryIt(() => people.startSecondStep(me.id)));
     if (req.method === "POST" && parts[1] === "second-step" && parts[2] === "confirm") return send(res, 200, await tryIt(() => people.confirmSecondStep(me.id, body.code)));
@@ -822,7 +836,8 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   if (parts[0] === "security-ops") {
     const by = me ? `${me.name} (${ROLE_WORDS[me.role].name})` : "You";
     if (me && req.method !== "GET" && me.role !== "owner" && me.role !== "admin") throw new HttpError(403, `Your role (${ROLE_WORDS[me.role].name}) does not allow that. Ask an administrator.`);
-    if (route === "GET security-ops") return send(res, 200, { feed: feedStatus(), alerts: alerts(), reviews: reviews.list().slice(0, 5), due: reviews.due(), every: REVIEW_EVERY_DAYS });
+    if (route === "GET security-ops" && parts[1] === "person") return send(res, 200, await tryIt(() => findPerson(orgs.active(), url.searchParams.get("q"))));
+    if (route === "GET security-ops") return send(res, 200, { feed: feedStatus(), alerts: alerts(), reviews: reviews.list().slice(0, 5), due: reviews.due(), every: REVIEW_EVERY_DAYS, retention: retention(), retentionChoices: RETENTION_CHOICES });
     if (req.method === "PUT" && parts[1] === "feed") return send(res, 200, await tryIt(() => setFeed(body.url ? body : null)));
     if (req.method === "POST" && parts[1] === "reviews" && !parts[2]) return send(res, 200, await tryIt(() => reviews.start(orgs.active(), by)));
     if (req.method === "POST" && parts[1] === "reviews" && parts[2] && parts[3] === "finish") return send(res, 200, await tryIt(() => reviews.finish(parts[2], by)));
@@ -1659,7 +1674,7 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
   } catch (err) {
     const status = err instanceof HttpError ? err.status : 500;
     if (status === 500) console.error(err);
-    if (!res.headersSent) send(res, status, { error: status === 500 ? "Something went wrong on the server." : (err as Error).message });
+    if (!res.headersSent) send(res, status, { error: status === 500 ? "Something went wrong on the server." : (err as Error).message, ...((err as { confirm?: boolean }).confirm ? { confirm: true } : {}) });
     else res.end();
   }
 }
@@ -1675,6 +1690,16 @@ export function start() {
   initStore();
   getConfig();
   startAuditFeed();
+  // Retention: once a day (and shortly after starting), records older than the owner's limit are deleted.
+  const tidy = () => {
+    try {
+      sweep((id) => engine.isRunning(id));
+    } catch (err) {
+      console.error("Retention could not run:", (err as Error).message);
+    }
+  };
+  setTimeout(tidy, 60_000).unref();
+  setInterval(tidy, 24 * 3600 * 1000).unref();
   const server = http.createServer(handle);
   server.listen(PORT, HOST, () => {
     // If Talqava was added to the Claude app from an older copy of this app (it was renamed), point Claude at this one.

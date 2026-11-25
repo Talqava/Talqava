@@ -76,8 +76,42 @@ async function api(method, path, body) {
     showLogin();
     throw new Error("Sign in first.");
   }
+  // A sensitive change asks for the password again; once given, the change is made.
+  if (res.status === 403 && data.confirm && !api.confirming) {
+    api.confirming = true;
+    try {
+      await askPasswordAgain();
+    } finally {
+      api.confirming = false;
+    }
+    return api(method, path, body);
+  }
   if (!res.ok) throw Object.assign(new Error(data.error || `Request failed (${res.status}).`), { status: res.status });
   return data;
+}
+
+/** Asks the signed-in person to type their password (and code, if they use one) before a sensitive change. */
+function askPasswordAgain() {
+  return new Promise((resolve, reject) => {
+    const dialog = h("dialog", { class: "aidialog" });
+    const pw = h("input", { type: "password", placeholder: "Your password", autocomplete: "current-password", "aria-label": "Your password" });
+    const code = h("input", { inputmode: "numeric", placeholder: "6-digit code (if you use a second step)", autocomplete: "one-time-code", maxlength: 7, "aria-label": "Code from your authenticator app" });
+    const status = h("p", { class: "note", role: "status" });
+    const close = (fn, value) => (dialog.close(), dialog.remove(), fn(value));
+    const form = h("form", { class: "form" }, pw, state.me?.person?.secondStep ? code : null, status, h("div", { class: "row" }, h("button", { class: "primary" }, "Continue"), h("button", { type: "button", class: "plain", onclick: () => close(reject, new Error("Cancelled: the change was not made.")) }, "Cancel")));
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const res = await fetch("/api/me/confirm", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: pw.value, code: code.value }) });
+      if (res.ok) return close(resolve);
+      status.textContent = (await res.json().catch(() => ({}))).error || "That did not work.";
+      status.className = "note bad";
+    });
+    fill(dialog, h("h3", {}, "Type your password again"), h("p", { class: "note" }, "This change affects everyone's security, so Talqava checks it is really you. You will not be asked again for a few minutes."), form);
+    dialog.addEventListener("cancel", () => close(reject, new Error("Cancelled: the change was not made.")));
+    document.body.append(dialog);
+    dialog.showModal();
+    pw.focus();
+  });
 }
 
 /** Replaces a node's children; lists are flattened and empty values skipped. */
@@ -7970,6 +8004,7 @@ async function securityView() {
   const sessions = h("div");
   const showSessions = () => attempt(async () => fill(sessions, h("ul", {}, (await api("GET", "people/sessions")).map((x) => h("li", {}, h("b", {}, x.name), ` · signed in ${when(x.createdAt)} · last active ${when(x.seenAt)}`, h("div", { class: "note small" }, x.device || "Unknown device"))))), col);
   const st = data.settings;
+  const networks = h("textarea", { rows: 3, placeholder: "203.0.113.0/24", "aria-label": "Approved networks" }, (st?.networks ?? []).join("\n"));
   fill(
     col,
     head,
@@ -7996,6 +8031,10 @@ async function securityView() {
             h("label", { class: "power" }, h("input", { type: "checkbox", checked: st.requireSecondStep, onchange: (e) => (!e.target.checked || me.secondStep || confirm("You have not set up your own second step yet. If you require it, you will be asked to set it up before you can do anything else. Carry on?") ? act(() => api("PUT", "people/settings", { requireSecondStep: e.target.checked })) : again()) }), "Require a second step for everyone"),
             h("p", { class: "note small" }, "Anyone without one is asked to set it up the next time they sign in, before they can do anything else."),
             h("label", {}, "Sign people out after this long without activity", h("select", { onchange: (e) => act(() => api("PUT", "people/settings", { idleMinutes: Number(e.target.value) })) }, st.idleChoices.map((m) => h("option", { value: m, selected: m === st.idleMinutes }, m < 120 ? `${m / 60} hour` : m < 2880 ? `${m / 60} hours` : `${m / 1440} days`)))),
+            h("label", { class: "power" }, h("input", { type: "checkbox", checked: st.askAgain, onchange: (e) => act(() => api("PUT", "people/settings", { askAgain: e.target.checked })) }), `Ask for the password again before changes to people, rules or security (at most every ${st.confirmMinutes} minutes)`),
+            h("label", {}, "Only allow signing in from these networks", networks),
+            h("p", { class: "note small" }, "One range on each line, such as 203.0.113.0/24, or a single address. Leave empty to allow any network. The computer Talqava runs on is always allowed."),
+            h("div", {}, h("button", { onclick: () => act(() => api("PUT", "people/settings", { networks: networks.value })) }, "Save the networks")),
             h("div", { class: "row wrap" }, h("button", { onclick: showSessions }, "See who is signed in"), h("button", { class: "danger", onclick: () => confirm("Sign everyone else out? They will need to sign in again. You stay signed in.") && act(async () => toast(`${(await api("POST", "people/sign-out-all")).ended} session(s) ended.`)) }, "Sign everyone else out")),
             sessions,
           ),
@@ -8022,6 +8061,18 @@ function securityOpsSection(canEdit) {
     const last = d.reviews.find((r) => r.finishedAt);
     const url = h("input", { type: "url", value: d.feed.url, placeholder: "https://… (the address your monitoring system gives you)", disabled: !canEdit, "aria-label": "Address to send events to" });
     const secret = h("input", { type: "password", placeholder: d.feed.signed ? "A signing secret is set; type a new one to replace it" : "Signing secret (optional)", autocomplete: "off", disabled: !canEdit, "aria-label": "Signing secret" });
+    const personQ = h("input", { type: "search", placeholder: "A name or an email address", "aria-label": "A person's name or email" });
+    const personOut = h("div");
+    const personForm = h("form", { class: "row", onsubmit: (e) => (e.preventDefault(), attempt(async () => {
+      const r = await api("GET", `security-ops/person?q=${encodeURIComponent(personQ.value)}`);
+      const text = [`Where “${r.query}” appears in Talqava, found on ${new Date().toLocaleDateString()}`, "", ...r.places.map((p) => `${p.where}: ${p.title}\n    ${p.snippet}`)].join("\n");
+      const save = () => {
+        const a = h("a", { href: URL.createObjectURL(new Blob([text], { type: "text/plain" })), download: `talqava-person-search-${new Date().toISOString().slice(0, 10)}.txt` });
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      };
+      fill(personOut, r.places.length ? [h("p", { class: "note" }, `Found in ${r.places.length} place${r.places.length === 1 ? "" : "s"}. Open each to correct or delete it; Talqava does not erase it for you, because the name may sit inside text you still need.`), h("ul", { class: "refused" }, r.places.slice(0, 100).map((p) => h("li", {}, h("b", {}, `${p.where}: `), p.title, h("div", { class: "note small" }, p.snippet)))), h("button", { type: "button", onclick: save }, "Download this list")] : h("p", { class: "note" }, `“${r.query}” was not found anywhere.`));
+    }, box)) }, personQ, h("button", {}, "Search"));
     const line = (r, i) => {
       const note = h("input", { value: i.note, placeholder: "Note (optional)", "aria-label": `Note for ${i.name}` });
       const set = (decision) => act(() => api("PATCH", `security-ops/reviews/${r.id}`, { item: i.id, decision, note: note.value }));
@@ -8045,6 +8096,18 @@ function securityOpsSection(canEdit) {
           : last && last.items.some((i) => i.decision === "change")
             ? h("div", {}, h("p", { class: "note small" }, "Marked “Needs a change” in the last review:"), h("ul", {}, last.items.filter((i) => i.decision === "change").map((i) => h("li", {}, h("b", {}, i.name), i.note ? ` · ${i.note}` : ""))))
             : null,
+      ),
+      h(
+        "div",
+        { class: "card form" },
+        h("b", {}, "Keeping and deleting records"),
+        h("label", {}, "Delete chats and finished tasks after", h("select", { disabled: !canEdit, onchange: (e) => (Number(e.target.value) === 0 || confirm(`Delete chats and finished tasks once they are ${e.target.selectedOptions[0].textContent} old?\n\nThis runs every day and cannot be undone. Pinned chats, running work and tasks with changes you have not kept or undone are never deleted.`) ? act(() => api("PUT", "settings", { retention: { days: Number(e.target.value) } }), "Saved.") : draw()) }, d.retentionChoices.map((n) => h("option", { value: n, selected: d.retention.days === n }, n === 0 ? "Never: keep until I delete them" : n < 365 ? `${n} days` : `${n / 365} year${n === 365 ? "" : "s"}`)))),
+        h("label", { class: "power" }, h("input", { type: "checkbox", disabled: !canEdit, checked: d.retention.legalHold, onchange: (e) => act(() => api("PUT", "settings", { retention: { legalHold: e.target.checked } }), e.target.checked ? "Legal hold is on: nothing can be deleted." : "Legal hold is off.") }), "Legal hold: nothing is deleted, by anyone, while this is on"),
+        h("p", { class: "note small" }, "Use a legal hold when a dispute or investigation means records must be kept. It stops the daily deletion above and every Delete button."),
+        h("b", {}, "Find everything about one person"),
+        h("p", { class: "note small" }, "When someone asks what you hold about them, or asks you to erase it: search their name or email across pages, documents, notes, sheets, the Library, Memory, chats and tasks."),
+        personForm,
+        personOut,
       ),
       h(
         "form",

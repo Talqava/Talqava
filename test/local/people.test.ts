@@ -168,3 +168,36 @@ test("in the running app: nothing without signing in, and a role's limits are en
     child.kill();
   }
 });
+
+test("approved networks, and asking for the password again before sensitive changes", () => {
+  const { people, inRanges, cleanRange } = P;
+  assert.deepEqual(["203.0.113.0/24", "10.1.2.3", " 300.1.1.1 ", "10.0.0.0/40", "office"].map(cleanRange), ["203.0.113.0/24", "10.1.2.3/32", "", "", ""]);
+  assert.equal(inRanges("203.0.113.77", ["203.0.113.0/24"]), true);
+  assert.equal(inRanges("::ffff:203.0.113.77", ["203.0.113.0/24"]), true);
+  assert.equal(inRanges("203.0.114.1", ["203.0.113.0/24"]), false);
+  assert.equal(inRanges("10.1.2.3", ["10.1.2.3/32"]), true);
+  assert.equal(inRanges("10.1.2.4", ["10.1.2.3/32"]), false);
+  assert.equal(inRanges("127.0.0.1", ["203.0.113.0/24"]), true, "the computer itself is always allowed");
+  assert.equal(inRanges("2001:db8::1", ["203.0.113.0/24"]), false);
+
+  assert.deepEqual(people.setSettings({ networks: "203.0.113.0/24\nnonsense, 10.0.0.5" }).networks, ["203.0.113.0/24", "10.0.0.5/32"]);
+  assert.throws(() => people.signIn({ email: "cy@example.com", password: "cy has a long one" }, "x", "198.51.100.9"), /approved networks/);
+  const s = people.signIn({ email: "cy@example.com", password: "cy has a long one" }, "x", "203.0.113.9") as { token: string };
+  assert.equal(people.networkAllowed("198.51.100.9"), false);
+  assert.equal(people.networkAllowed("10.0.0.5"), true);
+  people.setSettings({ networks: "" });
+  assert.equal(people.networkAllowed("198.51.100.9"), true);
+
+  // Just signed in counts as having proved who you are; later it must be proved again.
+  assert.equal(people.confirmedRecently(s.token), true);
+  const stored = JSON.parse(fs.readFileSync(path.join(dir, "people.json"), "utf8"));
+  stored.sessions.at(-1).confirmedAt = new Date(Date.now() - 11 * 60_000).toISOString();
+  fs.writeFileSync(path.join(dir, "people.json"), JSON.stringify(stored));
+  assert.equal(people.confirmedRecently(s.token), true, "the copy in use is not re-read from disk mid-run");
+  assert.throws(() => people.confirm(s.token, "wrong", ""), /not your password/);
+  assert.deepEqual(people.confirm(s.token, "cy has a long one", ""), { ok: true });
+  people.setSettings({ askAgain: false });
+  assert.equal(people.confirmedRecently(undefined), true);
+  people.setSettings({ askAgain: true });
+  assert.equal(people.confirmedRecently(undefined), false);
+});

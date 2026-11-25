@@ -38,11 +38,13 @@ interface StoredSession {
   createdAt: string;
   seenAt: string;
   device: string;
+  /** When the person last proved who they are (signing in, or typing their password again). */
+  confirmedAt?: string;
 }
 interface Store {
   people: StoredPerson[];
   sessions: StoredSession[];
-  settings: { requireSecondStep: boolean; idleMinutes: number };
+  settings: { requireSecondStep: boolean; idleMinutes: number; networks?: string[]; askAgain?: boolean };
 }
 
 /** A person, as the app shows them: never the password key or the second step's secret. */
@@ -62,6 +64,27 @@ export const MIN_PASSWORD = 12;
 export const MAX_FAILED = 5;
 export const LOCK_MINUTES = 15;
 export const IDLE_CHOICES = [60, 480, 1440, 10080];
+/** How long after proving who they are a person may make sensitive changes without being asked again. */
+export const CONFIRM_MINUTES = 10;
+
+/** A network range from what was typed: "203.0.113.0/24", or one address. IPv4 only; anything else is dropped. */
+export function cleanRange(text: unknown): string {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:\/(\d{1,2}))?$/.exec(String(text ?? "").trim());
+  if (!m || m.slice(1, 5).some((n) => Number(n) > 255) || (m[5] !== undefined && Number(m[5]) > 32)) return "";
+  return `${m.slice(1, 5).map(Number).join(".")}/${m[5] ?? "32"}`;
+}
+const toNumber = (ip: string) => ip.split(".").reduce((n, part) => n * 256 + Number(part), 0);
+/** Whether an address is inside one of the ranges. This computer itself always is, so the owner cannot lock themselves out. */
+export function inRanges(address: string | undefined, ranges: string[]): boolean {
+  const ip = String(address ?? "").replace(/^::ffff:/, "");
+  if (ip === "127.0.0.1" || ip === "::1") return true;
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return false;
+  return ranges.some((r) => {
+    const [base, bits] = r.split("/");
+    const mask = Number(bits) === 0 ? 0 : (~0 << (32 - Number(bits))) >>> 0;
+    return ((toNumber(ip) & mask) >>> 0) === ((toNumber(base) & mask) >>> 0);
+  });
+}
 const file = () => path.join(DATA, "people.json");
 
 let cache: Store | null = null;
@@ -157,7 +180,8 @@ export const people = {
   },
 
   settings() {
-    return { ...load().settings, idleChoices: IDLE_CHOICES, minPassword: MIN_PASSWORD };
+    const s = load().settings;
+    return { ...s, networks: s.networks ?? [], askAgain: s.askAgain !== false, idleChoices: IDLE_CHOICES, minPassword: MIN_PASSWORD, confirmMinutes: CONFIRM_MINUTES };
   },
 
   /** The first account, which is the owner's. Only possible while nobody has one. */
@@ -259,8 +283,10 @@ export const people = {
     return view(p);
   },
 
-  setSettings(patch: { requireSecondStep?: unknown; idleMinutes?: unknown }) {
+  setSettings(patch: { requireSecondStep?: unknown; idleMinutes?: unknown; networks?: unknown; askAgain?: unknown }) {
     const s = load();
+    if (patch.networks !== undefined) s.settings.networks = [...new Set((Array.isArray(patch.networks) ? patch.networks : String(patch.networks).split(/[\s,]+/)).map(cleanRange).filter(Boolean))].slice(0, 100);
+    if (typeof patch.askAgain === "boolean") s.settings.askAgain = patch.askAgain;
     if (typeof patch.requireSecondStep === "boolean") s.settings.requireSecondStep = patch.requireSecondStep;
     if (IDLE_CHOICES.includes(Number(patch.idleMinutes))) s.settings.idleMinutes = Number(patch.idleMinutes);
     save();
@@ -271,8 +297,9 @@ export const people = {
    * Signs someone in. Returns a session token, or says a code from their authenticator app is needed. Wrong passwords
    * count towards a lock; the message never says whether the email exists.
    */
-  signIn(input: { email?: unknown; password?: unknown; code?: unknown }, device = ""): { token: string; person: Person; setUpSecondStep: boolean } | { needsCode: true } {
+  signIn(input: { email?: unknown; password?: unknown; code?: unknown }, device = "", from?: string): { token: string; person: Person; setUpSecondStep: boolean } | { needsCode: true } {
     const s = load();
+    if (from !== undefined && s.settings.networks?.length && !inRanges(from, s.settings.networks)) throw new Error("Signing in is only allowed from your organization's approved networks.");
     const wrong = () => new Error("That email and password do not match.");
     const p = s.people.find((x) => x.email === cleanEmail(input.email));
     // The same work is done for an unknown email, so timing does not give away who has an account.
@@ -305,7 +332,7 @@ export const people = {
     p.lastSignIn = new Date().toISOString();
     const token = crypto.randomBytes(32).toString("hex");
     s.sessions = s.sessions.filter((x) => !this.expired(x)).slice(-500);
-    s.sessions.push({ hash: hashToken(token), person: p.id, createdAt: p.lastSignIn, seenAt: p.lastSignIn, device: device.slice(0, 200) });
+    s.sessions.push({ hash: hashToken(token), person: p.id, createdAt: p.lastSignIn, seenAt: p.lastSignIn, device: device.slice(0, 200), confirmedAt: p.lastSignIn });
     save();
     return { token, person: view(p), setUpSecondStep: s.settings.requireSecondStep && !p.totp?.on };
   },
@@ -327,6 +354,32 @@ export const people = {
       save();
     }
     return view(p);
+  },
+
+  /** Whether a request from this address is allowed, when approved networks are set. */
+  networkAllowed(from: string | undefined): boolean {
+    const ranges = load().settings.networks ?? [];
+    return !ranges.length || inRanges(from, ranges);
+  },
+
+  /** Whether this session proved who it is recently enough for a sensitive change. */
+  confirmedRecently(token: string | undefined): boolean {
+    if (load().settings.askAgain === false) return true;
+    const session = token ? load().sessions.find((x) => x.hash === hashToken(token)) : undefined;
+    return Boolean(session?.confirmedAt && Date.now() - new Date(session.confirmedAt).getTime() < CONFIRM_MINUTES * 60_000);
+  },
+
+  /** The person types their password (and code, if they have a second step) again before a sensitive change. */
+  confirm(token: string | undefined, password: unknown, code: unknown): { ok: true } {
+    const s = load();
+    const session = token ? s.sessions.find((x) => x.hash === hashToken(token)) : undefined;
+    const p = session && s.people.find((x) => x.id === session.person);
+    if (!session || !p) throw new Error("Sign in first.");
+    if (!crypto.timingSafeEqual(Buffer.from(stretch(String(password ?? "").slice(0, 200), p.salt)), Buffer.from(p.key))) throw new Error("That is not your password.");
+    if (p.totp?.on && !codeFits(p.totp.secret, code)) throw new Error("That code is not right. Type the six digits your authenticator app shows now.");
+    session.confirmedAt = new Date().toISOString();
+    save();
+    return { ok: true };
   },
 
   /** Whether this person must set up their second step before doing anything else. */
