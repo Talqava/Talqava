@@ -74,8 +74,8 @@ const dollars = (n: number) => "$" + n.toFixed(2);
 export function budgetBlock(bot: Bot, now = new Date()): string | null {
   const budgets = monthlyBudgets([bot], now);
   const own = budgets.bots[bot.id];
-  if (own.state === "stopped") return `${bot.name} has reached its monthly budget (${dollars(own.spent)} of ${dollars(own.limit!)}). Raise it on the bot's page, or wait until ${budgets.resets}.`;
-  if (budgets.total.state === "stopped") return `Your bots have reached the monthly budget for all bots (${dollars(budgets.total.spent)} of ${dollars(budgets.total.limit!)}). Raise it on the team page, or wait until ${budgets.resets}.`;
+  if (own.state === "stopped") return `${bot.title || bot.name}: its own monthly budget is used up (${dollars(own.spent)} of ${dollars(own.limit!)}). Raise "Monthly budget" on this agent's page, or wait until ${budgets.resets}.`;
+  if (budgets.total.state === "stopped") return `All agents together: the monthly budget for all agents is used up (${dollars(budgets.total.spent)} of ${dollars(budgets.total.limit!)}). Raise it under Settings, or wait until ${budgets.resets}.`;
   return null;
 }
 
@@ -96,5 +96,5 @@ export function groupBlock(orgId: string, group: { id: string; name: string; bud
   const b = groupBudget(orgId, group, now);
   if (b.state !== "stopped") return null;
   const resets = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  return `The ${group.name} group has reached its monthly budget (${dollars(b.spent)} of ${dollars(b.limit!)}). Raise it on the Organization page, or wait until ${resets.getFullYear()}-${String(resets.getMonth() + 1).padStart(2, "0")}-01.`;
+  return `The ${group.name} group: its monthly budget is used up (${dollars(b.spent)} of ${dollars(b.limit!)}). Raise the group's monthly budget on the Organization page, or wait until ${resets.getFullYear()}-${String(resets.getMonth() + 1).padStart(2, "0")}-01.`;
 }

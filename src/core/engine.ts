@@ -309,7 +309,7 @@ export class Engine {
       }
       const left = spec.remaining?.();
       if (left !== undefined && (left <= 0 || nextCall() > left)) {
-        stop("shared", `Stopped at its budget: the task's shared budget has ${dollars(Math.max(0, left))} left, less than the next step would cost. Say "continue" to keep going.`);
+        stop("shared", `Stopped at the budget per task: the task and everything handed on from it have ${dollars(Math.max(0, left))} left, less than the next step would cost. Raise "Budget per task" in Settings, or say "continue" to keep going.`);
         return;
       }
       if (limits.minutes !== undefined && Date.now() - startedAt > limits.minutes * 60_000) {

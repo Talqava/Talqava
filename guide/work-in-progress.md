@@ -82,7 +82,7 @@ Work in progress is your control room. You hand out work, clear what is waiting 
 2. Under **Role**, set its **Name**, **Job title**, **Department**, **Kind of work** and **Instructions**.
 3. Under **Model**, keep the **Default model** or give it **A model of its own**.
 4. Under **Powers**, tick the tools it may use, such as **Web search and read pages** or **Files**.
-5. Under **Limits**, choose **Approvals**, and set **Budget per task ($)**, **Steps per task** and **Budget per month ($)**.
+5. Under **Limits**, choose **Approvals**, and set **Budget per run ($)**, **Steps per run** and **Monthly budget ($)**.
 6. Click **Save**.
 
 **Start a checked template**
@@ -98,7 +98,7 @@ Work in progress is your control room. You hand out work, clear what is waiting 
 ## If something goes wrong
 
 - **"Failed"** in Completed work: open the task. The reason is in a red banner. Fix it, then retry from the Tasks page.
-- **"has reached its monthly budget"**: raise **Budget per month ($)** on the agent's page, or wait for next month. For a group, or all agents together, change it on the Organization page.
+- **"its own monthly budget is used up"**: raise **Monthly budget ($)** on the agent's page, or wait for next month. **"The … group: its monthly budget is used up"**: raise the group's monthly budget on the Organization page. **"All agents: the monthly budget for all agents is used up"**: raise it in Settings.
 - **"6 quests are already under way"**: only six tasks run at once. Wait for one to finish, or stop one.
 - **"✕ Check failed"**: open the task to see which check failed, and use **Hand to Claude** if it is offered.
 - **"No model"** next to an agent: set one under Settings or on the agent's page.

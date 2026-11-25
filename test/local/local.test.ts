@@ -203,20 +203,20 @@ test("bots have a team group and a monthly budget that warns at 80% and stops ne
 
   spend.recordSpend("q3", "saver", 0.4, nov); // 2.1 of 2
   assert.equal(spend.monthlyBudgets([saver], nov).bots.saver.state, "stopped");
-  assert.match(spend.budgetBlock(saver, nov)!, /Saver has reached its monthly budget \(\$2\.10 of \$2\.00\)/);
+  assert.match(spend.budgetBlock(saver, nov)!, /its own monthly budget is used up \(\$2\.10 of \$2\.00\)/);
   // The next month starts from nothing.
   assert.equal(spend.budgetBlock(saver, new Date(2026, 11, 1)), null);
 
   // The limit for all bots together stops every bot, even one with room of its own.
   store.saveConfig({ monthlyBudget: 2 });
   const other = crew.findBot("pip");
-  assert.match(spend.budgetBlock(other, nov)!, /all bots/);
+  assert.match(spend.budgetBlock(other, nov)!, /monthly budget for all agents is used up/);
   store.saveConfig({ monthlyBudget: undefined });
   assert.equal(spend.budgetBlock(other, nov), null);
 
   // A bot over its budget starts no new quest.
   spend.recordSpend("q4", "saver", 5); // this month
-  await assert.rejects(quests.quests.start({ bot: crew.findBot("saver"), text: "anything" }), /reached its monthly budget/);
+  await assert.rejects(quests.quests.start({ bot: crew.findBot("saver"), text: "anything" }), /its own monthly budget is used up/);
   crew.removeBot("saver");
 });
 
@@ -1469,7 +1469,7 @@ test("a group stops at its monthly budget: work is charged to the group its agen
     spend.recordSpend("budgetco-0000002", "bookkeeper", 0.2, new Date(), { org: org.id, group: finance.id });
     assert.equal(spend.groupSpend(org.id)[finance.id], 1.05);
     const bookkeeper = crew.findBot("bookkeeper")!;
-    await assert.rejects(quests.quests.start({ bot: bookkeeper, text: "Reconcile November." }), /Finance group has reached its monthly budget \(\$1\.05 of \$1\.00\)/);
+    await assert.rejects(quests.quests.start({ bot: bookkeeper, text: "Reconcile November." }), /Finance group: its monthly budget is used up \(\$1\.05 of \$1\.00\)/);
     // Raising the budget lets work start again, and the task records what it is charged to and why it exists.
     orgs.updateGroup(org.id, finance.id, { budget: 5 });
     script.push(say("Reconciled."));
