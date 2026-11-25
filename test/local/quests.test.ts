@@ -112,7 +112,7 @@ test("a bot only gets the tools its powers grant, plus the organization's: hand-
   await waitFor(() => runner.questStore.get(quest.id)!.status === "done");
   const request = mock.requests.filter((r) => /quest for tools/.test(JSON.stringify(r.body.messages))).at(-1)!;
   // Everyone placed reports to the owner, so nobody is below the analyst: it hands nothing out, and asks other groups' leads instead. It leads its own one-person group, so it may propose a position.
-  assert.deepEqual(request.body.tools.map((t: { name: string }) => t.name), ["memory", "skill", "conversation_search", "request_work", "ask_colleague", "team_memory", "library", "workspace", "table", "propose_position", "board", "web_search", "web_fetch"]);
+  assert.deepEqual(request.body.tools.map((t: { name: string }) => t.name), ["memory", "skill", "conversation_search", "request_work", "ask_colleague", "team_memory", "library", "workspace", "table", "sheet", "propose_position", "board", "web_search", "web_fetch"]);
 });
 
 test("a code quest works on its own branch: preview, then undo leaves no trace", async () => {

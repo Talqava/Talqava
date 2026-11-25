@@ -43,6 +43,7 @@ import { board } from "./board.ts";
 import { accessGraph, accessGraphs } from "./access.ts";
 import { loadModelList } from "./modelprices.ts";
 import { COLUMN_TYPES, peopleOf, tables } from "./tables.ts";
+import { sheets } from "./sheets.ts";
 import { projects } from "./projects.ts";
 import { connectCatalog, connectorLabel, disconnectCatalog, listCatalog } from "./connector-catalog.ts";
 import { installKit, listKits, previewKit, runPlaybook, undoKit } from "./kits.ts";
@@ -80,7 +81,7 @@ const GUIDES = [
   ["organization", "Organization"],
   ["marketplace", "Marketplace"],
   ["workspace", "Workspace"],
-  ["office", "Office: Documents and Notes"],
+  ["office", "Office: Documents, Sheets and Notes"],
   ["library", "Library"],
   ["memory", "Memory"],
   ["skills", "Skills"],
@@ -1173,6 +1174,9 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     const org = orgs.active();
     const [, area, id, sub, extra] = parts;
     // Office: documents and notes. They are pages of another kind, so every pages route works on them too.
+    // Sheets: a new one (from a CSV file, or empty) and one sheet out as CSV. Everything else is the pages routes.
+    if (route === "POST workspace" && area === "sheets" && !id) return send(res, 200, await attempt(() => sheets.create(org, null, { title: body.title, folder: body.folder, csv: body.csv })));
+    if (route === "GET workspace" && area === "sheets" && id && sub === "csv") return send(res, 200, await attempt(() => sheets.csv(org, id, url.searchParams.get("sheet") ?? undefined)));
     if (route === "GET workspace" && area === "office") return send(res, 200, { ...workspace.office(org), tree: workspace.tree(org), deleted: workspace.deleted(org), suggestions: workspace.suggestions(org) });
     if (route === "GET workspace" && !area) return send(res, 200, { tree: workspace.tree(org).filter((p) => p.kind === "page"), templates: workspace.templates(), deleted: workspace.deleted(org), suggestions: workspace.suggestions(org) });
     if (route === "GET workspace" && area === "search") return send(res, 200, workspace.search(org, null, url.searchParams.get("q") ?? "", 20));

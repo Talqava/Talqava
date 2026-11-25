@@ -286,6 +286,7 @@ const ICONS = {
   tasks: "M4 4.5h3v11H4zM8.5 4.5h3v7h-3zM13 4.5h3v4h-3z",
   docs: "M6 3.5h5.5l3 3V15A1.5 1.5 0 0 1 13 16.5H6A1.5 1.5 0 0 1 4.5 15V5A1.5 1.5 0 0 1 6 3.5zM11.5 3.5v3h3M7 9.5h6M7 12h6M7 14.5h3.5",
   notes: "M5 4.5h10v7.5l-3.5 3.5H5zM15 12h-3.5v3.5M7.5 7.5h5M7.5 10h3",
+  sheets: "M4.5 4.5h11v11h-11zM4.5 8h11M4.5 11.5h11M8.5 4.5v11M12 8v7.5",
   projects: "M3 6.5a1.5 1.5 0 0 1 1.5-1.5h3l1.5 1.5h6.5A1.5 1.5 0 0 1 17 8v6.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5z",
   guide: "M10 5.5C8.5 4.3 6.5 4 4 4v11c2.5 0 4.5.3 6 1.5 1.5-1.2 3.5-1.5 6-1.5V4c-2.5 0-4.5.3-6 1.5zM10 5.5v11",
   library: "M3.5 6A1.5 1.5 0 0 1 5 4.5h3l1.5 2H15A1.5 1.5 0 0 1 16.5 8v6A1.5 1.5 0 0 1 15 15.5H5A1.5 1.5 0 0 1 3.5 14zM7 10.5h6M7 12.8h4",
@@ -319,7 +320,7 @@ function renderRail() {
     h("div", { class: "raillabel" }, "Team"),
     h("div", { class: "railgroup" }, item("team", "Organization", v === "team", "The org chart, departments and budgets"), item("market", "Marketplace", v === "market" || v === "marketbot", "Ready-made agents and teams for every department")),
     h("div", { class: "raillabel" }, "Office"),
-    h("div", { class: "railgroup" }, item("docs", "Documents", v === "docs", "Letters, proposals and reports you and your agents write together"), item("notes", "Notes", v === "notes", "Quick notes, meeting notes and ideas, private until you share them")),
+    h("div", { class: "railgroup" }, item("docs", "Documents", v === "docs", "Letters, proposals and reports you and your agents write together"), item("sheets", "Sheets", v === "sheets", "Budgets, forecasts and lists that calculate"), item("notes", "Notes", v === "notes", "Quick notes, meeting notes and ideas, private until you share them")),
     h("div", { class: "raillabel" }, "Knowledge"),
     h(
       "div",
@@ -344,7 +345,7 @@ function renderRail() {
 
 function go(view, id = null) {
   ui.wsFlush?.();
-  if (!["workspace", "docs", "notes"].includes(view)) (ui.wsEditor?.destroy(), (ui.wsEditor = null), (ui.wsFlush = null));
+  if (!["workspace", "docs", "notes", "sheets"].includes(view)) (ui.wsEditor?.destroy(), (ui.wsEditor = null), (ui.wsFlush = null));
   state.view = view;
   state.convId = view === "chat" || view === "quest" ? id : null;
   state.botId = view === "bot" ? id : null;
@@ -375,7 +376,7 @@ function renderBody() {
   state.source = null;
   ui.log = null;
   ui.body.className = "body";
-  const views = { home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView, docs: docsView, notes: notesView };
+  const views = { home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView, docs: docsView, notes: notesView, sheets: sheetsView };
   (views[state.view] || homeView)();
 }
 
@@ -6741,7 +6742,7 @@ async function openPage(id) {
   // A document or a note opens in Office; a page opens in the Workspace.
   let kind = "page";
   if (id) kind = await api("GET", `workspace/pages/${id}`).then((p) => p.kind).catch(() => (ui.ws.data?.tree ?? []).find((p) => p.id === id)?.kind ?? "page");
-  const host = kind === "doc" ? "docs" : kind === "note" ? "notes" : "workspace";
+  const host = kind === "doc" ? "docs" : kind === "note" ? "notes" : kind === "sheet" ? "sheets" : "workspace";
   ui.ws.host = host;
   ui.ws.open = id;
   if (state.view !== host) go(host);
@@ -6749,7 +6750,7 @@ async function openPage(id) {
 }
 
 /** Draws again whichever screen is showing the page editor. */
-const wsReload = () => (ui.ws?.host === "docs" ? docsView() : ui.ws?.host === "notes" ? notesView() : workspaceView());
+const wsReload = () => (ui.ws?.host === "docs" ? docsView() : ui.ws?.host === "notes" ? notesView() : ui.ws?.host === "sheets" ? sheetsView() : workspaceView());
 
 async function workspaceView() {
   ui.ws ??= { collapsed: new Set() };
@@ -7284,7 +7285,7 @@ async function officeLoad(view, side, col) {
   }
   if (state.view !== view) return null;
   ui.ws.data = data;
-  const kind = view === "docs" ? "doc" : "note";
+  const kind = view === "docs" ? "doc" : view === "sheets" ? "sheet" : "note";
   if (ui.ws.open && !data.files.some((f) => f.id === ui.ws.open && f.kind === kind)) ui.ws.open = null;
   return data;
 }
@@ -7379,6 +7380,391 @@ async function docsView() {
     table,
   );
   drawTable();
+}
+
+/** Office › Sheets: files of cells with formulas. Agents read the worked-out values and change cells under the file's rules. */
+async function sheetsView() {
+  const side = h("aside", { class: "side wsside", "aria-label": "Sheets" });
+  const col = h("main", { class: "center wscenter" });
+  const data = await officeLoad("sheets", side, col);
+  if (!data) return;
+  const files = data.files.filter((f) => f.kind === "sheet");
+  const org = activeOrg();
+  const make = (body) =>
+    attempt(async () => {
+      const page = await api("POST", "workspace/sheets", body);
+      ui.ws.open = page.id;
+      sheetsView();
+    }, col);
+  const fromCsv = () => {
+    const input = h("input", { type: "file", accept: ".csv,text/csv" });
+    input.addEventListener("change", async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      if (file.size > 2_000_000) return toast("That file is larger than 2 MB. Split it into smaller files.");
+      make({ title: file.name.replace(/\.csv$/i, ""), csv: await file.text() });
+    });
+    input.click();
+  };
+  const groups = new Map();
+  for (const f of files) (groups.get(f.folder || "") ?? groups.set(f.folder || "", []).get(f.folder || "")).push(f);
+  const row = (f) => h("button", { class: `plain wsrow officerow ${ui.ws.open === f.id ? "on" : ""}`, "aria-current": ui.ws.open === f.id ? "true" : null, onclick: () => ((ui.ws.open = f.id), sheetsView()) }, h("span", { class: "grow" }, f.title), f.suggestions ? h("span", { class: "count", title: "Changes waiting for you" }, String(f.suggestions)) : null);
+  fill(
+    side,
+    h("div", { class: "wssidehead" }, h("button", { class: `plain wshome ${ui.ws.open ? "" : "on"}`, onclick: () => ((ui.ws.open = null), sheetsView()) }, "Sheets"), h("button", { class: "small", onclick: () => make({ title: "Untitled" }) }, "+ Sheet")),
+    [...groups.keys()].sort((a, b) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b))).map((name) => [h("div", { class: "label officegroup" }, name || (groups.size > 1 ? "No folder" : "All sheets")), groups.get(name).map(row)]),
+    files.length ? null : h("p", { class: "note small", style: "padding: 8px 10px" }, "No sheets yet."),
+  );
+  if (ui.ws.open) return renderSheet(col, ui.ws.open);
+
+  const what = h("input", { placeholder: "e.g. A cash forecast for the next three months, with a total for each month", "aria-label": "What should the sheet work out" });
+  const who = h("select", { "aria-label": "Agent" }, org.members.map((m) => h("option", { value: m.bot }, m.title)));
+  const ask = () =>
+    attempt(async () => {
+      const text = what.value.trim();
+      if (!text) throw new Error("Say what the sheet should work out.");
+      const quest = await startTask({ bot: who.value, text: `Build this sheet: ${text}\n\nUse the sheet tool: create a sheet file with a clear title, then fill it with set. Put headings in row 1, one kind of thing in each column, and use formulas for every total so it recalculates. Say in your report where it is and where its numbers came from.`, title: `Sheet: ${text}`.slice(0, 80) });
+      if (quest?.id) go("quest", quest.id);
+      else if (quest?.queued) openTask(quest.queued.id);
+    }, col);
+  const waiting = files.filter((f) => f.suggestions);
+  fill(
+    col,
+    h("div", { class: "officehome" }, h("h1", {}, "Sheets"), h("p", { class: "lead" }, "Budgets, forecasts and lists that calculate. Type numbers and formulas; agents read the results, and their changes to your cells wait for you unless you let them through.")),
+    h("div", { class: "row wrap" }, h("button", { class: "primary", onclick: () => make({ title: "Untitled" }) }, "+ New sheet"), h("button", { onclick: fromCsv }, "Import a CSV file")),
+    org.members.length ? h("form", { class: "card form officeask", onsubmit: (e) => (e.preventDefault(), ask()) }, h("b", {}, "Or ask an agent to build it"), h("div", { class: "row wrap" }, what, who, h("button", {}, "Give the task")), h("p", { class: "note small" }, "The agent's sheet appears here when the task is done.")) : null,
+    waiting.length ? h("section", {}, h("div", { class: "label" }, `Waiting for you · ${waiting.length}`), waiting.map((f) => h("button", { class: "plain card officewait", onclick: () => ((ui.ws.open = f.id), sheetsView()) }, h("b", {}, f.title), h("span", { class: "note small" }, " · an agent's changes to review")))) : null,
+    files.length
+      ? h(
+          "div",
+          { class: "card officetable" },
+          h(
+            "table",
+            {},
+            h("thead", {}, h("tr", {}, ["Name", "Folder", "What is in it", "Last change", "Who can read it"].map((t) => h("th", { scope: "col" }, t)))),
+            h("tbody", {}, files.map((f) => h("tr", {}, h("td", {}, h("button", { class: "plain link", onclick: () => ((ui.ws.open = f.id), sheetsView()) }, f.title), f.protected ? h("span", { class: "tag" }, "protected") : null), h("td", {}, f.folder || "—"), h("td", {}, f.summary), h("td", {}, `${f.updatedBy} · ${officeDay(f.updatedAt)}`), h("td", {}, officeWho(f))))),
+          ),
+        )
+      : h("p", { class: "note" }, "No sheets yet. Start one with + New sheet, import a CSV file, or ask an agent to build one."),
+  );
+}
+
+/** One sheet file: the grid, its formula bar, sheets, charts, the rules for agents, and any changes waiting. */
+async function renderSheet(col, id) {
+  let page, suggestions, eng;
+  try {
+    [page, suggestions, eng] = await Promise.all([api("GET", `workspace/pages/${id}`), api("GET", `workspace/suggestions?page=${encodeURIComponent(id)}`), import("/sheet-engine.js")]);
+  } catch (err) {
+    return fill(col, h("div", { class: "banner error" }, err.message));
+  }
+  if (state.view !== "sheets" || ui.ws.open !== id) return;
+  const org = activeOrg();
+  const file = eng.parseFile(page.markdown);
+  ui.sheet ??= {};
+  const mem = (ui.sheet[id] ??= { tab: 0, rows: 0, cols: 0 });
+  if (mem.tab >= file.sheets.length) mem.tab = 0;
+  let value = eng.compute(file);
+  let sel = { c1: 0, r1: 0, c2: 0, r2: 0 };
+  let active = { col: 0, row: 0 };
+  const sheet = () => file.sheets[mem.tab];
+
+  // ----- saving as you type -----
+  let rev = page.rev;
+  let timer = null;
+  let saving = Promise.resolve();
+  const status = h("span", { class: "wsstatus note small", role: "status" }, "Saved");
+  const conflict = h("div");
+  const save = () => {
+    clearTimeout(timer);
+    timer = null;
+    status.textContent = "Saving…";
+    const markdown = eng.writeFile(file);
+    saving = saving.then(async () => {
+      try {
+        rev = (await api("PUT", `workspace/pages/${id}`, { markdown, baseRev: rev })).rev;
+        status.textContent = "Saved";
+      } catch (err) {
+        status.textContent = "Not saved";
+        fill(conflict, h("div", { class: "banner error" }, err.message, " ", h("button", { class: "small", onclick: () => sheetsView() }, "Reload")));
+      }
+    });
+    return saving;
+  };
+  const changed = () => {
+    status.textContent = "Editing…";
+    clearTimeout(timer);
+    timer = setTimeout(save, 700);
+  };
+  ui.wsFlush = () => timer && save();
+  ui.wsEditor = { destroy() {}, markdown: () => eng.writeFile(file) };
+  const flush = async () => (timer && save(), await saving);
+
+  const title = h("input", { class: "wstitlebox", value: page.title === "Untitled" ? "" : page.title, placeholder: "Untitled", maxlength: 120, "aria-label": "Sheet title" });
+  title.addEventListener("change", () => attempt(async () => (await api("PATCH", `workspace/pages/${id}`, { title: (page.title = title.value.trim() || "Untitled") }), ui.ws.refreshSide?.()), col));
+  ui.ws.refreshSide = async () => {};
+
+  // ----- cells waiting for the owner -----
+  const pending = suggestions.map((s) => ({ s, cells: eng.diffFiles(file, eng.parseFile(s.markdown)) }));
+  const waitingRefs = () => new Set(pending.flatMap((p) => p.cells.filter((c) => c.sheet === sheet().name).map((c) => c.ref)));
+
+  // ----- the grid -----
+  const bar = h("input", { class: "sheetbar mono", "aria-label": "What is in the selected cell", placeholder: "Type a value, or a formula starting with =" });
+  const where = h("span", { class: "sheetwhere mono" }, "A1");
+  const gridBox = h("div", { class: "sheetscroll" });
+  const chartsBox = h("div", { class: "sheetcharts" });
+  const tabsBox = h("div", { class: "sheettabs", role: "tablist", "aria-label": "Sheets in this file" });
+  const inputs = new Map();
+  const selName = () => eng.rangeName(sel);
+  const paint = () => {
+    const waiting = waitingRefs();
+    for (const [ref, input] of inputs) {
+      const { col: c, row: r } = eng.parseRef(ref);
+      const v = value(mem.tab, c, r);
+      if (document.activeElement !== input) input.value = eng.show(v, eng.formatOf(sheet(), c, r));
+      const td = input.parentNode;
+      td.className = [typeof v === "number" ? "n" : "", eng.isError(v) ? "bad" : "", eng.isLocked(sheet(), c, r) ? "locked" : "", waiting.has(ref) ? "sug" : "", c >= sel.c1 && c <= sel.c2 && r >= sel.r1 && r <= sel.r2 ? "sel" : ""].join(" ");
+    }
+    where.textContent = selName();
+  };
+  const commit = (c, r, raw) => {
+    const ref = eng.refName(c, r);
+    const text = String(raw).trim();
+    if ((sheet().cells[ref] ?? "") === text) return;
+    if (text === "") delete sheet().cells[ref];
+    else sheet().cells[ref] = text.slice(0, 2000);
+    value = eng.compute(file);
+    paint();
+    drawCharts();
+    changed();
+  };
+  const focusCell = (c, r) => inputs.get(eng.refName(c, r))?.focus();
+  const drawGrid = () => {
+    const used = eng.extent(sheet());
+    const rows = Math.min(eng.MAX_ROWS, Math.max(used.rows + 4, 20) + mem.rows);
+    const cols = Math.min(eng.MAX_COLS, Math.max(used.cols + 3, 8) + mem.cols);
+    inputs.clear();
+    const body = [];
+    for (let r = 0; r < rows; r++) {
+      const cells = [h("th", { scope: "row" }, String(r + 1))];
+      for (let c = 0; c < cols; c++) {
+        const ref = eng.refName(c, r);
+        const input = h("input", { "aria-label": ref, autocomplete: "off", spellcheck: "false" });
+        input.addEventListener("focus", () => {
+          input.value = sheet().cells[ref] ?? "";
+          bar.value = input.value;
+          if (!input.dataset.keep) sel = { c1: c, r1: r, c2: c, r2: r };
+          delete input.dataset.keep;
+          active = { col: c, row: r };
+          paint();
+        });
+        input.addEventListener("mousedown", (e) => {
+          if (!e.shiftKey) return;
+          // Shift and click stretches the selection from the cell you were in.
+          sel = { c1: Math.min(active.col, c), r1: Math.min(active.row, r), c2: Math.max(active.col, c), r2: Math.max(active.row, r) };
+          e.preventDefault();
+          paint();
+        });
+        input.addEventListener("input", () => (bar.value = input.value));
+        input.addEventListener("blur", () => (commit(c, r, input.value), paint()));
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === "ArrowDown") (e.preventDefault(), focusCell(c, Math.min(r + 1, rows - 1)));
+          else if (e.key === "ArrowUp") (e.preventDefault(), focusCell(c, Math.max(r - 1, 0)));
+          else if (e.key === "Escape") ((input.value = sheet().cells[ref] ?? ""), input.blur());
+        });
+        inputs.set(ref, input);
+        cells.push(h("td", {}, input));
+      }
+      body.push(h("tr", {}, cells));
+    }
+    fill(gridBox, h("table", { class: "sheetgrid" }, h("thead", {}, h("tr", {}, h("th", {}), Array.from({ length: cols }, (_, c) => h("th", { scope: "col" }, eng.colName(c))))), h("tbody", {}, body)));
+    paint();
+  };
+  bar.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    commit(active.col, active.row, bar.value);
+    focusCell(active.col, active.row + 1);
+  });
+  bar.addEventListener("change", () => commit(active.col, active.row, bar.value));
+
+  // ----- charts -----
+  const seriesOf = (range) => {
+    const out = [];
+    const wide = range.r1 === range.r2 && range.c2 > range.c1;
+    if (wide) for (let c = range.c1; c <= range.c2; c++) out.push({ label: eng.colName(c), v: value(mem.tab, c, range.r1) });
+    else for (let r = range.r1; r <= range.r2; r++) out.push({ label: range.c2 > range.c1 ? eng.show(value(mem.tab, range.c1, r)) : String(r + 1), v: value(mem.tab, range.c2, r) });
+    return out.filter((p) => typeof p.v === "number");
+  };
+  const drawCharts = () => {
+    fill(
+      chartsBox,
+      sheet().charts.map((ch, i) => {
+        const pts = seriesOf(ch.range);
+        const max = Math.max(1, ...pts.map((p) => Math.abs(p.v)));
+        const words = pts.map((p) => `${p.label} ${eng.show(p.v, "number")}`).join("; ") || "no numbers in that range";
+        const picture =
+          ch.type === "line" && pts.length > 1
+            ? (() => {
+                const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                svg.setAttribute("viewBox", "0 0 300 110");
+                svg.setAttribute("class", "sheetline");
+                const low = Math.min(0, ...pts.map((p) => p.v));
+                const high = Math.max(...pts.map((p) => p.v), low + 1);
+                const xy = pts.map((p, n) => `${10 + (280 * n) / (pts.length - 1)},${100 - (90 * (p.v - low)) / (high - low)}`).join(" ");
+                svg.innerHTML = `<polyline fill="none" stroke="currentColor" stroke-width="2" points="${xy}"/>`;
+                return h("div", {}, svg, h("div", { class: "sheetlinelabels note small" }, pts.map((p) => h("span", {}, p.label))));
+              })()
+            : h("div", { class: "sheetbars" }, pts.map((p) => h("div", { class: "sheetbarrow" }, h("span", { class: "sheetbarlabel" }, p.label), h("span", { class: "sheetbarfill", style: `width: ${Math.max(1, (Math.abs(p.v) / max) * 100).toFixed(1)}%` }), h("span", { class: "mono small" }, eng.show(p.v, "number")))));
+        return h(
+          "figure",
+          { class: "card sheetchart" },
+          h("figcaption", { class: "row" }, h("b", { class: "grow" }, ch.title || "Chart"), h("span", { class: "note small mono" }, eng.rangeName(ch.range)), h("button", { class: "plain small danger", "aria-label": `Remove the chart ${ch.title || ""}`, onclick: () => (sheet().charts.splice(i, 1), drawCharts(), changed()) }, "Remove")),
+          h("div", { role: "img", "aria-label": `${ch.type === "line" ? "Line" : "Bar"} chart. ${words}` }, pts.length ? picture : h("p", { class: "note small" }, "There are no numbers in that range yet.")),
+        );
+      }),
+    );
+  };
+
+  // ----- sheets in the file -----
+  const drawTabs = () =>
+    fill(
+      tabsBox,
+      file.sheets.map((s, i) => h("button", { class: `mpill ${i === mem.tab ? "on" : ""}`, role: "tab", "aria-selected": String(i === mem.tab), onclick: () => ((mem.tab = i), (sel = { c1: 0, r1: 0, c2: 0, r2: 0 }), drawAll()) }, s.name)),
+      h("button", { class: "plain small", onclick: () => ((n) => n && (file.sheets.push(eng.parseFile(`!sheet ${n}`).sheets[0]), (mem.tab = file.sheets.length - 1), (value = eng.compute(file)), drawAll(), changed()))(prompt("Name the new sheet", `Sheet ${file.sheets.length + 1}`)) }, "+ Add a sheet"),
+      h("button", { class: "plain small", onclick: () => ((n) => n && n.trim() && ((sheet().name = eng.parseFile(`!sheet ${n}`).sheets[0].name), (value = eng.compute(file)), drawAll(), changed()))(prompt("Rename this sheet (formulas in other sheets that use its name will need the new name)", sheet().name)) }, "Rename"),
+      file.sheets.length > 1 ? h("button", { class: "plain small danger", onclick: () => confirm(`Remove the sheet “${sheet().name}” and everything in it? You can get it back from History.`) && (file.sheets.splice(mem.tab, 1), (mem.tab = 0), (value = eng.compute(file)), drawAll(), changed()) }, "Remove this sheet") : null,
+    );
+  const drawAll = () => (drawTabs(), drawGrid(), drawCharts());
+
+  // ----- the toolbar -----
+  const format = h("select", { "aria-label": "Number format for the selected cells" }, [["plain", "As typed"], ["number", "Number 1,234.5"], ["money", "Money 1,234.50"], ["percent", "Percent 12%"]].map(([v, t]) => h("option", { value: v }, t)));
+  format.addEventListener("change", () => ((sheet().formats = sheet().formats.filter((f) => eng.rangeName(f.range) !== selName())), sheet().formats.push({ range: { ...sel }, format: format.value }), paint(), changed()));
+  const touches = (r) => !(r.c2 < sel.c1 || r.c1 > sel.c2 || r.r2 < sel.r1 || r.r1 > sel.r2);
+  const addChart = (type) => {
+    if (sel.c1 === sel.c2 && sel.r1 === sel.r2) return toast("Select the cells to chart first: click the first cell, then hold Shift and click the last.");
+    const name = prompt("Name the chart", "Chart");
+    if (name === null) return;
+    sheet().charts.push({ type, range: { ...sel }, title: name.trim().slice(0, 80) });
+    drawCharts();
+    changed();
+  };
+  const exportCsv = () =>
+    attempt(async () => {
+      await flush();
+      const f = await api("GET", `workspace/sheets/${id}/csv?sheet=${encodeURIComponent(sheet().name)}`);
+      const a = h("a", { href: URL.createObjectURL(new Blob([f.csv], { type: "text/csv" })), download: f.name });
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }, col);
+  const toolbar = h(
+    "div",
+    { class: "wstoolbar sheettools", role: "toolbar", "aria-label": "Sheet tools" },
+    format,
+    h("button", { class: "small", title: "Agents cannot change locked cells", onclick: () => (sheet().locks.push({ ...sel }), paint(), changed(), toast(`${selName()} is locked: agents cannot change it.`)) }, "Lock for agents"),
+    h("button", { class: "small", onclick: () => ((sheet().locks = sheet().locks.filter((r) => !touches(r))), paint(), changed()) }, "Unlock"),
+    h("button", { class: "small", onclick: () => addChart("bar") }, "Bar chart"),
+    h("button", { class: "small", onclick: () => addChart("line") }, "Line chart"),
+    h("button", { class: "small", onclick: () => ((mem.rows += 10), drawGrid()) }, "+ Rows"),
+    h("button", { class: "small", onclick: () => ((mem.cols += 4), drawGrid()) }, "+ Columns"),
+    h("button", { class: "small", onclick: exportCsv }, "Export CSV"),
+    status,
+  );
+
+  // ----- changes waiting -----
+  const labelOf = (c) => ((s) => (s ? ((at) => (at ? eng.show(eng.literal(s.cells[eng.refName(0, at.row)] ?? "")) : ""))(eng.parseRef(c.ref)) : ""))(file.sheets.find((x) => x.name === c.sheet));
+  const decide = (sg, decision) =>
+    attempt(async () => {
+      await flush();
+      try {
+        await api("POST", `workspace/suggestions/${sg.id}`, { decision });
+      } catch (err) {
+        if (err.status !== 409 || !confirm(`${err.message}\n\nUse the agent's version of the sheet? Your newer cells stay in its history.`)) throw err;
+        await api("POST", `workspace/suggestions/${sg.id}`, { decision, replace: true });
+      }
+      loadPageSuggestions();
+      sheetsView();
+    }, col);
+  const waitingBox = pending.length
+    ? h(
+        "section",
+        { class: "sheetwaiting" },
+        h("div", { class: "label" }, `Waiting for you · ${pending.length}`),
+        pending.map(({ s: sg, cells }) =>
+          h(
+            "div",
+            { class: "card form" },
+            h("div", {}, h("b", {}, sg.authorName), sg.note ? h("span", { class: "note small" }, ` · ${sg.note}`) : null),
+            h("table", { class: "sheetdiff" }, h("tbody", {}, cells.slice(0, 40).map((c) => h("tr", {}, h("td", {}, `${file.sheets.length > 1 ? `${c.sheet} › ` : ""}${c.ref}${c.ref && labelOf(c) && !/^[A]\d+$/.test(c.ref) ? ` ${labelOf(c)}` : ""}`), h("td", { class: "mono" }, `${c.from || "(empty)"} → ${c.to || "(empty)"}`))))),
+            cells.length > 40 ? h("p", { class: "note small" }, `and ${cells.length - 40} more cells`) : null,
+            h("div", { class: "row" }, h("button", { class: "small primary", onclick: () => decide(sg, "accept") }, cells.length === 1 ? "Accept" : `Accept all ${cells.length}`), h("button", { class: "small", onclick: () => decide(sg, "decline") }, "Decline")),
+          ),
+        ),
+        h("p", { class: "note small" }, "The cells an agent wants to change are outlined in the grid. Nothing changes until you accept."),
+      )
+    : null;
+
+  // ----- the panel: who can see it, how agents change it, asking an agent -----
+  const patch = (body, then) => attempt(async () => (Object.assign(page, await api("PATCH", `workspace/pages/${id}`, body)), then?.()), col);
+  const groupsOf = [...new Set(org.members.map((m) => m.department))];
+  const whoSel = h("select", { "aria-label": "Who can see it" }, [["everyone", "Every agent"], ["some", "Only some groups"], ["private", "Private: no agent sees it"]].map(([v, t]) => h("option", { value: v, selected: v === (page.access.private ? "private" : page.access.everyone ? "everyone" : "some") }, t)));
+  const groupBox = h("div", { class: "sheetgroups" });
+  const drawGroups = () => fill(groupBox, whoSel.value === "some" ? groupsOf.map((g) => h("label", { class: "power" }, h("input", { type: "checkbox", checked: page.access.departments.includes(g), onchange: (e) => patch({ access: { departments: e.target.checked ? [...page.access.departments, g] : page.access.departments.filter((x) => x !== g) } }) }), g)) : null);
+  whoSel.addEventListener("change", () => patch({ access: whoSel.value === "everyone" ? { everyone: true } : whoSel.value === "private" ? { private: true } : { departments: page.access.departments } }, drawGroups));
+  drawGroups();
+  const edit = h("select", { "aria-label": "When agents want to change it" }, [["suggest", "They suggest; I accept or decline"], ["direct", "They change it straight away"]].map(([v, t]) => h("option", { value: v, selected: page.edit === v }, t)));
+  edit.addEventListener("change", () => patch({ edit: edit.value }));
+  const protect = h("input", { type: "checkbox", checked: page.protected, onchange: (e) => patch({ protected: e.target.checked }) });
+  const folder = h("input", { value: page.folder, placeholder: "e.g. Finance", maxlength: 60, "aria-label": "Folder" });
+  folder.addEventListener("change", () => patch({ folder: folder.value }));
+  const giveTo = h("select", { "aria-label": "Agent" }, org.members.map((m) => h("option", { value: m.bot }, m.title)));
+  const giveWhat = h("textarea", { rows: 2, placeholder: "e.g. Update March with this week's numbers and say what changed.", "aria-label": "What to do" });
+  const give = () =>
+    attempt(async () => {
+      await flush();
+      const what = giveWhat.value.trim() || `Check the sheet “${page.title}” and say what you find.`;
+      const quest = await startTask({ bot: giveTo.value, text: `${what}\n\nWork on the Office sheet “${page.title}” (file ${id}) with the sheet tool: read it first, change cells with set and a one-line note, leave locked cells alone, and say in your report what you changed.`, title: what.slice(0, 80) });
+      if (quest?.id) go("quest", quest.id);
+      else if (quest?.queued) openTask(quest.queued.id);
+    }, col);
+  const aside = h(
+    "aside",
+    { class: "wspanel" },
+    h("div", { class: "label" }, "Who can see it"),
+    whoSel,
+    groupBox,
+    h("div", { class: "label" }, "When agents want to change it"),
+    edit,
+    h("label", { class: "power" }, protect, "Protected: agents never change it directly"),
+    h("p", { class: "note small" }, "Agents can never change a locked cell, whatever is set here."),
+    h("div", { class: "label" }, "Folder"),
+    folder,
+    org.members.length ? [h("div", { class: "label" }, "Ask an agent about this sheet"), giveTo, giveWhat, h("button", { class: "small", onclick: give }, "Give the task")] : null,
+    h("div", { class: "row wrap wspanelend" }, h("button", { class: "small", onclick: async () => (await flush(), pageHistory(page)) }, "History"), h("button", { class: "small danger", onclick: () => confirm(`Delete “${page.title}”? You can restore it from the Workspace, under Deleted.`) && attempt(async () => (await api("DELETE", `workspace/pages/${id}`), (ui.ws.open = null), sheetsView()), col) }, "Delete")),
+  );
+
+  fill(
+    col,
+    h(
+      "div",
+      { class: "wspage sheetpage" },
+      h(
+        "article",
+        { class: "wsdoc sheetdoc" },
+        h("nav", { class: "wstrail note small", "aria-label": "Where this is" }, h("button", { class: "plain link", onclick: () => ((ui.ws.open = null), sheetsView()) }, "Sheets"), page.folder ? ` › ${page.folder}` : ""),
+        h("div", { class: "wshead" }, title),
+        conflict,
+        waitingBox,
+        toolbar,
+        h("div", { class: "sheetbarrowtop" }, where, h("span", { class: "mono note small", "aria-hidden": "true" }, "fx"), bar),
+        gridBox,
+        tabsBox,
+        chartsBox,
+        h("p", { class: "note small" }, "Start a formula with =, for example =SUM(B2:B6) or =B2*1.1. To select several cells, click the first, then hold Shift and click the last."),
+      ),
+      aside,
+    ),
+  );
+  drawAll();
 }
 
 /** Office › Notes: quick notes in notebooks, with tags. A note is private until the owner shares it. */
@@ -7578,7 +7964,7 @@ async function drawTables(box, pageId) {
 }
 
 /** Which guide explains each page. */
-const GUIDES_BY_VIEW = { chat: "chat", inbox: "inbox", tasks: "tasks", projects: "projects", project: "projects", home: "work-in-progress", quest: "work-in-progress", bot: "work-in-progress", jobs: "schedules", team: "organization", market: "marketplace", marketbot: "marketplace", workspace: "workspace", docs: "office", notes: "office", library: "library", memory: "memory", skills: "skills", audit: "audit-log", integrations: "integrations", settings: "settings" };
+const GUIDES_BY_VIEW = { chat: "chat", inbox: "inbox", tasks: "tasks", projects: "projects", project: "projects", home: "work-in-progress", quest: "work-in-progress", bot: "work-in-progress", jobs: "schedules", team: "organization", market: "marketplace", marketbot: "marketplace", workspace: "workspace", docs: "office", notes: "office", sheets: "office", library: "library", memory: "memory", skills: "skills", audit: "audit-log", integrations: "integrations", settings: "settings" };
 const guideFor = (view) => (view === "integrations" && ui.integration === "ai-models" ? "ai-models" : GUIDES_BY_VIEW[view] ?? null);
 
 /** Shows a user guide in a reader beside the page. Links between guides open in the reader; the list of guides is on the left. */
@@ -7656,6 +8042,7 @@ window.talqavaShowLegal = showLegal;
 /** One line of a page's Markdown as plain reading text, for showing a change: "- [ ] x" becomes "☐ x". */
 const diffText = (line) =>
   String(line ?? "")
+    .replace(/^([A-Z]{1,2}\d{1,4})\t/, "$1: ") // a sheet's cell
     .replace(/^(\s*)[-*+] \[ \] /, "$1☐ ")
     .replace(/^(\s*)[-*+] \[[xX]\] /, "$1☑ ")
     .replace(/^(\s*)[-*+] /, "$1• ")

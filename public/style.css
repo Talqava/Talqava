@@ -1878,3 +1878,40 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .projecttabs { justify-self: start; }
 .projectfilters select, .projecthead select { width: auto; min-width: 130px; }
 .projectspage > .back, .projectspage > .projecttabs { justify-self: start; }
+
+/* Office sheets: a grid of cells with formulas. */
+.sheetdoc { max-width: none; min-width: 0; }
+.sheetpage .wsdoc { flex: 1 1 520px; }
+.sheettools { flex-wrap: wrap; gap: 6px; align-items: center; }
+.sheettools select { width: auto; }
+.sheetbarrowtop { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.sheetwhere { min-width: 56px; font-weight: 600; }
+.sheetbar { flex: 1; min-width: 0; }
+.sheetscroll { overflow: auto; max-height: 62vh; border: 1px solid var(--line); border-radius: var(--r-m, 8px); background: var(--panel, #fff); }
+.sheetgrid { border-collapse: collapse; font-size: 13px; }
+.sheetgrid th { position: sticky; top: 0; background: var(--ground, #f5f6f4); border: 1px solid var(--line); font-size: 11px; font-weight: 600; color: var(--muted, #5e615f); padding: 4px 8px; text-align: center; z-index: 1; }
+.sheetgrid thead th { z-index: 2; }
+.sheetgrid tbody th { position: sticky; left: 0; top: auto; min-width: 30px; }
+.sheetgrid td { border: 1px solid var(--line); padding: 0; }
+.sheetgrid td input { width: 112px; height: 28px; border: 0; background: transparent; padding: 0 8px; font: inherit; color: inherit; border-radius: 0; }
+.sheetgrid td input:focus { outline: 2px solid var(--green-text, #007a3d); outline-offset: -2px; }
+.sheetgrid td.n input { text-align: right; font-variant-numeric: tabular-nums; }
+.sheetgrid td.n input:focus { text-align: left; }
+.sheetgrid td.bad input { color: var(--critical, #b42318); }
+.sheetgrid td.sel { background: color-mix(in srgb, var(--green-text, #007a3d) 10%, transparent); }
+.sheetgrid td.locked { background-image: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--muted, #5e615f) 12%, transparent) 6px 7px); }
+.sheetgrid td.sug { outline: 2px dashed var(--warning, #9a6200); outline-offset: -2px; }
+.sheettabs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0; }
+.sheetcharts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin: 8px 0; }
+.sheetchart { margin: 0; display: grid; gap: 10px; }
+.sheetbars { display: grid; gap: 6px; }
+.sheetbarrow { display: grid; grid-template-columns: 90px 1fr auto; gap: 8px; align-items: center; font-size: 12px; }
+.sheetbarrow > :nth-child(2) { justify-self: start; }
+.sheetbarlabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheetbarfill { display: block; height: 16px; background: #1f5bc7; min-width: 2px; }
+.sheetline { width: 100%; height: 120px; color: #1f5bc7; }
+.sheetlinelabels { display: flex; justify-content: space-between; }
+.sheetwaiting { display: grid; gap: 8px; margin-bottom: 10px; }
+.sheetdiff { font-size: 13px; border-collapse: collapse; }
+.sheetdiff td { padding: 3px 12px 3px 0; }
+.sheetgroups { display: grid; gap: 2px; }
