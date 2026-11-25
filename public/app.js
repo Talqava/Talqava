@@ -117,9 +117,16 @@ const money = (n) => `$${n < 0.1 && n > 0 ? n.toFixed(3) : n.toFixed(2)}`;
 const basename = (p) => String(p).split(/[\\/]/).filter(Boolean).pop() || p;
 
 // ---------- sign-in ----------
-function showLogin() {
+async function showLogin() {
   state.source?.close();
-  const password = h("input", { type: "password", placeholder: "Password", autocomplete: "current-password" });
+  clearInterval(boot.timer);
+  if (showLogin.open && document.querySelector("form.login")) return; // already showing; keep what is typed
+  showLogin.open = true;
+  // With people set up, each person signs in with their email; otherwise there is one password.
+  const how = await fetch("/api/login").then((r) => r.json()).catch(() => ({ people: false }));
+  const email = h("input", { type: "email", placeholder: "Email", autocomplete: "username", "aria-label": "Email" });
+  const password = h("input", { type: "password", placeholder: "Password", autocomplete: "current-password", "aria-label": "Password" });
+  const code = h("input", { inputmode: "numeric", placeholder: "6-digit code from your authenticator app", autocomplete: "one-time-code", maxlength: 7, "aria-label": "Code from your authenticator app", hidden: true });
   const form = h(
     "form",
     {
@@ -127,17 +134,25 @@ function showLogin() {
       onsubmit: async (e) => {
         e.preventDefault();
         await attempt(async () => {
-          await api("POST", "login", { password: password.value });
+          const r = await api("POST", "login", how.people ? { email: email.value, password: password.value, ...(code.hidden ? {} : { code: code.value }) } : { password: password.value });
+          if (r.needsCode) {
+            code.hidden = false;
+            code.focus();
+            return;
+          }
+          if (r.setUpSecondStep) state.view = "security";
           boot();
         }, form);
       },
     },
     h("div", { class: "brand", role: "img", "aria-label": "Talqava" }, brandLogo({ mark: 48, word: 18 })),
+    how.people ? email : null,
     password,
+    code,
     h("button", { class: "primary" }, "Sign in"),
   );
   fill(app, form);
-  password.focus();
+  (how.people ? email : password).focus();
 }
 
 // ---------- start-up and refreshing ----------
@@ -151,6 +166,8 @@ async function boot() {
     return;
   }
   document.title = "Talqava";
+  state.me = await api("GET", "me").catch(() => null);
+  if (state.me?.mustSetUpSecondStep) state.view = "security";
   if (!state.config.projects.includes(state.project)) state.project = "";
   if (needsKey(state.config)) (state.view = "integrations"), (ui.integration = "ai-models");
   await Promise.all([loadCrew(), loadQuests(), refreshList(), loadTemplates(), loadSpaces(), loadOrgs()]);
@@ -281,6 +298,7 @@ const ICONS = {
   jobs: "M10 5.5V10l3 2M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0z",
   settings: "M4 6h7M15 6h1M4 14h1M9 14h7M13 4v4M7 12v4",
   integrations: "M7.5 3.5v4M12.5 3.5v4M5.5 7.5h9v2.5a4.5 4.5 0 0 1-9 0zM10 14.5v2.5",
+  security: "M10 3l6 2.2v4.3c0 3.6-2.5 6.3-6 7.5-3.5-1.2-6-3.9-6-7.5V5.2zM7.6 10l1.7 1.7 3.2-3.4",
   audit: "M6 3.5h6l3 3v10H6A1.5 1.5 0 0 1 4.5 15V5A1.5 1.5 0 0 1 6 3.5zM7.5 9h5M7.5 11.5h5M7.5 14h3",
   workspace: "M5.5 3.5h6l3 3v10h-9zM11.5 3.5v3h3M7.5 10h5M7.5 12.5h5M7.5 7.5h2",
   tasks: "M4 4.5h3v11H4zM8.5 4.5h3v7h-3zM13 4.5h3v4h-3z",
@@ -331,13 +349,14 @@ function renderRail() {
       item("skills", "Skills", v === "skills", "Step-by-step know-how your agents can follow"),
     ),
     h("div", { class: "raillabel" }, "Oversight"),
-    h("div", { class: "railgroup" }, item("audit", "Audit log", v === "audit", "Every operation, by you and by each agent")),
+    h("div", { class: "railgroup" }, item("audit", "Audit log", v === "audit", "Every operation, by you and by each agent"), item("security", "Security", v === "security", "People, roles and how everyone signs in")),
     h(
       "div",
       { class: "railgroup railend" },
       item("integrations", "Integrations", v === "integrations", "Connect the tools your business already uses"),
       item("settings", "Settings", v === "settings", "AI models, approvals, budgets and how Talqava looks"),
       h("button", { class: "railitem", onclick: () => showGuide(guideFor(v) ?? "getting-started"), title: "How to use Talqava, page by page" }, icon("guide"), h("span", { class: "grow" }, "User guide")),
+      state.me?.person ? h("button", { class: "railitem", onclick: () => attempt(async () => (await api("POST", "logout"), (state.me = null), showLogin())), title: `Signed in as ${state.me.person.name} (${state.me.role.name})` }, icon("security"), h("span", { class: "grow" }, "Sign out")) : null,
     ),
   );
   syncInboxCount();
@@ -376,7 +395,7 @@ function renderBody() {
   state.source = null;
   ui.log = null;
   ui.body.className = "body";
-  const views = { home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView, docs: docsView, notes: notesView, sheets: sheetsView };
+  const views = { home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView, security: securityView, docs: docsView, notes: notesView, sheets: sheetsView };
   (views[state.view] || homeView)();
 }
 
@@ -7818,6 +7837,149 @@ async function notesView() {
   );
 }
 
+/** Security: people, their roles, and how everyone signs in. */
+async function securityView() {
+  ui.body.className = "body";
+  ui.log = null;
+  const col = h("div", { class: "integrations security" });
+  fill(ui.body, h("main", { class: "center" }, col));
+  let data;
+  try {
+    data = await api("GET", "people");
+  } catch (err) {
+    // A member cannot see other people, but still manages their own sign-in.
+    data = { enabled: true, people: [], settings: null, roles: [], me: state.me?.person ?? null, own: true, why: err.message };
+  }
+  if (state.view !== "security") return;
+  const again = () => securityView();
+  const act = (fn) => attempt(async () => (await fn(), again()), col);
+  const head = h("div", {}, h("h1", {}, "Security"), h("p", { class: "lead" }, "Who can open Talqava, how they prove who they are, and what each person may do. Your agents' limits are on each agent's page and under Organization › Access."));
+  const passwordHelp = "At least 12 characters. A few unrelated words work well.";
+
+  // Not set up yet: this computer is trusted, as it always was. The owner can add people.
+  if (!data.enabled) {
+    const name = h("input", { placeholder: "Your name", autocomplete: "name", "aria-label": "Your name" });
+    const email = h("input", { type: "email", placeholder: "Your email", autocomplete: "username", "aria-label": "Your email" });
+    const pw = h("input", { type: "password", placeholder: "A password", autocomplete: "new-password", "aria-label": "A password" });
+    return fill(
+      col,
+      head,
+      h("div", { class: "card form" }, h("b", {}, "Right now: one person, no sign-in"), h("p", { class: "note" }, "Anyone who can use this computer can open Talqava and do everything. That is fine for one owner on their own computer.")),
+      h(
+        "form",
+        { class: "card form", onsubmit: (e) => (e.preventDefault(), confirm("Turn on people and sign-in?\n\nFrom now on Talqava asks everyone, including you on this computer, to sign in. Keep your password safe: if you forget it, see “If something goes wrong” in the Security guide.") && attempt(async () => (await api("POST", "people/start", { name: name.value, email: email.value, password: pw.value }), boot()), col)) },
+        h("b", {}, "Add people, each with their own sign-in and role"),
+        h("p", { class: "note" }, "Start by making your own account. You become the Owner. Then add the others and choose what each may do."),
+        name,
+        email,
+        pw,
+        h("p", { class: "note small" }, passwordHelp),
+        h("div", {}, h("button", { class: "primary" }, "Turn on people and sign-in")),
+      ),
+    );
+  }
+
+  const me = data.me;
+  const admin = me && (me.role === "owner" || me.role === "admin");
+
+  // ----- your own sign-in -----
+  const stepBox = h("div");
+  const startStep = () =>
+    attempt(async () => {
+      const s = await api("POST", "me/second-step");
+      const code = h("input", { inputmode: "numeric", placeholder: "6-digit code", maxlength: 7, "aria-label": "Code from your authenticator app" });
+      fill(
+        stepBox,
+        h("ol", {}, h("li", {}, "Open an authenticator app on your phone (any app that shows 6-digit codes)."), h("li", {}, "Add an account by typing this key: ", h("code", { class: "stepkey" }, s.key), " ", h("a", { href: s.link }, "or open it on this device")), h("li", {}, "Type the 6-digit code the app shows:")),
+        h("form", { class: "row", onsubmit: (e) => (e.preventDefault(), attempt(async () => (await api("POST", "me/second-step/confirm", { code: code.value }), toast("Your second step is on."), boot()), col)) }, code, h("button", { class: "primary" }, "Turn on")),
+      );
+      code.focus();
+    }, col);
+  const cur = h("input", { type: "password", placeholder: "Current password", autocomplete: "current-password", "aria-label": "Current password" });
+  const next = h("input", { type: "password", placeholder: "New password", autocomplete: "new-password", "aria-label": "New password" });
+  const mine = me
+    ? h(
+        "section",
+        { class: "isec" },
+        h("h2", {}, "Your sign-in"),
+        h(
+          "div",
+          { class: "card form" },
+          h("div", { class: "row" }, h("div", { class: "grow" }, h("b", {}, me.name), h("div", { class: "note small" }, `${me.email} · ${state.me?.role?.name ?? me.role}`)), h("span", { class: `chip ${me.secondStep ? "on" : ""}` }, me.secondStep ? "Second step on" : "No second step")),
+          state.me?.mustSetUpSecondStep ? h("div", { class: "banner error" }, "Your organization requires a second step. Set it up now to carry on.") : null,
+          h("p", { class: "note" }, "A second step means a stolen password is not enough: signing in also needs a code from an app on your phone."),
+          h("div", {}, h("button", { class: me.secondStep ? "" : "primary", onclick: startStep }, me.secondStep ? "Set it up again (new phone)" : "Set up a second step")),
+          stepBox,
+          h("form", { class: "form", onsubmit: (e) => (e.preventDefault(), attempt(async () => (await api("POST", "me/password", { current: cur.value, password: next.value }), toast("Password changed. Sign in again."), showLogin()), col)) }, h("b", {}, "Change your password"), cur, next, h("p", { class: "note small" }, passwordHelp), h("div", {}, h("button", {}, "Change password"))),
+        ),
+      )
+    : null;
+  if (data.own) return fill(col, head, mine, h("p", { class: "note" }, "Only owners, administrators, managers and auditors see the list of people."));
+
+  // ----- people -----
+  const roleSelect = (value, onchange, withOwner = false) => h("select", { "aria-label": "Role", onchange }, data.roles.filter((r) => withOwner || r.id !== "owner").map((r) => h("option", { value: r.id, selected: r.id === value }, r.name)));
+  const row = (p) =>
+    h(
+      "tr",
+      {},
+      h("td", {}, h("b", {}, p.name), p.id === me?.id ? h("span", { class: "note small" }, " · you") : null, h("div", { class: "note small" }, p.email)),
+      h("td", {}, admin && p.role !== "owner" && p.id !== me.id ? roleSelect(p.role, (e) => act(() => api("PATCH", `people/${p.id}`, { role: e.target.value }))) : data.roles.find((r) => r.id === p.role)?.name ?? p.role),
+      h("td", {}, h("span", { class: `chip ${p.secondStep ? "on" : ""}` }, p.secondStep ? "On" : "Not set up"), p.locked ? h("span", { class: "chip warn" }, "Locked") : null),
+      h("td", {}, p.lastSignIn ? when(p.lastSignIn) : "Never"),
+      h(
+        "td",
+        {},
+        admin && p.id !== me.id && (p.role !== "owner" || me.role === "owner")
+          ? h(
+              "div",
+              { class: "row wrap" },
+              h("button", { class: "small", onclick: () => ((pw) => pw && act(() => api("POST", `people/${p.id}/password`, { password: pw })))(prompt(`A new password for ${p.name} (${passwordHelp.toLowerCase()}) Tell it to them in person; they should change it after signing in.`)) }, "New password"),
+              p.secondStep ? h("button", { class: "small", onclick: () => confirm(`Take off ${p.name}'s second step? Do this only if they lost their phone, and you are sure it is them asking.`) && act(() => api("POST", `people/${p.id}/clear-second-step`)) }, "Lost phone") : null,
+              p.role !== "owner" ? h("button", { class: "small danger", onclick: () => confirm(`Remove ${p.name}? They are signed out at once and can no longer open Talqava.`) && act(() => api("DELETE", `people/${p.id}`)) }, "Remove") : null,
+            )
+          : null,
+      ),
+    );
+  const nName = h("input", { placeholder: "Name", "aria-label": "Name" });
+  const nEmail = h("input", { type: "email", placeholder: "Email", "aria-label": "Email" });
+  const nPw = h("input", { type: "password", placeholder: "A first password", autocomplete: "new-password", "aria-label": "A first password" });
+  const nRole = roleSelect("member", null);
+  const sessions = h("div");
+  const showSessions = () => attempt(async () => fill(sessions, h("ul", {}, (await api("GET", "people/sessions")).map((x) => h("li", {}, h("b", {}, x.name), ` · signed in ${when(x.createdAt)} · last active ${when(x.seenAt)}`, h("div", { class: "note small" }, x.device || "Unknown device"))))), col);
+  const st = data.settings;
+  fill(
+    col,
+    head,
+    mine,
+    h(
+      "section",
+      { class: "isec" },
+      h("h2", {}, `People · ${data.people.length}`),
+      h("div", { class: "card officetable" }, h("table", {}, h("thead", {}, h("tr", {}, ["Person", "Role", "Second step", "Last sign-in", ""].map((t) => h("th", { scope: "col" }, t)))), h("tbody", {}, data.people.map(row)))),
+      admin
+        ? h("form", { class: "card form", onsubmit: (e) => (e.preventDefault(), act(async () => (await api("POST", "people", { name: nName.value, email: nEmail.value, password: nPw.value, role: nRole.value }), toast(`${nName.value} can now sign in.`)))) }, h("b", {}, "Add a person"), h("div", { class: "row wrap" }, nName, nEmail, nRole), nPw, h("p", { class: "note small" }, `${passwordHelp} Tell it to them in person; they change it after signing in.`), h("div", {}, h("button", { class: "primary" }, "Add person")))
+        : null,
+    ),
+    h("section", { class: "isec" }, h("h2", {}, "What each role may do"), h("div", { class: "card form" }, h("dl", { class: "roles" }, data.roles.map((r) => [h("dt", {}, r.name), h("dd", {}, r.may)])), h("p", { class: "note small" }, "Roles are enforced by the app itself, not just hidden on screen. Limiting a manager or member to their own groups is not built yet: a manager can change the whole chart."))),
+    admin
+      ? h(
+          "section",
+          { class: "isec" },
+          h("h2", {}, "Rules for everyone"),
+          h(
+            "div",
+            { class: "card form" },
+            h("label", { class: "power" }, h("input", { type: "checkbox", checked: st.requireSecondStep, onchange: (e) => (!e.target.checked || me.secondStep || confirm("You have not set up your own second step yet. If you require it, you will be asked to set it up before you can do anything else. Carry on?") ? act(() => api("PUT", "people/settings", { requireSecondStep: e.target.checked })) : again()) }), "Require a second step for everyone"),
+            h("p", { class: "note small" }, "Anyone without one is asked to set it up the next time they sign in, before they can do anything else."),
+            h("label", {}, "Sign people out after this long without activity", h("select", { onchange: (e) => act(() => api("PUT", "people/settings", { idleMinutes: Number(e.target.value) })) }, st.idleChoices.map((m) => h("option", { value: m, selected: m === st.idleMinutes }, m < 120 ? `${m / 60} hour` : m < 2880 ? `${m / 60} hours` : `${m / 1440} days`)))),
+            h("div", { class: "row wrap" }, h("button", { onclick: showSessions }, "See who is signed in"), h("button", { class: "danger", onclick: () => confirm("Sign everyone else out? They will need to sign in again. You stay signed in.") && act(async () => toast(`${(await api("POST", "people/sign-out-all")).ended} session(s) ended.`)) }, "Sign everyone else out")),
+            sessions,
+          ),
+        )
+      : null,
+  );
+}
+
 /** A table's columns: names, types and choices. Saving keeps the values that still fit. */
 function columnsDialog(t, types, done) {
   const dialog = h("dialog", { class: "aidialog" });
@@ -7964,7 +8126,7 @@ async function drawTables(box, pageId) {
 }
 
 /** Which guide explains each page. */
-const GUIDES_BY_VIEW = { chat: "chat", inbox: "inbox", tasks: "tasks", projects: "projects", project: "projects", home: "work-in-progress", quest: "work-in-progress", bot: "work-in-progress", jobs: "schedules", team: "organization", market: "marketplace", marketbot: "marketplace", workspace: "workspace", docs: "office", notes: "office", sheets: "office", library: "library", memory: "memory", skills: "skills", audit: "audit-log", integrations: "integrations", settings: "settings" };
+const GUIDES_BY_VIEW = { chat: "chat", inbox: "inbox", tasks: "tasks", projects: "projects", project: "projects", home: "work-in-progress", quest: "work-in-progress", bot: "work-in-progress", jobs: "schedules", team: "organization", market: "marketplace", marketbot: "marketplace", workspace: "workspace", docs: "office", notes: "office", security: "security", sheets: "office", library: "library", memory: "memory", skills: "skills", audit: "audit-log", integrations: "integrations", settings: "settings" };
 const guideFor = (view) => (view === "integrations" && ui.integration === "ai-models" ? "ai-models" : GUIDES_BY_VIEW[view] ?? null);
 
 /** Shows a user guide in a reader beside the page. Links between guides open in the reader; the list of guides is on the left. */

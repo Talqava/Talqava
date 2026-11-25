@@ -44,6 +44,8 @@ import { accessGraph, accessGraphs } from "./access.ts";
 import { loadModelList } from "./modelprices.ts";
 import { COLUMN_TYPES, peopleOf, tables } from "./tables.ts";
 import { sheets } from "./sheets.ts";
+import { ROLES, ROLE_WORDS, mayDo, people } from "./people.ts";
+import type { Person } from "./people.ts";
 import { projects } from "./projects.ts";
 import { connectCatalog, connectorLabel, disconnectCatalog, listCatalog } from "./connector-catalog.ts";
 import { installKit, listKits, previewKit, runPlaybook, undoKit } from "./kits.ts";
@@ -82,6 +84,7 @@ const GUIDES = [
   ["marketplace", "Marketplace"],
   ["workspace", "Workspace"],
   ["office", "Office: Documents, Sheets and Notes"],
+  ["security", "Security: people, roles and sign-in"],
   ["library", "Library"],
   ["memory", "Memory"],
   ["skills", "Skills"],
@@ -173,7 +176,9 @@ function auditEvent(id: string, event: RunEvent) {
 function describeRequest(method: string, parts: string[], body: any, url: URL): { kind: string; action: string; detail?: string; task?: string } | null {
   const [area, id, action] = parts;
   const words = (b: unknown) => JSON.stringify(redact(b ?? {})).slice(0, 400);
-  if (area === "login") return { kind: "settings", action: "Signed in" };
+  if (area === "login" || area === "logout") return area === "logout" ? { kind: "security", action: "Signed out" } : people.enabled() ? null : { kind: "settings", action: "Signed in" };
+  if (area === "me") return { kind: "security", action: id === "password" ? "Changed their own password" : action === "confirm" ? "Turned on their second step" : "Started setting up their second step" };
+  if (area === "people") return { kind: "security", action: id === "start" ? "Set up people" : id === "settings" ? "Changed the sign-in rules" : id === "sign-out-all" ? "Signed everyone out" : method === "POST" && !id ? `Added a person: ${String(body.name ?? "").slice(0, 60)} as ${String(body.role ?? "member")}` : method === "DELETE" ? "Removed a person" : action === "password" ? "Set a new password for a person" : action === "clear-second-step" ? "Took off a person's second step" : `Changed a person${body.role ? `: role ${String(body.role)}` : ""}` };
   if (area === "quests" && !id && method === "POST") return null; // the route records it, knowing whether the task started
   if (area === "quests" && id && action === "plan") return null; // the plan writes its own entry
   if (area === "quests" && id) return { kind: "task", task: id, action: action === "stop" ? "Stopped a task" : action === "board" ? "Posted to a task's board" : action === "escalate" ? "Handed a task to Claude" : action === "accept" ? "Kept a task's changes" : action === "undo" ? "Undid a task's changes" : method === "DELETE" ? "Deleted a task" : `${method} task ${action ?? ""}`.trim() };
@@ -264,10 +269,15 @@ const sessionToken = () => crypto.createHmac("sha256", getConfig().sessionSecret
 /** Compares two texts without giving away, by how long it takes, where they differ. */
 const sameText = (a: string, b: string) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
+const cookieOf = (req: IncomingMessage) => new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([a-f0-9]+)`).exec(req.headers.cookie || "")?.[1];
+/** The person a request comes from, once people are set up; null otherwise or when not signed in. */
+const personOf = (req: IncomingMessage): Person | null => (people.enabled() ? people.who(cookieOf(req)) : null);
+
 function signedIn(req: IncomingMessage): boolean {
+  if (people.enabled()) return Boolean(personOf(req));
   if (!PASSWORD) return true;
-  const cookie = new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([a-f0-9]+)`).exec(req.headers.cookie || "");
-  return Boolean(cookie) && sameText(cookie![1], sessionToken());
+  const cookie = cookieOf(req);
+  return Boolean(cookie) && sameText(cookie!, sessionToken());
 }
 
 // Without a password the page only answers to this machine's own address, and
@@ -275,7 +285,7 @@ function signedIn(req: IncomingMessage): boolean {
 // open in the same browser from reaching the agent.
 function checkOrigin(req: IncomingMessage) {
   const host = (req.headers.host || "").replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
-  if (!PASSWORD && !LOCAL_HOSTS.has(host)) throw new HttpError(403, "Open this page as http://localhost.");
+  if (!PASSWORD && !people.enabled() && !LOCAL_HOSTS.has(host)) throw new HttpError(403, "Open this page as http://localhost.");
   const origin = req.headers.origin;
   if (origin && new URL(origin).host !== req.headers.host) throw new HttpError(403, "Cross-site request refused.");
 }
@@ -697,8 +707,29 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   // A file dropped into the library arrives as it is, not as JSON; it is read after the sign-in check below.
   const upload = route === "POST library" && parts[1] === "upload";
   const body = upload ? {} : ["POST", "PUT", "PATCH"].includes(req.method ?? "") ? await readBody(req) : {};
-  (req as { auditBody?: unknown }).auditBody = route === "POST login" ? {} : body;
+  (req as { auditBody?: unknown }).auditBody = route === "POST login" || parts[0] === "me" || parts[0] === "people" ? { name: body.name, role: body.role } : body;
 
+  const secureCookie = req.headers["x-forwarded-proto"] === "https" ? "; Secure" : "";
+  const sessionCookie = (token: string, maxAge: number) => ({ "set-cookie": `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secureCookie}` });
+  // How to sign in: with an email and password once people are set up, with the one password otherwise.
+  if (route === "GET login") return send(res, 200, { people: people.enabled(), password: Boolean(PASSWORD) });
+  if (route === "POST login" && people.enabled()) {
+    let result: ReturnType<typeof people.signIn>;
+    try {
+      result = people.signIn(body, String(req.headers["user-agent"] ?? ""));
+    } catch (err) {
+      await new Promise((r) => setTimeout(r, 1000)); // slows password guessing
+      audit({ actor: "system", actorName: "Talqava", kind: "security", ok: false, action: "A sign-in was refused", detail: `${String(body.email ?? "").slice(0, 80)}: ${(err as Error).message}` });
+      throw new HttpError(401, (err as Error).message);
+    }
+    if ("needsCode" in result) return send(res, 200, { needsCode: true });
+    audit({ actor: `person:${result.person.id}`, actorName: result.person.name, kind: "security", action: "Signed in" });
+    return send(res, 200, { ok: true, setUpSecondStep: result.setUpSecondStep }, sessionCookie(result.token, 2592000));
+  }
+  if (route === "POST logout") {
+    people.signOut(cookieOf(req));
+    return send(res, 200, { ok: true }, sessionCookie("", 0));
+  }
   if (route === "POST login") {
     const ok = PASSWORD && crypto.timingSafeEqual(passwordKey(String(body.password || "").slice(0, 1000)), ownPasswordKey());
     if (!ok) {
@@ -724,6 +755,52 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     return res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OpenRouter ${ok ? "connected" : "not connected"}</title><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0d0c;color:#e8ece9;font:16px/1.5 -apple-system,system-ui,sans-serif"><main style="max-width:440px;padding:32px;border:1px solid #2a302c;border-radius:16px;background:#121513"><p style="margin:0 0 8px;font-size:12px;letter-spacing:.12em;color:${ok ? "#39ff88" : "#ff8f8f"}">${ok ? "CONNECTED" : "NOT CONNECTED"}</p><h1 style="margin:0 0 12px;font-size:22px">${ok ? "You are all set" : "The sign-in did not finish"}</h1><p style="margin:0;color:#b5bdb8">${safe}</p></main></body>`);
   }
   if (!signedIn(req)) throw new HttpError(401, "Sign in first.");
+
+  // People and roles. With nobody added yet, the first account (the owner's) can be made from this computer.
+  const tryIt = async <T>(fn: () => T | Promise<T>): Promise<T> => {
+    try {
+      return await fn();
+    } catch (err) {
+      throw err instanceof HttpError ? err : new HttpError(400, (err as Error).message);
+    }
+  };
+  const me = personOf(req);
+  (req as { person?: Person | null }).person = me;
+  if (me) {
+    const area = parts[0] || "";
+    if (people.mustSetUpSecondStep(me) && !["me", "state", "people"].includes(area)) throw new HttpError(403, "Set up your second step first: your organization requires it. Open Security.");
+    if (!mayDo(me.role, req.method ?? "GET", area, parts[1] ?? "")) throw new HttpError(403, `Your role (${ROLE_WORDS[me.role].name}) does not allow that. Ask an administrator.`);
+  }
+  if (parts[0] === "me") {
+    if (route === "GET me") return send(res, 200, { person: me, role: me ? ROLE_WORDS[me.role] : null, mustSetUpSecondStep: me ? people.mustSetUpSecondStep(me) : false });
+    if (!me) throw new HttpError(400, "People are not set up.");
+    if (req.method === "POST" && parts[1] === "password") return send(res, 200, await tryIt(() => people.setPassword(me.id, body.password, me, body.current)));
+    if (req.method === "POST" && parts[1] === "second-step" && !parts[2]) return send(res, 200, await tryIt(() => people.startSecondStep(me.id)));
+    if (req.method === "POST" && parts[1] === "second-step" && parts[2] === "confirm") return send(res, 200, await tryIt(() => people.confirmSecondStep(me.id, body.code)));
+    throw new HttpError(404, "Not found.");
+  }
+  if (parts[0] === "people") {
+    if (route === "GET people" && !parts[1]) return send(res, 200, { enabled: people.enabled(), people: people.list(), settings: people.settings(), roles: ROLES.map((r) => ({ id: r, ...ROLE_WORDS[r] })), me });
+    if (route === "POST people" && parts[1] === "start") {
+      // Only from this computer itself, and only while nobody has an account.
+      const host = (req.headers.host || "").replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
+      if (!LOCAL_HOSTS.has(host)) throw new HttpError(403, "Set up people from the computer Talqava runs on.");
+      const made = await tryIt(() => people.start(body));
+      const signed = people.signIn({ email: made.email, password: body.password }, String(req.headers["user-agent"] ?? ""));
+      audit({ actor: `person:${made.id}`, actorName: made.name, kind: "security", action: "Set up people and sign-in, as the owner" });
+      return send(res, 200, { person: made }, "token" in signed ? sessionCookie(signed.token, 2592000) : {});
+    }
+    if (!me) throw new HttpError(400, "Set up people first.");
+    if (route === "GET people" && parts[1] === "sessions") return send(res, 200, people.sessions());
+    if (route === "POST people" && parts[1] === "sign-out-all") return send(res, 200, people.signEveryoneOut(cookieOf(req)));
+    if (route === "PUT people" && parts[1] === "settings") return send(res, 200, await tryIt(() => people.setSettings(body)));
+    if (route === "POST people" && !parts[1]) return send(res, 200, await tryIt(() => people.add(body, me)));
+    if (route === "PATCH people" && parts[1]) return send(res, 200, await tryIt(() => people.update(parts[1], body, me)));
+    if (route === "DELETE people" && parts[1]) return send(res, 200, await tryIt(() => people.remove(parts[1], me)));
+    if (route === "POST people" && parts[1] && parts[2] === "password") return send(res, 200, await tryIt(() => people.setPassword(parts[1], body.password, me)));
+    if (route === "POST people" && parts[1] && parts[2] === "clear-second-step") return send(res, 200, await tryIt(() => people.clearSecondStep(parts[1], me)));
+    throw new HttpError(404, "Not found.");
+  }
 
   if (route === "GET state") return send(res, 200, publicConfig());
   if (route === "PUT settings") return send(res, 200, await updateSettings(body));
@@ -1517,6 +1594,9 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   throw new HttpError(404, "Not found.");
 }
 
+/** Who to name in the audit log for a request: the signed-in person, or "You" when people are not set up. */
+const requestActor = (req: IncomingMessage) => ((p) => (p ? { actor: `person:${p.id}`, actorName: `${p.name} (${ROLE_WORDS[p.role].name})` } : { actor: "owner", actorName: "You" }))((req as { person?: Person | null }).person);
+
 export async function handle(req: IncomingMessage, res: ServerResponse) {
   try {
     checkOrigin(req);
@@ -1528,12 +1608,12 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
         await api(req, res, url);
         if (record) {
           const d = describeRequest(req.method ?? "", parts, (req as { auditBody?: unknown }).auditBody ?? {}, url);
-          if (d) audit({ actor: "owner", actorName: "You", ...d, ok: res.statusCode < 400 });
+          if (d) audit({ ...requestActor(req), ...d, ok: res.statusCode < 400 });
         }
       } catch (err) {
         if (record) {
           const d = describeRequest(req.method ?? "", parts, (req as { auditBody?: unknown }).auditBody ?? {}, url);
-          if (d && parts[0] !== "login") audit({ actor: "owner", actorName: "You", ...d, ok: false, detail: `${d.detail ? `${d.detail} · ` : ""}Refused: ${(err as Error).message}` });
+          if (d && parts[0] !== "login") audit({ ...requestActor(req), ...d, ok: false, detail: `${d.detail ? `${d.detail} · ` : ""}Refused: ${(err as Error).message}` });
         }
         throw err;
       }
@@ -1550,7 +1630,7 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
 }
 
 export function start() {
-  if (!LOCAL_HOSTS.has(HOST) && !PASSWORD) {
+  if (!LOCAL_HOSTS.has(HOST) && !PASSWORD && !people.enabled()) {
     console.error(
       `Refusing to start: HOST is ${HOST}, which other machines can reach, but ${BRAND.envPrefix}PASSWORD is not set.\n` +
         `This agent can run commands, so it must not be open to a network without a password. Set ${BRAND.envPrefix}PASSWORD in .env.`,

@@ -1915,3 +1915,11 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .sheetdiff { font-size: 13px; border-collapse: collapse; }
 .sheetdiff td { padding: 3px 12px 3px 0; }
 .sheetgroups { display: grid; gap: 2px; }
+
+/* Security: people and sign-in. */
+.security .roles { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+.security .roles dt { font-weight: 600; }
+.security .roles dd { margin: 0; color: var(--ink-soft, #3c3f3d); }
+.security .stepkey { font-size: 14px; letter-spacing: 0.06em; user-select: all; }
+.security .officetable td { vertical-align: top; }
+.login input[hidden] { display: none; }
