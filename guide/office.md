@@ -138,15 +138,24 @@ In the panel, under **Turn it into**:
 
 To make it a task, choose an agent under **Give this note to an agent** and press **Give the task**. Share the note with that agent first, or the agent cannot read it.
 
+### Open or save Word and Excel files
+
+- **Save a document as a Word file:** open it and press **Word file (.docx)** under **Download**.
+- **Bring a Word file in:** on the **Documents** home screen, press **Import a Word file**. It opens as a new document.
+- **Save a sheet as an Excel file:** open it and press **Excel file (.xlsx)** in its toolbar. Formulas go with it.
+- **Bring an Excel file in:** on the **Sheets** home screen, press **Import an Excel file**. Each sheet in the file becomes a sheet here.
+
+What is kept: text, headings, lists, tables, bold and italic; cell values, formulas and sheet names. What is not: fonts, colours, page layout, pictures, charts, merged cells and comments. A formula that uses a function Sheets does not have shows **#NAME?** after import. Older .doc and .xls files need saving as .docx or .xlsx first.
+
 ### Download or print
 
 1. Open the document or note.
-2. Under **Download**, press **For Word** to get a file that opens in Microsoft Word and similar programs, or **Print or save as PDF**.
+2. Under **Download**, press **Word file (.docx)** to get a file that opens in Microsoft Word and similar programs, or **Print or save as PDF**.
 
 ## What is not built yet
 
 - Slides: a chart linked to a sheet, pictures, layouts other than a title with text, and saving as a PowerPoint file.
-- Opening and saving Word, Excel and PowerPoint files (documents download as a simple file Word opens; sheets go in and out as CSV).
+- Saving slides as a PowerPoint file, and opening one.
 - Notes: voice memos written out, and searching the words in photos.
 
 ## Tips

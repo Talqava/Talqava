@@ -44,6 +44,7 @@ import { accessGraph, accessGraphs } from "./access.ts";
 import { loadModelList } from "./modelprices.ts";
 import { COLUMN_TYPES, peopleOf, tables } from "./tables.ts";
 import { sheets } from "./sheets.ts";
+import { fromDocx, fromXlsx, toDocx, toXlsx } from "./officefiles.ts";
 import { listOfficeTemplates, useOfficeTemplate } from "./office-templates.ts";
 import { pageTool } from "../core/tools/page.ts";
 import { describeGuardrails, guardrails, guardrailsFrom } from "./guardrails.ts";
@@ -731,7 +732,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   const parts = url.pathname.split("/").filter(Boolean).slice(1); // after "api"
   const route = `${req.method} ${parts[0] || ""}`;
   // A file dropped into the library arrives as it is, not as JSON; it is read after the sign-in check below.
-  const upload = route === "POST library" && parts[1] === "upload";
+  const upload = (route === "POST library" && parts[1] === "upload") || (route === "POST workspace" && parts[1] === "import-file");
   const body = upload ? {} : ["POST", "PUT", "PATCH"].includes(req.method ?? "") ? await readBody(req) : {};
   (req as { auditBody?: unknown }).auditBody = route === "POST login" || parts[0] === "me" || parts[0] === "people" || parts[0] === "security-ops" ? { name: body.name, role: body.role } : body;
 
@@ -1338,6 +1339,42 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     // Sheets: a new one (from a CSV file, or empty) and one sheet out as CSV. Everything else is the pages routes.
     if (route === "POST workspace" && area === "sheets" && !id) return send(res, 200, await attempt(() => sheets.create(org, null, { title: body.title, folder: body.folder, csv: body.csv })));
     if (route === "GET workspace" && area === "sheets" && id && sub === "csv") return send(res, 200, await attempt(() => sheets.csv(org, id, url.searchParams.get("sheet") ?? undefined)));
+    // Word and Excel files, out and in. They are written and read here, with no outside library.
+    if (route === "GET workspace" && area === "pages" && id && (sub === "docx" || sub === "xlsx")) {
+      let page: ReturnType<typeof workspace.get>;
+      let data: Buffer;
+      try {
+        page = workspace.get(org, id);
+        if (sub === "xlsx" && page.kind !== "sheet") throw new Error("Only a sheet can be saved as an Excel file.");
+        if (sub === "docx" && page.kind === "sheet") throw new Error("A sheet is saved as an Excel file, not a Word file.");
+        data = sub === "docx" ? toDocx(page.title, page.markdown) : toXlsx(page.markdown);
+      } catch (err) {
+        throw new HttpError(400, (err as Error).message);
+      }
+      const name = `${page.title.replace(/[^\w .-]+/g, " ").trim().slice(0, 80) || "file"}.${sub}`;
+      res.writeHead(200, { "content-type": sub === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "content-disposition": `attachment; filename="${name}"`, "cache-control": "no-store", "x-content-type-options": "nosniff" });
+      return res.end(data);
+    }
+    if (route === "POST workspace" && area === "import-file") {
+      return send(res, 200, await attempt(async () => {
+        const chunks: Buffer[] = [];
+        let size = 0;
+        for await (const chunk of req) {
+          size += (chunk as Buffer).length;
+          if (size > 30_000_000) throw new Error("That file is larger than 30 MB.");
+          chunks.push(chunk as Buffer);
+        }
+        const name = decodeURIComponent(url.searchParams.get("name") ?? "file");
+        const title = name.replace(/\.[a-z0-9]+$/i, "").slice(0, 100) || "Imported file";
+        const data = Buffer.concat(chunks);
+        if (/\.docx$/i.test(name)) {
+          const doc = fromDocx(data);
+          return workspace.create(org, null, { kind: "doc", title: doc.title || title, markdown: doc.markdown });
+        }
+        if (/\.xlsx$/i.test(name)) return workspace.create(org, null, { kind: "sheet", title, markdown: fromXlsx(data) });
+        throw new Error("Choose a Word file (.docx) or an Excel file (.xlsx). Older .doc and .xls files need saving in the newer format first.");
+      }));
+    }
     // Office templates, reminders that are due, and saving a web page as a note.
     if (route === "GET workspace" && area === "office-templates") return send(res, 200, listOfficeTemplates());
     if (route === "POST workspace" && area === "office-templates" && id) return send(res, 200, await attempt(() => useOfficeTemplate(org, id)));

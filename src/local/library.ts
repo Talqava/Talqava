@@ -129,7 +129,7 @@ const safeName = (name: string) => name.replace(/[\\/:*?"<>|\x00-\x1f]/g, "-").r
 // ---------- reading files ----------
 
 /** The files inside a .docx, .pptx or .xlsx (they are zip archives), by name. */
-function unzip(buffer: Buffer): Map<string, () => Buffer> {
+export function unzip(buffer: Buffer): Map<string, () => Buffer> {
   const files = new Map<string, () => Buffer>();
   // The directory of entries is at the end; find its end record.
   let end = -1;
