@@ -500,7 +500,75 @@ async function liveLocal(baseUrl: string): Promise<{ running: boolean; models: n
   }
 }
 
+// ---------- is each service still working? ----------
+// Each connected service online is checked every few hours with the same free request used when it was connected
+// (list its models, or sign in), so an expired key or an account out of credit is found before a task fails.
+const health = new Map<string, { ok: boolean; problem?: string; checkedAt: number }>();
+const HEALTH_EVERY = 6 * 3600 * 1000;
+const checking = new Set<string>();
+
+async function checkService(provider: ProviderConfig): Promise<{ ok: boolean; problem?: string }> {
+  const cfg = getConfig();
+  const service = serviceOfProvider(provider);
+  try {
+    if (service?.serviceAccount) {
+      await accessToken(parseServiceAccount(provider.apiKey));
+    } else if (provider.kind === "anthropic") {
+      const key = cfg.apiKey || process.env.ANTHROPIC_API_KEY;
+      if (!key) return { ok: true };
+      await tryConnection(serviceOf("anthropic")!, serviceOf("anthropic")!.baseUrl, key);
+    } else {
+      await tryConnection(service ?? ({ id: provider.id, name: provider.name, group: "gateways", kind: "openai", baseUrl: "", needsKey: false, keyHeader: provider.keyHeader } as Service), String(provider.baseUrl), provider.apiKey);
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, problem: (err as Error).message };
+  }
+}
+
+/** Checks the connected services online that were not checked lately (or all, when forced), in the background. */
+export function refreshHealth(force = false): Promise<void> {
+  // Tests never reach real services unless a test asks for the check.
+  if (process.env.NODE_TEST_CONTEXT && !process.env.TALQAVA_CHECK_SERVICES) return Promise.resolve();
+  const cfg = getConfig();
+  const due = cfg.providers.filter((p) => {
+    // Model programs on this computer are shown live instead (see liveLocal).
+    if (serviceOfProvider(p)?.group === "local" || (p.id === LEGACY_LOCAL && !p.service) || checking.has(p.id)) return false;
+    if (p.kind === "anthropic" && !(cfg.apiKey || process.env.ANTHROPIC_API_KEY)) return false;
+    const last = health.get(p.id);
+    return force || !last || Date.now() - last.checkedAt > HEALTH_EVERY;
+  });
+  return Promise.all(
+    due.map(async (p) => {
+      checking.add(p.id);
+      try {
+        const result = await checkService(p);
+        const before = health.get(p.id);
+        health.set(p.id, { ...result, checkedAt: Date.now() });
+        if (!result.ok && before?.ok !== false) audit({ actor: "system", actorName: "Talqava", kind: "problem", ok: false, action: `${p.name} stopped working`, detail: result.problem });
+      } finally {
+        checking.delete(p.id);
+      }
+    }),
+  ).then(() => undefined);
+}
+
+/** Connected services that are not working now, with what is wrong. */
+export function serviceProblems(): { id: string; name: string; problem: string }[] {
+  const cfg = getConfig();
+  return cfg.providers.flatMap((p) => {
+    const h = health.get(p.id);
+    return h && !h.ok ? [{ id: p.id, name: p.kind === "anthropic" ? "Anthropic (Claude)" : p.name, problem: h.problem ?? "It could not be reached." }] : [];
+  });
+}
+
+/** For tests: forgets what was checked. */
+export function forgetHealth() {
+  health.clear();
+}
+
 export async function gatewayState({ live = true } = {}) {
+  void refreshHealth();
   const cfg = getConfig();
   const connected = cfg.providers
     .filter((p) => (p.kind === "anthropic" ? Boolean(cfg.apiKey || process.env.ANTHROPIC_API_KEY) : true))
@@ -518,6 +586,7 @@ export async function gatewayState({ live = true } = {}) {
         // The standard local entry is there from the start; it only counts once something answers.
         standard: p.id === LEGACY_LOCAL && !p.service,
         local: service?.group === "local",
+        health: health.get(p.id) ?? null,
       };
     });
   // A model runner on this computer may have been closed since it was connected: say how it is now.

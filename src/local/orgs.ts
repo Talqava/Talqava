@@ -40,6 +40,8 @@ export interface Group {
   goal?: string;
   /** Dollars a month the group's positions may spend together. None means no limit of its own. */
   budget?: number | null;
+  /** The model its positions use ("provider/model"), unless an agent has one of its own. None means the team's model. */
+  model?: string | null;
 }
 
 /** The version of the organization model: 2 is positions, groups and the lines the owner draws. */
@@ -341,7 +343,7 @@ export const orgs = {
   },
 
   /** Renames a group (its positions follow), or changes its lead, goal or budget. The lead joins the group. */
-  updateGroup(id: string, groupId: string, input: { name?: unknown; lead?: unknown; goal?: unknown; budget?: unknown }): Org {
+  updateGroup(id: string, groupId: string, input: { name?: unknown; lead?: unknown; goal?: unknown; budget?: unknown; model?: unknown }): Org {
     const data = read();
     const org = find(data, id);
     const group = org.groups.find((g) => g.id === groupId);
@@ -363,6 +365,11 @@ export const orgs = {
     }
     if (input.goal !== undefined) group.goal = clean(input.goal, 300) || undefined;
     if (input.budget !== undefined) Object.assign(group, { budget: budgetOf(input.budget).budget ?? null });
+    if (input.model !== undefined) {
+      const ref = String(input.model ?? "").trim();
+      if (ref && !/^[\w.-]+\/[\w.:@/+-]{1,160}$/.test(ref)) throw new Error("Choose the group's model from the list.");
+      group.model = ref || null;
+    }
     save(data);
     return tidy(org);
   },
@@ -567,4 +574,9 @@ export function rolePrompt(bot: Bot, org = orgs.active()): string {
   lines.push(approvalWords(org));
   if (org.members.length > 1) lines.push("You can put a short question to any colleague with ask_colleague and the answer comes back as a message. Ask when a colleague knows something you need; do not ask what you could look up in the organization's memory.");
   return lines.filter(Boolean).join("\n\n");
+}
+
+/** The model a position's group uses, if the owner gave the group one. */
+export function groupModelOf(org: Org, botId: string): string | undefined {
+  return groupOf(org, botId)?.model ?? undefined;
 }

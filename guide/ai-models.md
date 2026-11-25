@@ -48,6 +48,10 @@ If the row says it has no models, download one in the model program first.
 
 Agents work through tools, so choose a model that **Works for agents**. Agents you gave a model of their own keep it. To test a model first, use **Check this model** in **Settings**.
 
+**Is each service still working?** Talqava checks every connected service online now and then (every few hours, for free: the same request as when you connected it). A service whose key expired, or whose account ran out of credit, shows **Not working** here with what is wrong, and a message arrives in your Inbox. Connecting it again with a new key usually fixes it.
+
+**A model for a group.** On the Organization page, open a group and choose **Model for its positions**: for example a strong model for leadership and a cheaper one for a whole department. The choices are your team's model and your backup models. An agent with a model of its own keeps it.
+
 **More than one key for a service.** Press **+ Key** beside a connected service to add another key for it (up to five). The keys take turns, and when one reaches the service's rate limit, the others keep going. With only one key, Talqava waits up to 20 seconds for the limit to pass; for a longer wait, your backup model takes over. Each switch or wait is noted in the audit log.
 
 For models on your computer, Talqava also shows each model's size and whether it fits in your computer's memory:
