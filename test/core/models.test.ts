@@ -410,3 +410,41 @@ test("near the end of its budget an agent is told to wrap up and answer, and a c
   await (await engine.startRun(id, "continue")).done;
   assert.equal((await conversations.get(id))!.lastStop, null);
 });
+
+test("several keys take turns; a key at its rate limit rests while another takes over, or the request waits briefly", async () => {
+  const calls = { onText() {}, onThinking() {}, onToolStart() {} };
+  const request = () => ({ system: "s", messages: [{ role: "user" as const, content: "hi" }], tools: [], hostedTools: [], mcpServers: [], signal: new AbortController().signal });
+  const limits: { switched: boolean; waitedSeconds: number }[] = [];
+  const make = (path: string, apiKey: string, moreKeys: string[] = []) =>
+    new OpenAICompatibleModel({ providerId: "x", providerName: "Test service", baseUrl: `${mock.url}/${path}/v1`, apiKey, moreKeys, model: "m", onRateLimit: (i) => limits.push(i) });
+  const keyOf = (i: number) => mock.requests.at(i)!.headers.authorization;
+  script.length = 0;
+
+  // Two keys take turns, request by request.
+  script.push({ text: "one" }, { text: "two" });
+  const pair = make("turns", "key-a", ["key-b"]);
+  await pair.call(request(), calls);
+  await pair.call(request(), calls);
+  assert.deepEqual([keyOf(-2), keyOf(-1)], ["Bearer key-a", "Bearer key-b"]);
+
+  // A key at its rate limit rests; the other takes over at once, in the same request.
+  script.push({ status: 429, headers: { "retry-after": "120" } }, { text: "from the other key" });
+  const reply = await make("switch", "key-a", ["key-b"]).call(request(), calls);
+  assert.equal((reply.content[0] as { text: string }).text, "from the other key");
+  assert.deepEqual([keyOf(-2), keyOf(-1)], ["Bearer key-a", "Bearer key-b"]);
+  assert.deepEqual(limits.at(-1), { keys: 2, switched: true, waitedSeconds: 0 });
+
+  // One key, a short wait: it waits, then carries on.
+  script.push({ status: 429, headers: { "retry-after": "1" } }, { text: "after waiting" });
+  const started = Date.now();
+  assert.equal(((await make("wait", "key-c").call(request(), calls)).content[0] as { text: string }).text, "after waiting");
+  assert.ok(Date.now() - started >= 900);
+  assert.equal(limits.at(-1)!.switched, false);
+
+  // A long wait is not made: the request fails at once, so a backup model can take over.
+  script.push({ status: 429, headers: { "retry-after": "600" } });
+  const quick = Date.now();
+  await assert.rejects(make("long", "key-d").call(request(), calls), /rate limit/);
+  assert.ok(Date.now() - quick < 2000);
+  script.length = 0;
+});

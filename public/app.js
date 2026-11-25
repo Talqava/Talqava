@@ -5938,9 +5938,16 @@ function aiModelsSection(col) {
                         { class: `note small ${c.live.running && c.live.models ? "" : "warnline"}` },
                         !c.live.running ? `Not running right now. Start ${c.name} to use it.` : c.live.models ? `Running · ${c.live.models} model${c.live.models === 1 ? "" : "s"} on this computer` : `Running, but no models downloaded yet. Download one in ${c.name}, then press Models.`,
                       )
-                    : h("div", { class: "note small" }, c.address ? short(c.address) : "Connected with your key"),
+                    : h("div", { class: "note small" }, [c.address ? short(c.address) : "Connected with your key", c.keys > 1 ? `${c.keys} keys, taking turns` : null].filter(Boolean).join(" · ")),
                 ),
                 h("button", { class: "small", onclick: () => modelsDialog(c) }, "Models"),
+                // More keys for the same service spread the work and keep going when one reaches its rate limit.
+                c.hasKey && !c.local && c.service !== "vertex" && c.service !== "anthropic"
+                  ? h("button", { class: "small plain", title: "Work is spread across the keys, and when one reaches its rate limit the others keep going.", onclick: () => {
+                      const key = prompt(`Paste another ${c.name} key.\n\nWork is spread across the keys, and when one reaches its rate limit the others keep going.`);
+                      if (key && key.trim()) attempt(async () => (await api("POST", `gateway/${encodeURIComponent(c.id)}/keys`, { key: key.trim() }), toast(`${c.name} now has another key.`), refresh()), col);
+                    } }, "+ Key")
+                  : null,
                 h("button", { class: "small plain danger", onclick: () => confirm(`Disconnect ${c.name}?\n\nIts key is forgotten on this computer.${c.inUse ? " Your team goes back to Claude." : ""}`) && attempt(async () => (await api("DELETE", `gateway/${encodeURIComponent(c.id)}`), refresh()), col) }, "Disconnect"),
               ),
             )

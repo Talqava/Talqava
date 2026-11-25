@@ -402,6 +402,24 @@ function customId(name: string, cfg = getConfig()): string {
 }
 
 /** Disconnects a service. Its key is forgotten; agents using one of its models go back to Claude. */
+/** Adds another key to a connected service, after checking it with the service. Up to five keys. */
+export async function addKey(providerId: string, typed: unknown): Promise<{ keys: number }> {
+  const cfg = getConfig();
+  const provider = cfg.providers.find((p) => p.id === providerId);
+  if (!provider || provider.kind === "anthropic") throw new Error("That AI service is not connected.");
+  const service = serviceOfProvider(provider);
+  if (!service || service.group === "local" || service.serviceAccount) throw new Error(`${provider.name} takes one key.`);
+  const key = String(typed ?? "").trim();
+  if (!key) throw new Error("Paste the key.");
+  const keys = [provider.apiKey, ...(provider.moreKeys ?? [])].filter(Boolean);
+  if (keys.includes(key)) throw new Error("That key is already there.");
+  if (keys.length >= 5) throw new Error("Up to five keys for one service.");
+  await tryConnection(service, String(provider.baseUrl), key);
+  saveConfig({ providers: cfg.providers.map((p) => (p.id === providerId ? { ...p, moreKeys: [...(p.moreKeys ?? []), key] } : p)) });
+  audit({ actor: "owner", actorName: "You", kind: "integration", action: `Added another key to ${provider.name}`, detail: `${keys.length + 1} keys` });
+  return { keys: keys.length + 1 };
+}
+
 export function disconnect(providerId: string): { model: string } {
   const cfg = getConfig();
   const provider = cfg.providers.find((p) => p.id === providerId);
@@ -495,6 +513,7 @@ export async function gatewayState({ live = true } = {}) {
         group: service?.group ?? "gateways",
         address: p.kind === "anthropic" ? null : p.baseUrl,
         hasKey: p.kind === "anthropic" ? true : Boolean(p.apiKey),
+        keys: p.kind === "anthropic" ? 1 : [p.apiKey, ...(p.moreKeys ?? [])].filter(Boolean).length,
         inUse: cfg.model.startsWith(`${p.id}/`),
         // The standard local entry is there from the start; it only counts once something answers.
         standard: p.id === LEGACY_LOCAL && !p.service,

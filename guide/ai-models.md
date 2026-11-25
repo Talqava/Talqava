@@ -48,6 +48,8 @@ If the row says it has no models, download one in the model program first.
 
 Agents work through tools, so choose a model that **Works for agents**. Agents you gave a model of their own keep it. To test a model first, use **Check this model** in **Settings**.
 
+**More than one key for a service.** Press **+ Key** beside a connected service to add another key for it (up to five). The keys take turns, and when one reaches the service's rate limit, the others keep going. With only one key, Talqava waits up to 20 seconds for the limit to pass; for a longer wait, your backup model takes over. Each switch or wait is noted in the audit log.
+
 For models on your computer, Talqava also shows each model's size and whether it fits in your computer's memory:
 - **Too big for this computer's memory**: it would be very slow or not run. Choose a smaller one (models with 4b or 3b in the name are small). Talqava asks before using it.
 - **Only just fits**: it works, but close other apps while agents use it.

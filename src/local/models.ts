@@ -35,6 +35,9 @@ export function resolveOne(cfg: Config = getConfig(), ref = cfg.model): Model {
     baseUrl: provider.baseUrl,
     apiKey: provider.apiKey || undefined,
     getKey: keySource(provider),
+    moreKeys: provider.moreKeys,
+    onRateLimit: ({ keys, switched, waitedSeconds }) =>
+      audit({ actor: "system", actorName: "Talqava", kind: "problem", action: switched ? `${provider.name} reached a key's rate limit; another of its ${keys} keys took over` : `${provider.name} reached its rate limit; waited ${waitedSeconds} seconds`, detail: model }),
     model,
     prices: listed?.prices ?? provider.prices ?? known?.prices,
     contextTokens,
