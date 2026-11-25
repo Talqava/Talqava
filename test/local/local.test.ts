@@ -1027,6 +1027,9 @@ test("a task that is waiting on its own hand-offs is not reported upward as fini
   const quests = await import("../../src/local/quests.ts");
   const org = orgs.create("Chain Co", "", "team");
   market.buildStructure(org.id, "team", "software");
+  // This is about hand-offs, so the lead starts straight away instead of planning first.
+  const planning = store.getConfig().planFirst;
+  store.saveConfig({ planFirst: "never" });
   const leadBot = (await import("../../src/local/crew.ts")).findBot("lead-developer");
   // The lead hands a part to the front-end developer, who asks a colleague a question and ends its turn to wait.
   // Then the answer comes back, the developer writes its real report, and only that reaches the lead.
@@ -1052,6 +1055,7 @@ test("a task that is waiting on its own hand-offs is not reported upward as fini
   const settled = () => all().length >= 3 && all().every((q) => q.status !== "running" && q.status !== "waiting" && (!q.parent || q.parent.delivered)) && !app.engine.isRunning(root.id);
   for (let i = 0; i < 300 && !settled(); i++) await new Promise((r) => setTimeout(r, 50));
   mock.route = undefined;
+  store.saveConfig({ planFirst: planning });
   assert.ok(settled(), `the chain finished: ${all().map((q) => `${q.bot.id}:${q.status}:${q.parent?.delivered}`).join(" ")}`);
   const texts = store.conversations.get(root.id)!.messages.filter((m) => typeof m.content === "string").map((m) => String(m.content));
   const reports = texts.filter((t) => t.startsWith("[Report from Front-End Developer"));
@@ -2177,5 +2181,224 @@ test("marketplace packages: every listing passes the checks, the preview says wh
   } finally {
     orgs.remove(org0.id);
     if (crew.loadCrew().bots.some((b) => b.id === "bookkeeper" && b.source === "personal")) crew.removeBot("bookkeeper");
+  }
+});
+
+test("a task that stops leaves a hand-over note on the task, Try again picks up from it, and work cannot go round in circles", { timeout: 40_000 }, async () => {
+  const { orgs } = await import("../../src/local/orgs.ts");
+  const market = await import("../../src/local/marketplace.ts");
+  const { work } = await import("../../src/local/work.ts");
+  const quests = await import("../../src/local/quests.ts");
+  const crewMod = await import("../../src/local/crew.ts");
+  const org0 = orgs.create("Handover Co", "Keep the books.", "custom");
+  const before = store.getConfig().budget;
+  try {
+    market.addTeam("finance-team");
+    const org = orgs.active();
+    // One step only, so the task stops at its budget after its first step.
+    store.saveConfig({ budget: { steps: 1 } });
+    const lead = crewMod.loadCrew().bots.find((b) => b.id === "head-of-finance")!;
+    crewMod.saveBot(lead.id, { ...lead, budget: { steps: 1, spend: 0.5 } });
+    script.length = 0;
+    script.push(call("workspace", { action: "list" }), say("unreached"));
+    const item = work.create(org, { title: "Close November", description: "Close the November books and report.", owner: "head-of-finance", createdBy: "owner" });
+    await work.schedule();
+    const questId = work.get(org, item.id).quest!;
+    for (let i = 0; i < 100 && quests.quests.isRunning(questId); i++) await new Promise((r) => setTimeout(r, 30));
+    await new Promise((r) => setTimeout(r, 200));
+    const stopped = quests.questStore.get(questId)!;
+    assert.equal(stopped.status, "budget");
+    assert.equal(stopped.stop, "steps");
+    assert.ok(stopped.handover);
+    assert.match(stopped.handover!.did.join(" "), /used the workspace: list/);
+    // The note is left on the task, as a comment from the agent.
+    const notes = work.comments(org, item.id).map((c: { text: string }) => c.text).join("\n");
+    assert.match(notes, /Hand-over note from the Head of Finance\. Stopped: .*1 steps/);
+    assert.match(notes, /Next: /);
+
+    // Try again: the agent is told to carry on, with its own note.
+    crewMod.saveBot(lead.id, { ...lead, budget: { steps: 5, spend: 0.5 } });
+    script.push(say("Closed November: all accounts reconciled."));
+    await work.retry(org, item.id);
+    for (let i = 0; i < 100 && quests.quests.isRunning(questId); i++) await new Promise((r) => setTimeout(r, 30));
+    const asked = JSON.stringify(mock.requests.at(-1)!.body.messages.at(-1));
+    assert.match(asked, /Carry on with this task from where it stopped/);
+    assert.match(asked, /Hand-over note from your last run\. Stopped:/);
+
+    // Round in circles: an agent cannot send work or questions back up its own chain.
+    const stamp = new Date().toISOString();
+    const up = { id: "f".repeat(16), title: "Plan Q1", bot: lead, status: "running" as const, steps: 0, createdAt: stamp, updatedAt: stamp };
+    const down = { id: "e".repeat(15) + "1", title: "Part of Q1", bot: crewMod.loadCrew().bots.find((b) => b.id === "bookkeeper")!, status: "running" as const, steps: 0, parent: { id: up.id, by: "Head of Finance", delivered: false }, depth: 1, createdAt: stamp, updatedAt: stamp };
+    quests.questStore.save(up);
+    quests.questStore.save(down);
+    const ctx = { signal: new AbortController().signal, conversation: { id: down.id, messages: [] } as unknown as Conversation };
+    await assert.rejects(Promise.resolve(tools.askTool.run({ to: "Head of Finance", question: "Which accounts should I reconcile first?" }, ctx)), /further up this same task.*round in circles/);
+    quests.questStore.remove(up.id);
+    quests.questStore.remove(down.id);
+  } finally {
+    store.saveConfig({ budget: before });
+    orgs.remove(org0.id);
+  }
+});
+
+test("succession and the task board: a stopped task goes to another agent with its note, and everyone on a task shares one board", { timeout: 40_000 }, async () => {
+  const { orgs } = await import("../../src/local/orgs.ts");
+  const market = await import("../../src/local/marketplace.ts");
+  const { work } = await import("../../src/local/work.ts");
+  const quests = await import("../../src/local/quests.ts");
+  const crewMod = await import("../../src/local/crew.ts");
+  const { board, boardPrompt, boardTool, MAX_POSTS } = await import("../../src/local/board.ts");
+  const org0 = orgs.create("Board Co", "Keep the books.", "custom");
+  const made: string[] = [];
+  try {
+    market.addTeam("finance-team");
+    const org = orgs.active();
+    const stamp = new Date().toISOString();
+    const lead = crewMod.loadCrew().bots.find((b) => b.id === "head-of-finance")!;
+    const keeper = crewMod.loadCrew().bots.find((b) => b.id === "bookkeeper")!;
+    const up = { id: "a".repeat(15) + "2", title: "Close November", bot: lead, status: "running" as const, steps: 0, createdAt: stamp, updatedAt: stamp };
+    const down = { id: "b".repeat(15) + "2", title: "Reconcile cards", bot: keeper, status: "running" as const, steps: 0, parent: { id: up.id, by: "Head of Finance", delivered: false }, depth: 1, createdAt: stamp, updatedAt: stamp };
+    for (const q of [up, down]) (quests.questStore.save(q), made.push(q.id));
+
+    // One board for the task and the part handed on from it: what one posts, the other reads.
+    const ctx = (id: string) => ({ signal: new AbortController().signal, conversation: { id, messages: [] } as unknown as Conversation });
+    assert.match(String(await boardTool.run({ action: "post", kind: "finding", text: "Three card payments have no receipt." }, ctx(down.id))), /Posted to the task's board as a finding/);
+    assert.match(String(await boardTool.run({ action: "read" }, ctx(up.id))), /Finding from the Bookkeeper: Three card payments have no receipt\./);
+    board.post(org, up.id, "owner", "decision", "Leave the November card fees for December.");
+    assert.match(boardPrompt(org, down.id), /The board so far[\s\S]*Finding from the Bookkeeper[\s\S]*Decision from the owner: Leave the November card fees/);
+    await assert.rejects(async () => boardTool.run({ action: "post", text: "ok" }, ctx(down.id)), /Write the note/);
+    await assert.rejects(async () => boardTool.run({ action: "read" }, ctx("c".repeat(16))), /belongs to a task/);
+    for (let i = board.list(org, up.id).length; i < MAX_POSTS; i++) board.post(org, up.id, "owner", "note", `Note ${i}`);
+    assert.throws(() => board.post(org, up.id, "owner", "note", "One more"), /board is full/);
+
+    // Succession: a task that stopped can be given to another agent, who starts from the brief and its hand-over note.
+    const item = work.create(org, { title: "Chase late invoices", description: "Chase the invoices more than 30 days late.", owner: "invoice-chaser", createdBy: "owner" });
+    const stopped = { id: "d".repeat(15) + "2", title: "Chase late invoices", bot: crewMod.loadCrew().bots.find((b) => b.id === "invoice-chaser")!, status: "failed" as const, steps: 4, stop: "repeat" as const, createdAt: stamp, updatedAt: stamp };
+    quests.questStore.save(stopped);
+    made.push(stopped.id);
+    const { openOrgDb } = await import("../../src/local/library.ts");
+    openOrgDb(org.id).prepare("update work_items set quest = ?, state = 'started' where id = ?").run(stopped.id, item.id);
+    await work.comment(org, item.id, "Hand-over note from the Accounts Receivable Specialist. Stopped: it tried the same step a third time.", "invoice-chaser");
+    assert.equal(work.get(org, item.id).status, "blocked");
+    const moved = work.update(org, item.id, { owner: "bookkeeper" });
+    assert.equal(moved.owner, "bookkeeper");
+    assert.equal(moved.quest, null);
+    assert.equal(moved.status === "todo" || moved.status === "working", true);
+    const said = work.comments(org, item.id).map((c: { text: string }) => c.text).join("\n");
+    assert.match(said, /Given to the Bookkeeper, from the Accounts Receivable Specialist\. Pick up from the hand-over note above/);
+    // A task still working cannot be moved; it must be stopped first.
+    quests.questStore.save({ ...stopped, status: "running" });
+    openOrgDb(org.id).prepare("update work_items set quest = ?, state = 'started', owner = 'invoice-chaser' where id = ?").run(stopped.id, item.id);
+    assert.throws(() => work.update(org, item.id, { owner: "bookkeeper" }), /working now\. Stop it first/);
+  } finally {
+    for (const id of made) quests.questStore.remove(id);
+    orgs.remove(org0.id);
+  }
+});
+
+test("the access graph shows what each agent may reach, and the owner decides whether the assistant reads group-only items", { timeout: 30_000 }, async () => {
+  const { orgs } = await import("../../src/local/orgs.ts");
+  const market = await import("../../src/local/marketplace.ts");
+  const { accessGraph, accessGraphs } = await import("../../src/local/access.ts");
+  const { GENERAL_AGENT, mayUse } = await import("../../src/local/library.ts");
+  const org0 = orgs.create("Access Co", "Keep the books.", "custom");
+  const before = store.getConfig().assistantSeesGroups;
+  try {
+    market.addTeam("finance-team");
+    const org = orgs.active();
+    const keeper = accessGraph(org, "bookkeeper");
+    assert.equal(keeper.agent.title, "Bookkeeper");
+    assert.equal(keeper.approvals, "ask");
+    assert.deepEqual(keeper.tasks, []);
+    assert.equal(keeper.escalatesTo, "Head of Finance");
+    assert.ok(keeper.powers.every((p) => typeof p.words === "string" && p.words.length > 3));
+    assert.ok(!keeper.powers.some((p) => p.id === "shell"));
+    assert.ok(keeper.budget.perTask !== null);
+    const lead = accessGraph(org, "head-of-finance");
+    assert.ok(lead.tasks.includes("Bookkeeper") && lead.tasks.length === 6);
+    assert.equal(lead.escalatesTo, "you");
+    const all = accessGraphs(org);
+    assert.equal(all.length, org.members.length + 1);
+    assert.match(all[0].agent.title, /the assistant/);
+    assert.throws(() => accessGraph(org, "nobody-here"), /no such agent/);
+
+    // Group-only items: an agent outside the group never sees them; the assistant does unless the owner turns it off.
+    const financeOnly = { everyone: false, private: false, departments: ["Finance"], agents: [] };
+    const secret = { everyone: false, private: true, departments: [], agents: [] };
+    assert.equal(mayUse(org, financeOnly, "bookkeeper"), true);
+    store.saveConfig({ assistantSeesGroups: true });
+    assert.equal(mayUse(org, financeOnly, GENERAL_AGENT), true);
+    store.saveConfig({ assistantSeesGroups: false });
+    assert.equal(mayUse(org, financeOnly, GENERAL_AGENT), false);
+    assert.equal(mayUse(org, secret, GENERAL_AGENT), false);
+    assert.equal(mayUse(org, { ...financeOnly, everyone: true }, GENERAL_AGENT), true);
+  } finally {
+    store.saveConfig({ assistantSeesGroups: before });
+    orgs.remove(org0.id);
+  }
+});
+
+test("plans for approval: a lead plans first with look-up tools only, the owner asks for changes, then approves, and the work starts", { timeout: 60_000 }, async () => {
+  const { orgs } = await import("../../src/local/orgs.ts");
+  const market = await import("../../src/local/marketplace.ts");
+  const { work } = await import("../../src/local/work.ts");
+  const quests = await import("../../src/local/quests.ts");
+  const org0 = orgs.create("Plan Co", "Sell bread to cafés.", "custom");
+  const before = store.getConfig().planFirst;
+  const wait = async (id: string) => {
+    for (let i = 0; i < 150 && quests.quests.isRunning(id); i++) await new Promise((r) => setTimeout(r, 30));
+    await new Promise((r) => setTimeout(r, 120));
+  };
+  const toolsSent = () => mock.requests.at(-1)!.body.tools.map((t: { name: string }) => t.name) as string[];
+  try {
+    market.addTeam("sales-team");
+    const org = orgs.active();
+    store.saveConfig({ planFirst: "leads" });
+    script.length = 0;
+    script.push(call("submit_plan", { summary: "List 50 cafés in the north, then have the outreach specialist draft first emails for your review.", steps: [{ what: "List 50 cafés", who: "Lead Finder" }, { what: "Draft first emails", who: "Outreach Specialist" }], estimate: 1.2 }), say("Plan sent."));
+    const item = work.create(org, { title: "Win wholesale cafés", description: "Find and approach wholesale cafés in the north.", owner: "head-of-sales", createdBy: "owner" });
+    await work.schedule();
+    const id = work.get(org, item.id).quest!;
+    await wait(id);
+    // While planning: look-up tools and submit_plan only; nothing that hands work on or changes anything.
+    const planningTools = toolsSent();
+    assert.ok(planningTools.includes("submit_plan"));
+    assert.ok(!planningTools.includes("assign_task") && !planningTools.includes("bash"));
+    assert.match(mock.requests.at(-1)!.body.system, /plan it, and wait for the owner's approval/);
+    let q = quests.questStore.get(id)!;
+    assert.equal(q.status, "asking");
+    assert.deepEqual([q.plan!.status, q.plan!.version, q.plan!.estimate, q.plan!.steps!.length], ["proposed", 1, 1.2, 2]);
+    assert.equal(work.get(org, item.id).status, "waiting");
+    assert.match(work.get(org, item.id).detail, /plan is waiting for your approval/);
+
+    // Ask for changes: the agent revises and submits again.
+    await assert.rejects(quests.quests.decidePlan(id, "changes", ""), /Say what should change/);
+    script.push(call("submit_plan", { summary: "Start with 20 cafés near the bakery, then draft emails, keeping the cost under one dollar.", steps: [{ what: "List 20 nearby cafés", who: "Lead Finder" }, { what: "Draft emails", who: "Outreach Specialist" }], estimate: 0.8 }), say("Revised."));
+    await quests.quests.decidePlan(id, "changes", "Start with the 20 cafés closest to the bakery.");
+    await wait(id);
+    assert.match(JSON.stringify(mock.requests.at(-2)!.body.messages.at(-1)), /asks for changes to your plan: Start with the 20 cafés closest/);
+    q = quests.questStore.get(id)!;
+    assert.deepEqual([q.plan!.status, q.plan!.version, q.plan!.feedback], ["proposed", 2, "Start with the 20 cafés closest to the bakery."]);
+
+    // Approve: the full tools come back, and the work starts.
+    script.push(say("Done: 20 cafés listed and emails drafted."));
+    await quests.quests.decidePlan(id, "approve", "");
+    await wait(id);
+    assert.ok(toolsSent().includes("assign_task"));
+    assert.match(JSON.stringify(mock.requests.at(-1)!.body.messages), /Your plan is approved\. Carry it out now/);
+    assert.equal(quests.questStore.get(id)!.plan!.status, "approved");
+    await assert.rejects(quests.quests.decidePlan(id, "approve", ""), /no plan waiting/);
+
+    // Plans off: a lead starts straight away.
+    store.saveConfig({ planFirst: "never" });
+    script.push(say("Straight to work."));
+    const other = work.create(org, { title: "Tidy the pipeline", description: "Tidy the sales pipeline.", owner: "head-of-sales", createdBy: "owner" });
+    await work.schedule();
+    const otherId = work.get(org, other.id).quest!;
+    await wait(otherId);
+    assert.equal(quests.questStore.get(otherId)!.plan, undefined);
+  } finally {
+    store.saveConfig({ planFirst: before });
+    orgs.remove(org0.id);
   }
 });

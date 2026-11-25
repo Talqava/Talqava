@@ -33,10 +33,11 @@ If no AI service is connected yet, a banner at the top links to **Integrations â
 2. **Effort, for Claude**: higher thinks longer and costs more.
 3. **Cost saving for your team of agents**: **Off: every agent uses my model**, or **On: match the model to the work**. With Claude Opus or Fable as your model, managers who plan keep your model, team members doing their own part use Claude Sonnet 5.5 (about half the price), and quick questions between agents use Claude Haiku 5.5. An agent you gave a model of its own keeps it.
 4. **Before starting a task**: **Check first, and ask me if something is missing** (the default) or **Start straight away**. Checking means an agent first makes sure it has the information, documents or access it needs. If something is missing, it asks you in your Inbox instead of spending money guessing. The check costs a few cents and shows on the task's receipt.
-5. **Approvals**: **Ask me before commands, file changes and API writes** (the default) or **Run everything without asking**. Only choose the second if nothing on the computer would matter if lost. With "ask", a scheduled job that needs approval waits until you open its chat and answer.
-6. **Budget per run: steps (model calls)**: 40 by default.
-7. **Budget per run: estimated spend in US dollars**: $1 by default. Leave it empty for no dollar limit.
-8. Press **Save**.
+5. **Plans for your approval**: **Tasks I give to a lead: plan first, for my approval** (the default), **Every task I give: plan first, for my approval**, or **Never: start straight away**. With plans on, the agent sends you a plan (the steps, who does each, and its cost estimate) and changes nothing until you approve it or ask for changes.
+6. **Approvals**: **Ask me before commands, file changes and API writes** (the default) or **Run everything without asking**. Only choose the second if nothing on the computer would matter if lost. With "ask", a scheduled job that needs approval waits until you open its chat and answer.
+7. **Budget per run: steps (model calls)**: 40 by default.
+8. **Budget per run: estimated spend in US dollars**: $1 by default. Leave it empty for no dollar limit.
+9. Press **Save**.
 
 A run stops before going over either limit, and you can say "continue" to carry on. Spend is estimated from list prices; your provider's bill is the real figure.
 

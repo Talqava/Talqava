@@ -634,11 +634,29 @@ function onEvent(event) {
     case "notice":
       ui.log.append(h("div", { class: "banner" }, event.text));
       break;
+    case "stopped": {
+      // The plain notice just shown becomes the banner with a Continue button.
+      const last = ui.log.lastElementChild;
+      if (last?.classList.contains("banner") && last.textContent === event.text) last.remove();
+      ui.log.append(stopBanner(event.text));
+      break;
+    }
     case "error":
       ui.log.append(h("div", { class: "banner error" }, event.text));
       break;
   }
   if (stick || event.type === "sync" || event.type === "user") ui.scroll.scrollTop = ui.scroll.scrollHeight;
+}
+
+/** Why a run stopped before finishing, kept on the chat, with a button that carries on. */
+function stopBanner(text) {
+  const words = String(text).replace(/\s*Say “?"?continue"?”?[^.]*\.\s*$/i, "").trim();
+  return h(
+    "div",
+    { class: "banner stopbanner" },
+    h("div", { class: "grow" }, h("b", {}, "It stopped before finishing. "), words, h("div", { class: "note small" }, "Nothing is lost. Continue to let it carry on from here, or raise the limit under Settings → Budget per run.")),
+    h("button", { class: "primary small", onclick: (e) => (e.currentTarget.closest(".stopbanner")?.remove(), (ui.input.value = "continue"), submit()) }, "Continue"),
+  );
 }
 
 function renderConversation(conv, live) {
@@ -669,6 +687,7 @@ function renderConversation(conv, live) {
       ),
     );
   }
+  if (conv.lastStop && !live.running) ui.log.append(stopBanner(conv.lastStop.text));
   setRunning(live.running);
   for (const delta of live.partial) streamDelta(delta);
   for (const approval of live.approvals) addApproval(approval);
@@ -1100,6 +1119,7 @@ const mood = (q) =>
 /** How a quest stands: a glyph and a word or two, and whether it needs attention. */
 function standing(q) {
   if (q.status === "waiting") return ["◌ Waiting on you", "loud"];
+  if (q.status === "asking" && q.plan?.status === "proposed") return ["◌ Plan to approve", "loud"];
   if (q.status === "asking") return ["? Needs your answer", "loud"];
   if (q.status === "running") return q.template?.tries ? [`● Fixing · try ${q.template.tries} of ${q.template.maxTries}`, "loud"] : ["● Working", "loud"];
   if (q.checking) return ["◌ Checking the result", "loud"];
@@ -1563,10 +1583,18 @@ function inboxItems() {
   for (const q of quests) {
     const recent = Date.now() - new Date(q.updatedAt).getTime() < RECENT;
     if (q.approvals?.length) needs.push({ kind: "approval", q, approval: q.approvals[0] });
+    else if (q.status === "asking" && q.plan?.status === "proposed") needs.push({ kind: "plan", q });
+    else if (q.status === "asking") needs.push({ kind: "asking", q });
     else if (q.branch && !q.outcome && !isLive(q) && q.status !== "failed" && q.changedFiles !== 0) needs.push({ kind: "review", q });
     else if (q.check && !q.check.passed && q.status === "done" && recent) needs.push({ kind: "check", q });
     else if (q.status === "failed" && recent) needs.push({ kind: "failed", q });
     else if (q.status === "budget" && recent) needs.push({ kind: "budget", q });
+  }
+  // Finished work from the Tasks board waits for Accept or Send back; a task whose code changes are under review is listed once.
+  for (const t of state.workItems ?? []) {
+    if (t.status !== "review" || !t.quest) continue;
+    const q = quests.find((x) => x.id === t.quest);
+    if (q && !needs.some((n) => n.q === q)) needs.push({ kind: "taskreview", q, t });
   }
   for (const c of state.convs ?? []) if (c.needsApproval) needs.push({ kind: "chat", c });
   for (const bot of state.crew?.bots ?? []) if (bot.month?.state === "stopped") needs.push({ kind: "monthly", bot });
@@ -1641,7 +1669,7 @@ async function loadPageSuggestions() {
 async function loadMail() {
   loadPageSuggestions();
   try {
-    state.mail = await api("GET", "inbox");
+    [state.mail, state.workItems] = await Promise.all([api("GET", "inbox"), api("GET", "work").then((w) => w.items).catch(() => state.workItems ?? [])]);
   } catch {
     state.mail ??= { messages: {}, names: {} };
   }
@@ -1653,19 +1681,27 @@ const MONTH_START = () => `${new Date().toISOString().slice(0, 7)}-01T00:00:00.0
 function mailMessages() {
   const out = [];
   const own = ownTasks();
+  const needs = inboxItems().needs;
+  // A plan to approve, a question before starting, or finished work to review is shown as that, with its buttons, instead of as the task's ordinary message.
+  const ACTION = new Set(["plan", "asking", "taskreview"]);
+  const actionFor = new Set(needs.filter((n) => n.q && ACTION.has(n.kind)).map((n) => n.q));
   for (const q of own) {
+    if (actionFor.has(q)) continue;
     const live = isLive(q);
     const failed = q.status === "failed" || q.status === "budget" || (q.check && !q.check.passed) || (!live && q.chain?.stopped > 0);
     const label = q.approvals?.length || q.status === "asking" ? "needs" : failed ? "failed" : live ? "working" : "done";
     const snippet = q.status === "failed" && q.note ? q.note : q.said || (live ? "Working on it now." : "Finished without a written report.");
     out.push({ id: `task:${q.id}`, kind: "task", q, bot: q.bot, subject: q.title, snippet, at: q.updatedAt, activityAt: live && !q.approvals?.length ? q.createdAt : q.updatedAt, label });
   }
-  for (const n of inboxItems().needs) {
-    if (n.q && own.includes(n.q)) continue;
+  for (const n of needs) {
+    if (n.q && own.includes(n.q) && !ACTION.has(n.kind)) continue;
     // A part of a task the person assigned reports inside that task's message; only a part waiting for approval (or for a review of its changes) writes on its own.
     if (n.q?.parent && n.kind !== "approval" && n.kind !== "review") continue;
     const q = n.q;
     if (n.kind === "approval") out.push({ id: `need:approval:${q.id}:${n.approval.id}`, kind: "need", need: n, q, bot: q.bot, subject: `Approval needed: ${NAMES[n.approval.name] || n.approval.name} for “${q.title}”`, snippet: n.approval.name === "bash" ? n.approval.input.command : JSON.stringify(n.approval.input), at: q.updatedAt, activityAt: q.updatedAt, label: "needs" });
+    else if (n.kind === "plan") out.push({ id: `need:plan:${q.id}:${q.plan.version}`, kind: "need", need: n, q, bot: q.bot, subject: `Plan to approve: ${q.title}`, snippet: q.plan.summary ?? "", at: q.plan.at ?? q.updatedAt, activityAt: q.updatedAt, label: "needs" });
+    else if (n.kind === "asking") out.push({ id: `need:asking:${q.id}`, kind: "need", need: n, q, bot: q.bot, subject: `Needs your answer before starting: ${q.title}`, snippet: q.note || "I need something from you before I start.", at: q.updatedAt, activityAt: q.updatedAt, label: "needs" });
+    else if (n.kind === "taskreview") out.push({ id: `need:taskreview:${n.t.id}:${q.updatedAt}`, kind: "need", need: n, q, bot: q.bot, subject: `To review: #${n.t.number} ${n.t.title}`, snippet: q.said ? q.said.replace(/\s+/g, " ").slice(0, 160) : "Finished. Accept it, or send it back with a comment.", at: q.updatedAt, activityAt: q.updatedAt, label: "needs" });
     else if (n.kind === "review") out.push({ id: `need:review:${q.id}`, kind: "need", need: n, q, bot: q.bot, subject: `Ready for your review: ${q.title}`, snippet: `${q.changedFiles ?? "Some"} file${q.changedFiles === 1 ? "" : "s"} changed on ${q.branch}.`, at: q.updatedAt, activityAt: q.updatedAt, label: "needs" });
     else if (n.kind === "check") out.push({ id: `need:check:${q.id}`, kind: "need", need: n, q, bot: q.bot, subject: `Did not pass its check: ${q.title}`, snippet: "The result did not pass its check. Open the task to see why.", at: q.updatedAt, activityAt: q.updatedAt, label: "failed" });
     else if (n.kind === "failed") out.push({ id: `need:failed:${q.id}`, kind: "need", need: n, q, bot: q.bot, subject: `Could not finish: ${q.title}`, snippet: q.note || "The task failed.", at: q.updatedAt, activityAt: q.updatedAt, label: "failed" });
@@ -1937,7 +1973,7 @@ function readMail(m) {
   const from = h("div", { class: "readfrom", style: m.bot ? botStyle(m.bot) : "" }, m.bot ? keycap(m.bot, 44, isLive(q ?? {}) ? "working" : "", m.bot.type) : h("span", { class: "sysavatar big", "aria-hidden": "true" }, "T"), h("div", { class: "grow" }, nameBox, h("div", { class: "note small" }, `${agentRole(m.bot)}${m.bot ? ` · ${departmentOf(m.bot.id)}` : ""} · to me`)), h("span", { class: "mtime" }, new Date(m.at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })));
 
   const body = h("div", { class: "readbody" });
-  const act = (fn) => attempt(async () => (await fn(), await Promise.all([loadQuests(), refreshList(), loadCrew()]), renderInbox(), syncInboxCount()), body);
+  const act = (fn) => attempt(async () => (await fn(), await Promise.all([loadQuests(), refreshList(), loadCrew(), loadMail()]), renderInbox(), syncInboxCount()), body);
   if (m.kind === "pagechange") {
     const sg = m.suggestion;
     const decide = (decision) =>
@@ -1976,6 +2012,29 @@ function readMail(m) {
       const a = n.approval;
       const decide = (decision) => act(() => api("POST", `conversations/${q.id}/approvals/${a.id}`, { decision }));
       fill(body, h("p", {}, `I want to use ${NAMES[a.name] || a.name} for “${q.title}”. Is that all right?`), h("pre", {}, a.name === "bash" ? a.input.command : JSON.stringify(a.input, null, 2)), h("div", { class: "row" }, h("button", { class: "primary", onclick: () => decide("allow") }, "Allow once"), h("button", { class: "danger", onclick: () => decide("deny") }, "Don't allow"), h("button", { class: "plain", onclick: () => go("quest", q.id) }, "Open the task")));
+    } else if (n.kind === "plan") fill(body, planCard(q, () => act(async () => {})), h("button", { class: "plain small", onclick: () => go("quest", q.id) }, "Open the task"));
+    else if (n.kind === "asking") {
+      const answer = h("textarea", { rows: 4, placeholder: "Your answer. The task starts once you send it.", "aria-label": "Answer" });
+      fill(
+        body,
+        h("div", { class: "md readreport" }, q.said ? renderMarkdown(q.said) : h("p", {}, q.note || "I need something from you before I start.")),
+        answer,
+        h("div", { class: "row" }, h("button", { class: "primary", onclick: () => answer.value.trim() && act(() => api("POST", `conversations/${q.id}/messages`, { text: answer.value.trim() })) }, "Send and start"), h("button", { class: "plain", onclick: () => go("quest", q.id) }, "Open the task")),
+      );
+    } else if (n.kind === "taskreview") {
+      const why = h("textarea", { rows: 3, placeholder: "What should change? Sending it back wakes the agent.", "aria-label": "What should change" });
+      fill(
+        body,
+        h("div", { class: "md readreport" }, q.said ? renderMarkdown(q.said) : h("p", {}, "Finished without a written report.")),
+        why,
+        h(
+          "div",
+          { class: "row" },
+          h("button", { class: "primary", onclick: () => act(() => api("POST", `work/${n.t.id}/accept`)) }, "Accept"),
+          h("button", { onclick: () => why.value.trim() && act(() => api("POST", `work/${n.t.id}/comment`, { text: why.value.trim() })) }, "Send back with this comment"),
+          h("button", { class: "plain", onclick: () => go("quest", q.id) }, "Open the task"),
+        ),
+      );
     } else if (n.kind === "chat") fill(body, h("p", {}, `The chat “${n.c.title}” is waiting for you to approve a step.`), h("button", { class: "primary", onclick: () => go("chat", n.c.id) }, "Open the chat"));
     else if (n.kind === "monthly") fill(body, h("p", {}, `I have spent ${money(n.bot.month.spent)} of my ${money(n.bot.month.limit)} monthly budget, so I won't start new work until you raise it or the month turns.`), h("button", { class: "primary", onclick: () => go("bot", n.bot.id) }, "Raise my budget"));
     else if (n.kind === "total") fill(body, h("p", {}, "All your agents together have reached this month's budget. No agent starts new work until you raise it or the month turns."), h("button", { class: "primary", onclick: () => go("team") }, "Change the budget"));
@@ -1996,6 +2055,7 @@ function readMail(m) {
     approvals,
     live && !q.approvals?.length ? h("div", { class: "readnow" }, h("i", { class: "dot", "aria-hidden": "true" }), q.activity ? `Working on it: ${NAMES[q.activity.name] || q.activity.name}` : "Working on it now.") : null,
     q.status === "failed" && q.note ? h("div", { class: "banner error" }, q.note) : null,
+    handoverCard(q),
     !live && q.chain?.stopped ? h("div", { class: "banner" }, `${q.chain.stopped} part${q.chain.stopped === 1 ? "" : "s"} of this task stopped before finishing${q.chain.cost >= q.chain.budget ? `, because the task reached its ${money(q.chain.budget)} budget` : ""}. The receipt shows which, and what each cost. Reply “continue” to carry on, or raise the budget per task under Settings.`) : null,
     whyChain(q),
     q.said || !live ? report : null,
@@ -2111,6 +2171,82 @@ function structureDiagram(id) {
   const wrap = h("div", {});
   wrap.innerHTML = `<svg viewBox="0 0 240 120" aria-hidden="true">${body}</svg>`;
   return wrap.firstChild;
+}
+
+/**
+ * The access graph: for each agent, and the assistant, what it may read, change, hand work to and ask, drawn from
+ * the rules that decide it (powers, the chart, library and workspace access, connectors, keys, approvals, budgets).
+ * Anything not shown here, the agent is refused.
+ */
+function orgAccessPanel(org) {
+  const box = h("div", { class: "accesspanel" }, h("p", { class: "note" }, "Working out what each agent can reach…"));
+  const find = h("input", { type: "search", placeholder: "Find an agent", "aria-label": "Find an agent" });
+  const list = (items, none) => (items.length ? items.join(", ") : none);
+  const row = (label, value, tone = "") => h("div", { class: `arow ${tone}` }, h("span", { class: "alabel" }, label), h("span", { class: "grow" }, value));
+  let graphs = [];
+  const draw = () => {
+    const q = find.value.trim().toLowerCase();
+    const shown = graphs.filter((g) => !q || `${g.agent.title} ${g.agent.department ?? ""}`.toLowerCase().includes(q));
+    fill(
+      cards,
+      shown.map((g, i) => {
+        const bot = state.crew?.bots.find((b) => b.id === g.agent.id);
+        const general = g.agent.id === "@general";
+        const changing = g.powers.filter((p) => p.changes).length;
+        return h(
+          "details",
+          { class: "card acard", open: graphs.length <= 4 || (i === 0 && !q) },
+          h(
+            "summary",
+            {},
+            bot ? keycap(bot, 32, "") : h("span", { class: "sysavatar", "aria-hidden": "true" }, "T"),
+            h("span", { class: "grow" }, h("b", {}, g.agent.title), g.agent.department ? h("span", { class: "note small" }, ` · ${g.agent.department}`) : null),
+            h("span", { class: `tag ${g.approvals === "ask" ? "ok" : "warnline"}` }, g.approvals === "ask" ? "Asks before changes" : "Runs without asking"),
+          ),
+          row("Can", list(g.powers.map((p) => p.words), "Only talk"), changing && g.approvals !== "ask" ? "warnline" : ""),
+          row("Hands work to", list(g.tasks, "Nobody: it does its work itself")),
+          g.requests.length ? row("Requests work from", list(g.requests, "")) : null,
+          row("Takes decisions to", g.escalatesTo === "you" ? "You" : `The ${g.escalatesTo}`),
+          row("Asks questions", g.asks ? "Anyone in the organization, up to 3 per task, never back up its own chain" : "Nobody"),
+          row("Library", `${g.library.documents} document${g.library.documents === 1 ? "" : "s"}${g.library.folders.length ? ` in ${list(g.library.folders.slice(0, 6), "")}${g.library.folders.length > 6 ? ` and ${g.library.folders.length - 6} more folders` : ""}` : ""}${g.library.hidden ? ` · ${g.library.hidden} hidden from it` : ""}`),
+          row("Workspace pages", `Reads ${g.workspace.read}${g.workspace.changeDirectly.length ? ` · changes directly: ${list(g.workspace.changeDirectly.slice(0, 5), "")}${g.workspace.changeDirectly.length > 5 ? "…" : ""}` : " · changes none directly, only suggests"}${g.workspace.hidden ? ` · ${g.workspace.hidden} hidden from it` : ""}`),
+          g.connectors.length ? row("Connected services", list(g.connectors, "")) : null,
+          g.keys.length ? row("Keys it may use", g.keys.map((k) => `${k.name} (only sent to ${k.host})`).join(", ")) : null,
+          row("Limits", [g.budget.perTask != null ? `${money(g.budget.perTask)} a task` : null, g.budget.steps != null ? `${g.budget.steps} steps` : null, g.budget.monthly != null ? `${money(g.budget.monthly)} a month` : "no monthly limit", "30 minutes a run"].filter(Boolean).join(" · ")),
+          general
+            ? h(
+                "label",
+                { class: "arow pickrow" },
+                h("input", {
+                  type: "checkbox",
+                  checked: state.config.assistantSeesGroups !== false,
+                  onchange: (e) => attempt(async () => ((state.config = await api("PUT", "settings", { assistantSeesGroups: e.target.checked })), load()), box),
+                }),
+                h("span", {}, "The assistant may read documents and pages limited to some groups. It works for you; Private items stay hidden from it either way."),
+              )
+            : null,
+          bot ? h("div", { class: "row" }, h("button", { class: "small", onclick: () => go("bot", bot.id) }, "Change its powers and limits")) : null,
+        );
+      }),
+    );
+  };
+  const cards = h("div", { class: "acards" });
+  const load = () =>
+    api("GET", `orgs/${org.id}/access`)
+      .then((g) => {
+        graphs = g;
+        fill(
+          box,
+          h("p", { class: "note" }, "What each agent can reach, all in one place: what it can do, who it can hand work to and ask, which documents and pages it can read or change, and its limits. Anything not listed here, the agent is refused. Change it on the agent's page, or with library and page access."),
+          find,
+          cards,
+        );
+        draw();
+      })
+      .catch((err) => fill(box, h("div", { class: "banner error" }, err.message)));
+  find.addEventListener("input", draw);
+  load();
+  return box;
 }
 
 async function teamView() {
@@ -2573,7 +2709,7 @@ function renderOrg() {
       : null;
 
   const side = panel();
-  const views = [["groups", "Groups"], ["chart", "Chart"], ["list", "List"], ["memory", "Memory"]];
+  const views = [["groups", "Groups"], ["chart", "Chart"], ["list", "List"], ["access", "Access"], ["memory", "Memory"]];
   fill(
     col,
     h(
@@ -2596,7 +2732,9 @@ function renderOrg() {
     ),
     o.note ? h("div", { class: "banner" }, o.note, o.undo.length && o.noteUndoes ? h("button", { class: "plain small", onclick: () => orgUndo() }, "Undo") : null) : null,
     problems.length ? h("div", { class: "orgproblems" }, problems.map(([text, fix, fn]) => h("div", { class: "orgproblem" }, h("span", { class: "grow" }, text), h("button", { class: "small", onclick: fn }, fix)))) : null,
-    o.view === "memory"
+    o.view === "access"
+      ? orgAccessPanel(org)
+      : o.view === "memory"
       ? orgMemoryPanel(org, groups)
       : h(
           "div",
@@ -4278,6 +4416,96 @@ async function marketBotView() {
 }
 
 // ---------- one quest ----------
+/** A plan an agent wrote before starting: waiting for the owner, being revised, or approved. */
+function planCard(q, after = null) {
+  const p = q?.plan;
+  if (!p) return null;
+  const steps = p.steps?.length ? h("ol", { class: "plansteps" }, p.steps.map((st) => h("li", {}, st.what, h("span", { class: "note small" }, ` · ${/^(you|me|myself)$/i.test(st.who) ? q.bot.name : st.who}`)))) : null;
+  const estimate = p.estimate != null ? h("p", { class: "note small" }, `Its estimate to carry it out: about ${money(p.estimate)}.`) : null;
+  if (p.status === "drafting") return h("div", { class: "card plancard" }, h("b", {}, "Writing its plan"), h("p", { class: "note small" }, "This is a task for a lead, so it plans first and waits for your approval before starting the work."));
+  if (p.status === "changes") return h("div", { class: "card plancard" }, h("b", {}, "Revising its plan"), h("p", { class: "note small" }, `You asked: ${p.feedback}`));
+  if (p.status === "approved") return h("details", { class: "card plancard" }, h("summary", {}, h("b", {}, "Approved plan"), h("span", { class: "note small" }, ` · version ${p.version}`)), h("p", {}, p.summary), steps, estimate);
+  const changes = h("textarea", { rows: 2, placeholder: "What should change? For example: “Do the cafés in the north first, and keep it under $2.”", "aria-label": "Changes to the plan" });
+  const decide = (decision) =>
+    attempt(async () => {
+      await api("POST", `quests/${q.id}/plan`, { decision, comment: changes.value });
+      ui.qplanKey = null;
+      if (after) after();
+      else refreshQuest();
+    }, ui.qnote ?? null);
+  return h(
+    "div",
+    { class: "card plancard waiting" },
+    h("div", { class: "row" }, h("b", { class: "grow" }, `Plan for your approval${p.version > 1 ? ` (version ${p.version})` : ""}`), h("span", { class: "tag" }, "Waiting on you")),
+    h("p", {}, p.summary),
+    steps,
+    estimate,
+    h("p", { class: "note small" }, "Nothing has been started or handed on yet. Approve it to let the agent carry it out, or say what should change and it will revise the plan."),
+    changes,
+    h("div", { class: "row" }, h("button", { class: "primary", onclick: () => decide("approve") }, "Approve the plan"), h("button", { onclick: () => decide("changes") }, "Ask for changes")),
+  );
+}
+
+/** What a stopped run left for whoever carries on: why, what it did and changed, and where to pick up. */
+function handoverCard(q) {
+  return q?.handover && !isLive(q) && q.status !== "done"
+      ? h(
+          "details",
+          { class: "card handover", open: q.stop === "repeat" || q.stop === "failing" },
+          h("summary", {}, h("b", {}, "Hand-over note"), h("span", { class: "note small" }, ` · stopped ${when(q.handover.at)}: ${q.handover.why}`)),
+          q.handover.did.length ? [h("div", { class: "label" }, "What it did last"), h("ul", {}, q.handover.did.map((d) => h("li", {}, d)))] : null,
+          q.handover.changed.length ? [h("div", { class: "label" }, "What it changed"), h("ul", {}, q.handover.changed.map((c) => h("li", {}, c)))] : null,
+          q.handover.lastWords ? [h("div", { class: "label" }, "What it last said"), h("p", { class: "handwords" }, q.handover.lastWords)] : null,
+          h("p", {}, h("b", {}, "Next: "), q.handover.next),
+          h("p", { class: "note small" }, "Say “continue” below, or press Try again on the task, and it picks up from this note."),
+        )
+      : null;
+}
+
+const BOARD_WORDS = { finding: "Finding", decision: "Decision", question: "Question", blocker: "Blocker", handover: "Hand-over", note: "Note" };
+
+/**
+ * The shared board of the task tree this run belongs to: what the agents on it have posted, and a box for the owner
+ * to post too. The box is made once, so a refresh of the list never wipes what is being typed.
+ */
+function taskBoard() {
+  const list = h("div", { class: "boardlist" });
+  const text = h("textarea", { rows: 2, placeholder: "Post a note every agent on this task will see, e.g. “Use the November export in the Finance folder.”", "aria-label": "Note for the board" });
+  const kind = h("select", { "aria-label": "Kind of note" }, ["note", "decision", "question", "finding"].map((k) => h("option", { value: k }, BOARD_WORDS[k])));
+  const form = h(
+    "form",
+    {
+      class: "row boardform",
+      onsubmit: (e) => {
+        e.preventDefault();
+        if (!text.value.trim()) return;
+        attempt(async () => {
+          await api("POST", `quests/${state.convId}/board`, { kind: kind.value, text: text.value });
+          text.value = "";
+          refreshQuest();
+        }, ui.qboard);
+      },
+    },
+    kind,
+    text,
+    h("button", { class: "small" }, "Post"),
+  );
+  const box = h("details", { class: "card taskboard" }, h("summary", {}, h("b", {}, "Task board"), h("span", { class: "note small count" })), list, form);
+  return {
+    node: box,
+    show(posts = []) {
+      box.querySelector(".count").textContent = posts.length ? ` · ${posts.length} note${posts.length === 1 ? "" : "s"} from everyone on this task` : " · empty so far: agents post findings, decisions, questions and blockers here";
+      if (posts.some((p) => p.kind === "blocker" || p.kind === "question") && !box.dataset.seen) (box.open = true), (box.dataset.seen = "1");
+      fill(
+        list,
+        posts.length
+          ? posts.map((p) => h("div", { class: `boardpost ${p.kind}` }, h("span", { class: "tag" }, BOARD_WORDS[p.kind] ?? p.kind), h("div", { class: "grow" }, h("div", {}, p.text), h("div", { class: "note small" }, `${p.authorName} · ${when(p.at)}`))))
+          : h("p", { class: "note small" }, "Nothing yet."),
+      );
+    },
+  };
+}
+
 function questView() {
   ui.body.className = "body questview";
   ui.qhead = h("div", { class: "subhead" });
@@ -4291,7 +4519,11 @@ function questView() {
   ui.changesPanel = h("div", { class: "tabpanel pad", hidden: true });
   ui.receiptPanel = h("div", { class: "tabpanel pad", hidden: true });
   ui.convoPanel = h("div", { class: "tabpanel" }, conversationPane());
-  fill(ui.qcenter, ui.tabs, ui.changesPanel, ui.receiptPanel, ui.convoPanel);
+  ui.qnote = h("div", { class: "qnote" });
+  ui.qplanKey = null;
+  ui.qboardView = taskBoard();
+  ui.qboard = h("div", { class: "qnote" }, ui.qboardView.node);
+  fill(ui.qcenter, ui.tabs, ui.qnote, ui.qboard, ui.changesPanel, ui.receiptPanel, ui.convoPanel);
   ui.title = h("span");
   ui.meta = h("span", { class: "meta" });
   ui.changesFor = null;
@@ -4312,6 +4544,10 @@ async function refreshQuest(first = false) {
   if (state.view !== "quest" || state.convId !== id) return;
   const changed = !state.quest || state.quest.id !== q.id || state.quest.status !== q.status || state.quest.outcome !== q.outcome;
   state.quest = q;
+  // The plan card is drawn again only when the plan changes, so a refresh never wipes what the owner is typing in it.
+  const planKey = q.plan ? `${q.plan.status}:${q.plan.version}:${q.handover?.at ?? ""}` : "";
+  if (ui.qnote && (planKey !== ui.qplanKey || !q.plan)) (fill(ui.qnote, planCard(q), handoverCard(q)), (ui.qplanKey = planKey));
+  ui.qboardView?.show(q.board);
   const [label, tone] = standing(q);
   const where = q.branch ? ["on branch ", h("code", {}, q.branch), " · your own branch is untouched"] : q.project ? [`in ${basename(q.project)}`] : ["in the workspace folder"];
   fill(ui.qhead, 
@@ -5949,6 +6185,7 @@ function settingsView() {
   const effort = select(c.efforts.map((e) => [e, e]), c.effort);
   const savings = select([["off", "Off: every agent uses my model"], ["balanced", "On: match the model to the work"]], c.savings ?? "off");
   const checkFirst = select([["on", "Check first, and ask me if something is missing"], ["off", "Start straight away"]], c.checkFirst === false ? "off" : "on");
+  const planFirst = select([["leads", "Tasks I give to a lead: plan first, for my approval"], ["all", "Every task I give: plan first, for my approval"], ["never", "Never: start straight away"]], c.planFirst ?? "leads");
   const mode = select(
     [
       ["ask", "Ask me before commands, file changes and API writes"],
@@ -5998,7 +6235,7 @@ function settingsView() {
         class: "form",
         onsubmit: (e) => (
           e.preventDefault(),
-          save({ agentName: name.value, model: ref(), effort: effort.value, savings: savings.value, checkFirst: checkFirst.value === "on", approvalMode: mode.value, budget: { steps: Number(steps.value), spend: spend.value === "" ? null : Number(spend.value) } })
+          save({ agentName: name.value, model: ref(), effort: effort.value, savings: savings.value, checkFirst: checkFirst.value === "on", planFirst: planFirst.value, approvalMode: mode.value, budget: { steps: Number(steps.value), spend: spend.value === "" ? null : Number(spend.value) } })
         ),
       },
       h("label", {}, "Name", name),
@@ -6011,6 +6248,8 @@ function settingsView() {
       h("label", {}, "Effort, for Claude (higher thinks longer and costs more)", effort),
       h("label", {}, "Cost saving for your team of agents", savings),
       h("label", {}, "Before starting a task", checkFirst),
+      h("label", {}, "Plans for your approval", planFirst),
+      h("p", { class: "note small" }, "With plans on, the agent first looks into the task and sends you a plan: the steps, who does each, and its cost estimate. It changes nothing and hands nothing on until you approve it, or ask for changes. A lead is an agent with people reporting to it."),
       h("p", { class: "note small" }, "With this on, an agent first checks it has what your task needs (information, a repository, documents, access). If something is missing, it asks you in your Inbox instead of spending money guessing. The check costs a few cents at most and shows on the receipt."),
       h("p", { class: "note small" }, "With cost saving on, and Claude Opus or Fable as your model: managers who plan and check keep your model, team members doing their own part use Claude Sonnet 5.5 (about half the price), and quick questions between agents use Claude Haiku 5.5 (about a fortieth). An agent you gave a model of its own keeps it. Off uses your model for everything."),
       h("label", {}, "Approvals", mode),
@@ -6657,7 +6896,26 @@ async function drawTaskPanel(id) {
   title.addEventListener("change", () => title.value.trim() && title.value.trim() !== t.title && patch({ title: title.value.trim() }));
   const priority = h("select", { "aria-label": "Priority", onchange: (e) => patch({ priority: e.target.value }) }, ["urgent", "high", "normal", "low"].map((p) => h("option", { value: p, selected: t.priority === p }, PRIORITY_WORDS[p])));
   const ownerBot = crew.get(t.owner);
-  const owner = t.status === "todo" ? h("select", { "aria-label": "Assigned to", onchange: (e) => patch({ owner: e.target.value }) }, org.members.map((m) => h("option", { value: m.bot, selected: m.bot === t.owner }, m.title))) : h("span", { class: "row" }, ownerBot ? keycap(ownerBot, 20, "", ownerBot.type) : null, t.ownerName);
+  // A task not started can go to anyone; a stopped one can be given to someone else, who picks up from its hand-over note.
+  const owner =
+    t.status === "todo"
+      ? h("select", { "aria-label": "Assigned to", onchange: (e) => patch({ owner: e.target.value }) }, org.members.map((m) => h("option", { value: m.bot, selected: m.bot === t.owner }, m.title)))
+      : t.status === "blocked"
+        ? h(
+            "div",
+            {},
+            h("span", { class: "row" }, ownerBot ? keycap(ownerBot, 20, "stuck", ownerBot.type) : null, t.ownerName),
+            h(
+              "select",
+              {
+                "aria-label": "Give it to someone else",
+                onchange: (e) => e.target.value && confirm(`Give task #${t.number} to the ${org.members.find((m) => m.bot === e.target.value)?.title}?\n\nThey start a fresh run from the hand-over note it left.`) ? patch({ owner: e.target.value }) : (e.target.value = ""),
+              },
+              h("option", { value: "" }, "Give it to someone else…"),
+              org.members.filter((m) => m.bot !== t.owner).map((m) => h("option", { value: m.bot }, m.title)),
+            ),
+          )
+        : h("span", { class: "row" }, ownerBot ? keycap(ownerBot, 20, "", ownerBot.type) : null, t.ownerName);
   const parent = t.parent ? ui.tasks?.find((x) => x.id === t.parent) : null;
   const comment = h("textarea", { rows: 3, placeholder: t.status === "review" ? "What should change? Sending it back wakes the agent." : "Write a note for the agent…", "aria-label": "Comment" });
   const sendComment = () => comment.value.trim() && act(async () => (await api("POST", `work/${id}/comment`, { text: comment.value }), (comment.value = "")));
@@ -6672,6 +6930,7 @@ async function drawTaskPanel(id) {
       "div",
       { class: "taskactions row wrap" },
       t.status === "review" ? h("button", { class: "primary small", onclick: () => act(() => api("POST", `work/${id}/accept`)) }, "Accept") : null,
+      t.status === "waiting" && /plan/i.test(t.detail ?? "") && t.quest ? h("button", { class: "primary small", onclick: () => go("quest", t.quest) }, "Review its plan") : null,
       t.status === "blocked" ? h("button", { class: "primary small", onclick: () => act(() => api("POST", `work/${id}/retry`)) }, "Try again") : null,
       t.status === "waiting" && t.quest ? h("button", { class: "primary small", onclick: () => go("quest", t.quest) }, "Answer it") : null,
       t.quest ? h("button", { class: "small", onclick: () => go("quest", t.quest) }, "Open the work") : null,

@@ -54,6 +54,14 @@ Your mission is at the top. Below it are goal cards, grouped under "The whole or
 
 **Goals, projects and tasks.** A goal is something you can measure, with a date, such as "40 wholesale customers by March". A project is a piece of work that serves a goal, and it can have a lead. A task can belong to a project (and so serve its goal), or serve a goal directly. When a task starts, its agent is told which goal and project it serves, with the goal's current progress, and to keep the work aimed at that. Every agent is also told your active goals (the organization's, and its own group's) and asked to put what moves them forward first.
 
+**Every task has exits, and leaves a note when it stops.** Besides its budget, a task stops on its own when it has worked for 30 minutes (5 for a question to a colleague), when it tries the very same step a third time, or when every step fails four times in a row. Each of these means it is stuck or going round in circles, so it stops before wasting more money. Agents also cannot send work or questions back up their own chain (for example, a bookkeeper asking the head of finance who gave it the work), because that would go round in circles; they say in their report what they need instead.
+
+**Plans for your approval.** When you give a task to a lead (an agent with people reporting to it), it plans first. It looks into the task, then sends you a plan: a short summary, the steps in order with who does each, and its cost estimate. Until you approve, it changes nothing and hands nothing on; it can only read and look things up. The task shows **Plan to approve** and waits in **Needs you**. You approve it, or ask for changes and it revises the plan. You choose when plans are needed in **Settings** (tasks for leads, every task, or never).
+
+**The task board.** Every task, together with the parts handed on from it, has one shared **Task board**. The agents working on it post short notes there as they go: a finding the others should know, a decision and why, a question, or a blocker. Every agent on the task sees the latest notes when it starts, and can read and post while it works, so two agents do not research the same thing and a decision reaches everyone at once. You can read the board on the task's page, and post to it yourself.
+
+**Hand-over notes.** Whenever a task stops before finishing (its budget, a time limit, getting stuck, an error, or you stopping it), its agent leaves a **Hand-over note** on the task: why it stopped, what it did last, which files and pages it changed, what it last said, and where to pick up. You see it in the task's comments and on its page. **Try again** hands the note back to the agent, so it carries on from there instead of starting over.
+
 ## How to…
 
 **Create a task**
@@ -73,7 +81,24 @@ Your mission is at the top. Below it are goal cards, grouped under "The whole or
 
 **Reassign a task**
 1. Open a task that is still in **To do**.
-2. Pick another agent under **Assigned to**. Once a task has started, you can't reassign it. Cancel it and create a new one instead.
+2. Pick another agent under **Assigned to**.
+
+**Give a stopped task to someone else**
+1. Open a task that is **Stuck** (it stopped at its budget, got stuck, failed, or you stopped it).
+2. Choose an agent from **Give it to someone else…** and confirm.
+3. The new agent starts a fresh run. Its brief includes the **Hand-over note** the last agent left, so it picks up from there instead of starting over. The first agent's run stays in the task's history.
+
+A task that is still working must be stopped first, and a finished task cannot be moved: create a new task instead.
+
+**Approve a plan, or ask for changes**
+1. Open the task: on its panel, press **Review its plan**.
+2. Read the summary, the steps and who does each, and the estimate.
+3. Press **Approve the plan** to let the agent carry it out. Or write what should change in the box and press **Ask for changes**: the agent revises the plan and sends it again, marked with its version.
+
+**Use the task board**
+1. Open a task's page (from **Work in progress** or the task's panel) and open **Task board**.
+2. Read what the agents on the task have posted: findings, decisions, questions, blockers and hand-overs. It opens by itself when one has a question or a blocker.
+3. To tell every agent on the task something at once, write a note, choose its kind and press **Post**. They see it the next time they read the board or start.
 
 **Rename a task or link it to a project or goal**
 1. Open the task and edit the title at the top. It saves when you click away.
@@ -144,9 +169,16 @@ Your mission is at the top. Below it are goal cards, grouped under "The whole or
 ## If something goes wrong
 
 - **"Before this task starts"**: the app found something missing before spending anything, such as an AI model or a key. Use the button shown to fix it. If **Start anyway** appears, the task can run without it.
-- **"This task has started. Cancel it and create a new one for someone else."**: you can only reassign tasks still in To do.
+- **"It is working now. Stop it first, then give it to someone else."**: press **Stop** on the task's page, wait until it shows its hand-over note, then choose **Give it to someone else…**.
+- **"This task finished and is waiting for your review."**: a finished task is not moved. Send it back with a comment, or create a new task for someone else.
+- **"Say what should change in the plan."**: write what should change in the box before pressing **Ask for changes**.
+- **"There is no plan waiting for your approval on this task."**: the plan was already approved, or the agent is still revising it. Reload the page.
+- **"This task's board is full"**: a task's board keeps up to 60 notes; the agents put the rest in their reports.
 - **"Its agent is no longer on your team."**: the agent was removed. Reassign the task, then click **Try again**.
 - **"It reached its budget."** or a monthly budget message: raise the budget (per task in Settings, per agent on the agent's page, or per group on the Organization page), then click **Try again**.
+- **"Stopped: it tried the same step … a third time"** or **"Stopped: every step failed 4 times in a row"**: the agent is stuck. Read its **Hand-over note** and the last errors, add a comment with a hint (for example where the file really is), then click **Try again**.
+- **"Stopped at its time limit"**: the task ran for over 30 minutes. Click **Try again** to let it carry on from its hand-over note, or split the task into smaller ones.
+- **"… is further up this same task … would go round in circles"**: an agent tried to send work back to the agent that gave it the work. It finishes its part and says in its report what it needs; nothing to fix.
 - **"Its result did not pass its check."**: open the work to see which check failed.
 - **"The lead must be a position on the chart."**: add that agent to your Organization chart first.
 

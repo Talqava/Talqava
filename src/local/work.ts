@@ -12,7 +12,7 @@ import type { Org } from "./orgs.ts";
 import { openOrgDb } from "./library.ts";
 import { loadCrew } from "./crew.ts";
 import { audit } from "./audit.ts";
-import { MAX_RUNNING, questStore, quests, setWhyGoal } from "./quests.ts";
+import { MAX_RUNNING, handoverText, questStore, quests, setWhyGoal } from "./quests.ts";
 import { goalLine, goals, goalsDb } from "./goals.ts";
 import type { Quest } from "./quests.ts";
 
@@ -145,6 +145,7 @@ function statusOf(row: Row, rows: Row[], quest: Quest | null): { status: Status;
   if (!quest) return { status: "blocked", detail: "Its run is gone." };
   if (quest.status === "running") return { status: "working", detail: "" };
   if (quest.status === "waiting") return { status: "waiting", detail: "Needs your approval for a step" };
+  if (quest.status === "asking" && quest.plan?.status === "proposed") return { status: "waiting", detail: "Its plan is waiting for your approval" };
   if (quest.status === "asking") return { status: "waiting", detail: quest.note ? `Asked: ${quest.note}` : "Asked you for what it needs" };
   if (quest.status === "failed") return { status: "blocked", detail: quest.note || "It failed." };
   if (quest.status === "budget") return { status: "blocked", detail: quest.note || "It reached its budget." };
@@ -214,12 +215,13 @@ function briefOf(org: Org, row: Row, rows: Row[]): string {
   const handoff = row.handoff ? (JSON.parse(row.handoff) as { conversation: string; by: string; text?: string }) : null;
   const serves = servesLine(org, row);
   // A hand-off carries the text its sender wrote, which already says who it is from and where the report goes.
-  if (handoff?.text) return serves ? `${handoff.text}\n\n${serves}` : handoff.text;
+  const notes = comments.length ? `Notes on this task:\n${comments.map((c) => `- ${nameOf(org, c.author)}: ${c.text}`).join("\n")}` : "";
+  if (handoff?.text) return [handoff.text, serves, notes].filter(Boolean).join("\n\n");
   return [
     row.description.trim() || row.title,
     serves,
     parent ? `[This is part of the task “${parent.title}”.]` : "",
-    comments.length ? `Notes on this task:\n${comments.map((c) => `- ${nameOf(org, c.author)}: ${c.text}`).join("\n")}` : "",
+    notes,
     `[Task #${row.number}${row.priority !== "normal" ? `, ${row.priority} priority` : ""}. End with a short report of what you did and what you found.]`,
   ]
     .filter(Boolean)
@@ -307,15 +309,34 @@ export const work = {
       d.prepare("update work_items set priority = ? where id = ?").run(String(patch.priority), row.id);
     }
     if (patch.owner !== undefined && patch.owner !== row.owner) {
-      if (row.state !== "todo") throw new Error("This task has started. Cancel it and create a new one for someone else.");
       if (!bots().has(String(patch.owner))) throw new Error("There is no such agent.");
-      d.prepare("update work_items set owner = ?, held = null where id = ?").run(String(patch.owner), row.id);
+      if (row.state === "todo") d.prepare("update work_items set owner = ?, held = null where id = ?").run(String(patch.owner), row.id);
+      else this.reassign(org, row, String(patch.owner));
     }
     if (patch.goal !== undefined) d.prepare("update work_items set goal = ? where id = ?").run(patch.goal ? goals.get(org, String(patch.goal)).id : null, row.id);
     if (patch.projectId !== undefined) d.prepare("update work_items set project_id = ? where id = ?").run(patch.projectId ? goals.project(org, String(patch.projectId)).id : null, row.id);
     d.prepare("update work_items set updated_at = ? where id = ?").run(now(), row.id);
     this.kick();
     return this.get(org, id);
+  },
+
+  /**
+   * Succession: a task that stopped (stuck, at its budget, failed or stopped by the owner) moves to another agent. Its
+   * run is kept in its history; the new agent starts a fresh run from the brief, which includes the hand-over note the
+   * last agent left on the task. A task still working, or already done, is not moved.
+   */
+  reassign(org: Org, row: Row, owner: string) {
+    const quest = row.quest ? questStore.get(row.quest) : null;
+    if (busy(quest) || (row.quest && quests.isRunning(row.quest))) throw new Error("It is working now. Stop it first, then give it to someone else.");
+    if (row.state === "done" || row.state === "cancelled") throw new Error("This task is finished. Create a new task for someone else.");
+    if (quest?.status === "done" && !(quest.check && !quest.check.passed)) throw new Error("This task finished and is waiting for your review. Send it back with a comment, or create a new task for someone else.");
+    const d = db(org.id);
+    const crew = bots();
+    const from = nameOf(org, row.owner, crew);
+    const to = nameOf(org, owner, crew);
+    d.prepare("update work_items set owner = ?, quest = null, state = 'todo', held = null where id = ?").run(owner, row.id);
+    d.prepare("insert into work_comments (id, item, author, text, at, delivered) values (?, ?, 'owner', ?, ?, 1)").run(newId(), row.id, `Given to the ${to}, from the ${from}. Pick up from the hand-over note above, not from the start.`, now());
+    audit({ actor: "owner", actorName: "You", kind: "task", action: `Gave task #${row.number} to the ${to}`, detail: `It had stopped with the ${from}: ${row.title}` });
   },
 
   /** Cancels a task and the sub-tasks under it that have not finished; a run under way is stopped, its work kept. */
@@ -389,7 +410,13 @@ export const work = {
     const row = rowOf(d, id);
     if (!row) throw new Error("There is no such task.");
     if (row.state === "todo") d.prepare("update work_items set held = null, updated_at = ? where id = ?").run(now(), row.id);
-    else if (row.quest && !busy(questStore.get(row.quest))) await quests.resume(row.quest, "[Carry on with this task from where it stopped, then end with a short report.]");
+    else if (row.quest && !busy(questStore.get(row.quest))) {
+      // It carries on from its own hand-over note: why it stopped, what it did, and where it got to.
+      const stopped = questStore.get(row.quest);
+      const note = stopped?.handover ? `\n\n${handoverText(stopped.handover, "your last run")}` : "";
+      const hint = stopped?.stop === "repeat" || stopped?.stop === "failing" ? " Last time it got stuck: try a different way rather than repeating the same step." : "";
+      await quests.resume(row.quest, `[Carry on with this task from where it stopped, then end with a short report.${hint}]${note}`);
+    }
     this.kick();
     return this.get(org, id);
   },

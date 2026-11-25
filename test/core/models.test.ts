@@ -325,3 +325,72 @@ test("backup models: a service that is down or out of credit hands over before a
   await assert.rejects(new FallbackModel([failing(500, "anthropic", true), good]).call(request, quiet), /nope/);
   await assert.rejects(new FallbackModel([failing(500), failing(503)]).call(request, quiet), /nope/);
 });
+
+test("every loop has an exit: a repeated step, steps that keep failing, and a time limit each stop the run cleanly and say why", async () => {
+  const stops = async (limits: object, replies: ChatReply[]) => {
+    run = { model: local({ input: 0, output: 0 }), budget: { steps: 20 }, limits } as typeof run;
+    script.length = 0;
+    script.push(...replies);
+    const { id } = await conversations.create();
+    const events: RunEvent[] = [];
+    engine.subscribe(id, (e) => events.push(e));
+    await (await engine.startRun(id, "go")).done;
+    const saved = (await conversations.get(id))!;
+    return { stopped: events.filter((e) => e.type === "stopped") as { reason: string; text: string }[], saved, ran: events.filter((e) => e.type === "tool_result").map((e) => (e as { result: { is_error?: boolean; content: unknown } }).result) };
+  };
+
+  // The same step a third time is not run: the run stops, and every requested step still has an answer.
+  const same = { calls: [{ name: "echo", args: { word: "again" } }] };
+  const repeat = await stops({}, [same, same, same, { text: "never reached" }]);
+  assert.deepEqual(repeat.stopped.map((s) => s.reason), ["repeat"]);
+  assert.match(repeat.stopped[0].text, /same step \(echo\) a third time/);
+  assert.deepEqual(repeat.ran.map((r) => Boolean(r.is_error)), [false, false, true]);
+  assert.match(String(repeat.ran[2].content), /already tried 2 times/);
+  assert.equal(repeat.saved.messages.at(-1)!.role, "user"); // the run can be continued: the last step has its answer
+
+  // Different steps are fine, however many.
+  const varied = await stops({}, [...[0, 1, 2, 3].map((n): ChatReply => ({ calls: [{ name: "echo", args: { word: `w${n}` } }] })), { text: "Done." }]);
+  assert.deepEqual(varied.stopped, []);
+
+  // Every step failing, four times in a row, stops it.
+  const failing = await stops({}, [1, 2, 3, 4, 5].map((n) => ({ calls: [{ name: "echo", args: { other: n } }] })));
+  assert.deepEqual(failing.stopped.map((s) => s.reason), ["failing"]);
+  assert.equal(failing.ran.length, 4);
+
+  // Past its time limit, it stops before the next step.
+  const slow = await stops({ minutes: 1e-7 }, [{ calls: [{ name: "echo", args: { word: "a" } }] }, { text: "late" }]);
+  assert.deepEqual(slow.stopped.map((s) => s.reason), ["time"]);
+  assert.match(slow.stopped[0].text, /time limit/);
+
+  // The budget stops say so too.
+  run = { model: local({ input: 0, output: 0 }), budget: { steps: 1 } } as typeof run;
+  script.length = 0;
+  script.push({ calls: [{ name: "echo", args: { word: "x" } }] }, { text: "unreached" });
+  const { id } = await conversations.create();
+  const events: RunEvent[] = [];
+  engine.subscribe(id, (e) => events.push(e));
+  await (await engine.startRun(id, "go")).done;
+  assert.deepEqual(events.filter((e) => e.type === "stopped").map((e) => (e as { reason: string }).reason), ["steps"]);
+});
+
+test("near the end of its budget an agent is told to wrap up and answer, and a chat keeps why its run stopped", async () => {
+  const { WRAP_UP } = await import("../../src/core/engine.ts");
+  run = { model: local({ input: 0, output: 0 }), budget: { steps: 3 } } as typeof run;
+  mock.requests.length = 0;
+  script.length = 0;
+  script.push({ calls: [{ name: "echo", args: { word: "a" } }] }, { calls: [{ name: "echo", args: { word: "b" } }] }, { calls: [{ name: "echo", args: { word: "c" } }] }, { text: "unreached" });
+  const { id } = await conversations.create();
+  await (await engine.startRun(id, "look into it")).done;
+  // The second call (two steps left) carries the wrap-up note after the tool result; the first does not.
+  const said = mock.requests.map((r) => JSON.stringify(r.body.messages));
+  assert.ok(!said[0].includes("close to its budget"));
+  assert.ok(said[1].includes("close to its budget"));
+  assert.equal(said.filter((x) => x.includes("Stop looking things up now")).length >= 1, true);
+  assert.match(WRAP_UP, /what is left to do/);
+  // It stopped at its steps: the conversation says so, and a new run clears it.
+  const saved = (await conversations.get(id))!;
+  assert.equal(saved.lastStop?.reason, "steps");
+  script.push({ text: "All done." });
+  await (await engine.startRun(id, "continue")).done;
+  assert.equal((await conversations.get(id))!.lastStop, null);
+});

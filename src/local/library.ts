@@ -12,7 +12,7 @@ import crypto from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { defineTool, htmlToText } from "../core/index.ts";
 import type { Tool } from "../core/index.ts";
-import { DATA } from "./store.ts";
+import { DATA, getConfig } from "./store.ts";
 import { memberOf, orgs } from "./orgs.ts";
 import type { Org } from "./orgs.ts";
 
@@ -412,7 +412,9 @@ function effectiveAccess(org: Org, rel: string, own: Access | null, settings: Ma
 export function mayUse(org: Org, access: Access, botId: string | null): boolean {
   if (botId === OWNER) return true;
   if (access.private) return false;
-  if (botId === GENERAL_AGENT || access.everyone) return true;
+  if (access.everyone) return true;
+  // The assistant works for the owner, so by default it may read what is limited to some groups; the owner can turn that off.
+  if (botId === GENERAL_AGENT) return getConfig().assistantSeesGroups !== false;
   const me = memberOf(org, botId);
   return access.agents.includes(botId) || Boolean(me && access.departments.includes(me.department));
 }

@@ -6,10 +6,11 @@ The Organization page is your org chart. It is where you decide which AI agents 
 
 - **The heading.** Your organization's name and its mission underneath. If you have more than one organization, a drop-down next to the name lets you switch. The **Settings** button sits on the right.
 - **The summary strip.** How many positions and groups you have, and the most your agents can spend in a month (their monthly budgets added up). If none are set, it says **No monthly limits set**.
-- **Four views:** **Groups**, **Chart**, **List** and **Memory**.
+- **Five views:** **Groups**, **Chart**, **List**, **Access** and **Memory**.
   - **Groups** shows a **You, the owner** bar at the top, then one box per group. Each box shows the group's lead first, with the rest of the group nested under whoever they report to.
   - **Chart** shows the whole tree, starting from you.
   - **List** puts each position on one row. You can change its group, who it reports to, and its dotted line right there in the row.
+  - **Access** shows, for each agent and the Talqava assistant, everything it can reach: what it can do, whether it asks before changes, who it can hand work to, request work from and ask, which library documents and workspace pages it can read or change, and its limits.
   - **Memory** holds what the organization remembers: notes for everyone, for one group, and each agent's own notes and past work.
 - **Buttons on the strip:** **Suggest positions**, **Undo** and **History**. **History** opens the audit log, where every change is recorded.
 - **The Add bar** on the left. It has a search box (**Find a role or a team**) and the **+ Group** button. It lists **Your agents, not on the chart**, **Ready-made teams**, and roles **From the marketplace**.
@@ -102,6 +103,15 @@ Click it, then change **Title**, **Responsible for** or **Group**. Changes save 
 ### Remove a position or group
 - **Position:** open it and click **Take off the chart**. Anyone who reported to it moves up to its manager. The agent stays on your team.
 - **Group:** open it, choose where its positions should move, and click **Remove**. An empty group can be removed straight away.
+
+### See what an agent can reach
+
+1. Press **Access**.
+2. Open an agent's card, or type its name in **Find an agent**.
+3. Read what it can do, who it can hand work to and ask, which documents and pages it can read or change, and its limits. Anything not listed, it is refused.
+4. To change it, press **Change its powers and limits**, or change who may see a library folder or a workspace page.
+
+The first card is the Talqava assistant. It works for you, so by default it may read documents and pages limited to some groups (never Private ones). Untick **The assistant may read documents and pages limited to some groups** on its card to keep those to their groups only.
 
 ### Undo a change
 Click **Undo** on the strip, or in the note that appears after a change. You can also press Cmd-Z when you're not typing in a box.

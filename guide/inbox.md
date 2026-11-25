@@ -8,7 +8,7 @@ The Inbox is where your agents write to you. It works like email. Every task you
 
 - **Inbox**: everything not archived or deleted.
 - **Saved**: messages you starred.
-- **Needs you**: approvals, questions, problems and budget stops.
+- **Needs you**: everything waiting on you, in one place: steps to allow, plans to approve, questions an agent asked before starting, finished work to accept or send back, code changes to review, suggested page changes, proposed positions, problems and budget stops. Each one has its buttons right in the message.
 - **In progress**: tasks still being worked on.
 - **Archive**: messages you put away.
 - **Trash**: deleted messages, removed after 30 days.
@@ -90,6 +90,13 @@ Work handed between agents doesn't send you separate messages. Its progress show
 **Rename an agent**
 1. Open one of its messages and click **Rename** next to its name.
 2. Type the new name and click **Save**. **Use default** goes back to the original.
+
+### Approve a plan, answer a question, or accept work, from the Inbox
+
+1. Open **Needs you**.
+2. **Plan to approve:** read the steps and the estimate, then press **Approve the plan**, or write what should change and press **Ask for changes**.
+3. **Needs your answer before starting:** read what the agent needs, write your answer and press **Send and start**.
+4. **To review:** read the report, then press **Accept**, or write what should change and press **Send back with this comment**.
 
 ## Tips
 

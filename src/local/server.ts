@@ -39,6 +39,8 @@ import { needsFor } from "./preflight.ts";
 import { acceptSuggestion, suggestPositions } from "./suggest.ts";
 import { audit, readAudit, redact } from "./audit.ts";
 import { connect, disconnect, findLocal, gatewayState, listModels, setBackups } from "./gateway.ts";
+import { board } from "./board.ts";
+import { accessGraph, accessGraphs } from "./access.ts";
 import { finishOpenRouterSignIn, openrouterIntegration, openrouterModels, removeOpenRouter, saveOpenRouterKey, startOpenRouterSignIn, useOpenRouterModel } from "./openrouter.ts";
 import { autoSetupGit, cloneRepository, disconnectRepository, gitIntegration, githubAccounts, githubRepos, installGit, listIntegrations, pollGithubSignIn, removeGitIntegration, startGithubSignIn, testGithub } from "./integrations.ts";
 import { ASSIGN_RULES, INDUSTRIES, REQUEST_RULES, STRUCTURES, seatsFor } from "./structures.ts";
@@ -158,7 +160,8 @@ function describeRequest(method: string, parts: string[], body: any, url: URL): 
   const words = (b: unknown) => JSON.stringify(redact(b ?? {})).slice(0, 400);
   if (area === "login") return { kind: "settings", action: "Signed in" };
   if (area === "quests" && !id && method === "POST") return null; // the route records it, knowing whether the task started
-  if (area === "quests" && id) return { kind: "task", task: id, action: action === "stop" ? "Stopped a task" : action === "escalate" ? "Handed a task to Claude" : action === "accept" ? "Kept a task's changes" : action === "undo" ? "Undid a task's changes" : method === "DELETE" ? "Deleted a task" : `${method} task ${action ?? ""}`.trim() };
+  if (area === "quests" && id && action === "plan") return null; // the plan writes its own entry
+  if (area === "quests" && id) return { kind: "task", task: id, action: action === "stop" ? "Stopped a task" : action === "board" ? "Posted to a task's board" : action === "escalate" ? "Handed a task to Claude" : action === "accept" ? "Kept a task's changes" : action === "undo" ? "Undid a task's changes" : method === "DELETE" ? "Deleted a task" : `${method} task ${action ?? ""}`.trim() };
   if (area === "conversations") {
     if (action === "messages") return { kind: "chat", task: id, action: questStore.get(id) ? "Replied to an agent" : "Sent a chat message", detail: String(body.text ?? "").slice(0, 300) };
     if (action === "approvals") return null; // the agent's event records the decision
@@ -308,6 +311,8 @@ async function updateSettings(body: any) {
   if (EFFORTS.includes(body.effort)) patch.effort = body.effort;
   if (body.savings === "balanced" || body.savings === "off") patch.savings = body.savings;
   if (typeof body.checkFirst === "boolean") patch.checkFirst = body.checkFirst;
+  if (typeof body.assistantSeesGroups === "boolean") patch.assistantSeesGroups = body.assistantSeesGroups;
+  if (["leads", "all", "never"].includes(body.planFirst)) patch.planFirst = body.planFirst;
   if (["ask", "auto"].includes(body.approvalMode)) patch.approvalMode = body.approvalMode;
   if (typeof body.apiKey === "string") patch.apiKey = body.apiKey.trim();
 
@@ -613,6 +618,10 @@ function questSummary(quest: Quest) {
     outcome: quest.outcome ?? null,
     changedFiles: quest.changedFiles ?? null,
     note: quest.note ?? null,
+    // Which exit stopped it, and what it left for whoever carries on.
+    stop: quest.stop ?? null,
+    handover: quest.handover ?? null,
+    plan: quest.plan ?? null,
     // What this task and everything handed on from it have cost together, and how many tasks that is.
     chain: rootOf(quest) === quest.id ? { cost: chainCost(quest.id), tasks: chainSize(quest.id), budget: chainBudget(), ...chainProgress(quest.id) } : null,
     // The agent's latest words: its report once it has finished, or what it last said while working.
@@ -905,7 +914,18 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
         throw new HttpError(409, (err as Error).message);
       }
     };
-    if (!action && req.method === "GET") return send(res, 200, { ...questSummary(quest), journal: journal.read(id) });
+    // One task: everything about it, its journal, and the shared board of the task tree it belongs to.
+    if (!action && req.method === "GET") return send(res, 200, { ...questSummary(quest), journal: journal.read(id), board: board.list(orgs.active(), rootOf(quest)) });
+    // The owner approves an agent's plan, or asks for changes; either way the agent carries on.
+    if (action === "plan" && req.method === "POST") return send(res, 200, questSummary(await attemptQuest(() => quests.decidePlan(id, body.decision, body.comment))));
+    // The owner posts to that board: the agents on the task see it when they next read it or start.
+    if (action === "board" && req.method === "POST") {
+      try {
+        return send(res, 200, board.post(orgs.active(), rootOf(quest), "owner", body.kind, body.text));
+      } catch (err) {
+        throw new HttpError(400, (err as Error).message);
+      }
+    }
     // The receipt covers the whole task: asked for from one of its parts, it is the receipt of the task that part came from.
     if (action === "receipt" && req.method === "GET") return send(res, 200, receiptOf(rootOf(quest)));
     // A finished task's report, saved as a page in the workspace.
@@ -1280,6 +1300,12 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (route === "POST orgs" && sub === "pack") return send(res, 200, await attempt(() => addPack(orgId, String(body.team ?? ""), { under: body.under, group: body.group })));
     // Positions the agents proposed, and the owner's answer to one.
     if (route === "GET orgs" && sub === "proposals") return send(res, 200, listProposals(orgId));
+    // The access graph: what each agent, and the assistant, may read, change, hand work to and ask.
+    if (route === "GET orgs" && sub === "access") {
+      const org = orgs.list().orgs.find((o) => o.id === orgId);
+      if (!org) throw new HttpError(404, "There is no such organization.");
+      return send(res, 200, await attempt(() => (memberId ? accessGraph(org, decodeURIComponent(memberId)) : accessGraphs(org))));
+    }
     if (route === "POST orgs" && sub === "proposals" && parts[3]) return send(res, 200, await attempt(() => decide(orgId, parts[3], body.decision, body.answer)));
     if (route === "PUT orgs" && sub === "chart") return send(res, 200, await attempt(() => orgs.replaceChart(orgId, body)));
     if (route === "POST orgs" && sub === "groups") return send(res, 200, await attempt(() => orgs.addGroup(orgId, body)));

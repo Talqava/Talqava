@@ -21,6 +21,7 @@ import {
   setting,
 } from "../core/index.ts";
 import type { Bot, Conversation, JobBook, Power, RunSpec, Tool } from "../core/index.ts";
+import { boardPrompt, boardTool } from "./board.ts";
 import { MAX_DEPTH, MAX_OPEN_HANDOFFS, chainBudget, chainCost, chainOf, chainOver, questStore, quests, rootOf, whyPrompt } from "./quests.ts";
 import { propose } from "./proposals.ts";
 import { loadCrew } from "./crew.ts";
@@ -307,6 +308,7 @@ export const assignTool: Tool = defineTool<{ to: string; task: string }>({
     const task = String(input.task ?? "").trim();
     if (task.length < 10) throw new Error("Say what the task is, with everything the agent needs to know.");
     if ((quest?.depth ?? 0) >= MAX_DEPTH) throw new Error(`Tasks can be handed down ${MAX_DEPTH} levels at most. Do this one yourself.`);
+    noRoundTrip(quest, target);
     const { work } = await import("./work.ts");
     const open = questStore.list().filter((q) => q.parent?.id === conversation.id && !q.parent.delivered).length + work.pendingFor(conversation.id);
     if (open >= MAX_OPEN_HANDOFFS) throw new Error(`${MAX_OPEN_HANDOFFS} tasks you assigned are still open. Wait for their reports before assigning more.`);
@@ -373,6 +375,7 @@ export const askTool: Tool = defineTool<{ to: string; question: string }>({
     if (question.length < 8) throw new Error("Say what you are asking, with the context needed to answer it.");
     if (quest?.kind) throw new Error("You are answering a question yourself. Answer from what you know, and say what you are unsure of.");
     if ((quest?.depth ?? 0) >= MAX_DEPTH) throw new Error("This task is already several hand-offs deep. Work from what you have, and say what you could not confirm.");
+    noRoundTrip(quest, target);
     const open = questStore.list().filter((q) => q.parent?.id === conversation.id && !q.parent.delivered).length;
     if (open >= MAX_OPEN_HANDOFFS) throw new Error(`${MAX_OPEN_HANDOFFS} tasks and questions of yours are still open. Wait for them before asking more.`);
     const asked = questStore.list().filter((q) => q.parent?.id === conversation.id && q.kind === "question");
@@ -418,6 +421,7 @@ export const requestTool: Tool = defineTool<{ to: string; request: string; why?:
     if (request.length < 10) throw new Error("Say what you need, with everything they need to know.");
     if (quest?.kind) throw new Error("You are answering a question yourself. Say in your answer what work is needed and from whom.");
     if ((quest?.depth ?? 0) >= MAX_DEPTH) throw new Error("This task is already several hand-offs deep. Say in your report what is needed from the other department.");
+    noRoundTrip(quest, target);
     const { work } = await import("./work.ts");
     const open = questStore.list().filter((q) => q.parent?.id === conversation.id && !q.parent.delivered).length + work.pendingFor(conversation.id);
     if (open >= MAX_OPEN_HANDOFFS) throw new Error(`${MAX_OPEN_HANDOFFS} tasks and requests of yours are still open. Wait for them before making more.`);
@@ -537,6 +541,53 @@ export function costModel(cfg: ReturnType<typeof getConfig>, bot: Bot, work: "ma
   return { ref: cfg.model, effort: cfg.effort };
 }
 
+/** Tools an agent may use while it is still writing its plan: reading and looking things up, nothing that changes anything. */
+const PLANNING_TOOLS = new Set(["memory", "skill", "conversation_search", "web_search", "web_fetch", "read_page", "library", "workspace", "team_memory", "board", "submit_plan"]);
+
+const PLAN_PROMPT =
+  "Before doing this task, plan it, and wait for the owner's approval. Look into what you need (read the library, the workspace, memory, the web if you may), but change nothing and hand nothing on yet. " +
+  "Then call submit_plan once with: a two- or three-sentence summary of how you will do it and what the owner gets; the steps in order, each with who does it (you, or the title of someone you would hand it to); and your estimate of what carrying it out will cost in dollars. " +
+  "Then end your turn. If the owner asks for changes, revise and submit again.";
+
+/** An agent sends its plan for the owner's approval. Its run ends, and it carries on once the owner decides. */
+export const submitPlanTool: Tool = defineTool<{ summary: string; steps: { what: string; who: string }[]; estimate?: number }>({
+  name: "submit_plan",
+  description: "Sends your plan for this task to the owner for approval, then you stop until they approve it or ask for changes. Give a short summary, the steps in order (what, and who does it), and your cost estimate in dollars.",
+  properties: {
+    summary: { type: "string", description: "Two or three sentences: how you will do it, and what the owner gets." },
+    steps: { type: "array", items: { type: "object", properties: { what: { type: "string" }, who: { type: "string", description: "You, or the title of the colleague you would hand it to." } }, required: ["what", "who"] }, description: "The steps, in order." },
+    estimate: { type: "number", description: "What carrying out the plan will cost, in US dollars." },
+  },
+  required: ["summary", "steps"],
+  run(input, { conversation }) {
+    const summary = String(input.summary ?? "").trim();
+    const steps = Array.isArray(input.steps) ? input.steps.map((s) => ({ what: String(s?.what ?? "").trim().slice(0, 300), who: String(s?.who ?? "you").trim().slice(0, 80) || "you" })).filter((s) => s.what) : [];
+    if (summary.length < 20) throw new Error("Write a short summary of how you will do the task and what the owner gets.");
+    if (!steps.length) throw new Error("List the steps, in order, each with who does it.");
+    const estimate = Number.isFinite(Number(input.estimate)) && Number(input.estimate) >= 0 ? Math.round(Number(input.estimate) * 100) / 100 : null;
+    quests.planSubmitted(conversation.id, { summary: summary.slice(0, 1200), steps: steps.slice(0, 20), estimate });
+    return "Your plan is with the owner. End your turn now: you will be told when it is approved, or what to change.";
+  },
+});
+
+/** Every task's run stops after this long, besides its budget; a question to a colleague much sooner. */
+const TASK_LIMITS = { minutes: 30 };
+const QUESTION_LIMITS = { minutes: 5 };
+
+/**
+ * Work or a question sent back to an agent further up the same chain goes round in circles (A hands to B, B asks A).
+ * It is refused, and the agent is told to finish its part and say in its report what it needs.
+ */
+function noRoundTrip(quest: ReturnType<typeof questStore.get>, target: Bot) {
+  const seen = new Set<string>();
+  for (let q = quest; q?.parent && !seen.has(q.id); q = questStore.get(q.parent.id)) {
+    seen.add(q.id);
+    const up = questStore.get(q.parent.id);
+    if (up?.bot.id === target.id)
+      throw new Error(`The ${target.name} is further up this same task: it handed this work on. Sending work or questions back to it would go round in circles. Finish your part from what you have, and say in your report what you need from the ${target.name}.`);
+  }
+}
+
 /** A question is answered on a small budget: a few steps, and no hand-offs of its own. */
 const QUESTION_BUDGET = { steps: 3, spend: 0.05 };
 
@@ -620,7 +671,9 @@ export function localRunSpec(jobs: JobBook) {
       // Why the task exists, from the mission down: so a hand-off three levels deep still knows what it is for.
       const why = question ? "" : whyPrompt(quest);
       // Whoever may hand work to someone gets assign_task; every member can ask a colleague and use the shared memory.
-      const teamwork = !onChart ? [] : question ? [teamMemory, libraryForAgents, workspaceForAgents] : teamworkTools(org, bot.id);
+      // Every agent on a task, and on the parts handed on from it, shares the task's board.
+      const teamwork = !onChart ? [boardTool] : question ? [teamMemory, libraryForAgents, workspaceForAgents, boardTool] : [...teamworkTools(org, bot.id), boardTool];
+      const shared = question ? "" : boardPrompt(org, quest.id);
       if (question) {
         // Answering a colleague is a small job, so it is run as one: a short prompt with only who the agent is and
         // what the organization knows, the two look-up tools, low effort and a few steps. This is what keeps a
@@ -642,19 +695,24 @@ export function localRunSpec(jobs: JobBook) {
           mcpServers: [],
           approvalMode: bot.approvals,
           budget: QUESTION_BUDGET,
+          limits: QUESTION_LIMITS,
           cautionAfter: [...CAUTION_TOOLS],
           remaining: () => shareLeft(quest.id),
         };
       }
+      // Big work is planned first: until the owner approves the plan, the agent can only look things up and submit it.
+      const planning = Boolean(quest.plan && quest.plan.status !== "approved");
+      const allTools = [...(await botTools(bot, root, jobs, claude)), ...teamwork, ...linked.tools];
       return {
         model,
-        system: `${localPrompt(root, bot.name, [...where, ...linked.note], conversation)}\n\n${botPrompt(bot)}${role ? `\n\n${role}` : ""}${why ? `\n\n${why}` : ""}${remembered ? `\n\n${remembered}` : ""}`,
-        tools: [...(await botTools(bot, root, jobs, claude)), ...teamwork, ...linked.tools],
+        system: `${localPrompt(root, bot.name, [...where, ...linked.note], conversation)}\n\n${botPrompt(bot)}${role ? `\n\n${role}` : ""}${why ? `\n\n${why}` : ""}${remembered ? `\n\n${remembered}` : ""}${shared ? `\n\n${shared}` : ""}${planning ? `\n\n${PLAN_PROMPT}` : ""}`,
+        tools: planning ? [...allTools.filter((t) => PLANNING_TOOLS.has(t.name)), submitPlanTool] : allTools,
         hostedTools: claude && bot.powers.includes("web") ? HOSTED_WEB : [],
         // Connectors are reached from this machine (see connectors.ts), so every model can use them.
         mcpServers: [],
         approvalMode: bot.approvals,
         budget: question ? QUESTION_BUDGET : { ...cfg.budget, ...bot.budget },
+        limits: question ? QUESTION_LIMITS : TASK_LIMITS,
         // What a connector returns is outside content too.
         cautionAfter: [...CAUTION_TOOLS, ...linked.names],
         // The task and what is handed on from it share one budget, checked before every step.

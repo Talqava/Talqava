@@ -30,6 +30,8 @@ export interface Conversation {
   allowed: string[];
   /** Tokens used, and the estimated cost in US dollars when the model's prices are known. */
   usage: { input: number; output: number; cost?: number };
+  /** Why its last run stopped before finishing (a budget, its time, being stuck), kept so the chat can say so later. Cleared when it runs again. */
+  lastStop?: { reason: RunStop; text: string; at: string } | null;
 }
 
 /** A space keeps one client's or project's memory and chats apart from the rest. */
@@ -179,7 +181,25 @@ export interface RunSpec {
    * from it). Asked before every model call, so the run stops before a step that would likely go over.
    */
   remaining?: () => number;
+  /** The exits every run has besides its budget (see RunLimits). */
+  limits?: RunLimits;
 }
+
+/**
+ * Exits on a run's loop, besides its budget. Each stops the run cleanly (every requested step gets an answer, so the
+ * run can be continued) and says why, as a "stopped" event.
+ */
+export interface RunLimits {
+  /** Minutes a run may take, counted from when it started or was continued. */
+  minutes?: number;
+  /** How many times the very same step (the same tool with the same input) may run in one run. Default 2. */
+  repeats?: number;
+  /** Steps in a row in which every tool failed, before the run stops. Default 4. */
+  failingSteps?: number;
+}
+
+/** Why a run stopped before finishing its work. */
+export type RunStop = "steps" | "spend" | "shared" | "time" | "repeat" | "failing";
 
 /** Limits on one run (one quest). The run stops before going over either. */
 export interface Budget {
@@ -212,6 +232,8 @@ export type RunEvent =
   | { type: "approval_done"; id: string; decision: Decision }
   | { type: "status"; running: boolean; usage?: Conversation["usage"] }
   | { type: "notice"; text: string }
+  /** The run stopped at one of its exits: a budget, its time, a repeated step, or tools that kept failing. */
+  | { type: "stopped"; reason: RunStop; text: string }
   | { type: "error"; text: string };
 
 export interface LiveState {
