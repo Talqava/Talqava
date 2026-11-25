@@ -1603,6 +1603,7 @@ function inboxItems() {
   for (const c of state.convs ?? []) if (c.needsApproval) needs.push({ kind: "chat", c });
   for (const bot of state.crew?.bots ?? []) if (bot.month?.state === "stopped") needs.push({ kind: "monthly", bot });
   if (state.crew?.budgets?.total.state === "stopped") needs.push({ kind: "total" });
+  for (const p of state.serviceProblems ?? []) needs.push({ kind: "service", p });
   const working = [...quests.filter((q) => isLive(q) && !q.approvals?.length).map((q) => ({ q })), ...(state.convs ?? []).filter((c) => c.running && !c.needsApproval).map((c) => ({ c }))];
   const today = new Date().toDateString();
   const done = quests.filter((q) => !isLive(q) && new Date(q.updatedAt).toDateString() === today && !needs.some((n) => n.q === q));
@@ -1675,7 +1676,7 @@ async function loadPageSuggestions() {
 async function loadMail() {
   loadPageSuggestions();
   try {
-    [state.mail, state.workItems] = await Promise.all([api("GET", "inbox"), api("GET", "work").then((w) => w.items).catch(() => state.workItems ?? [])]);
+    [state.mail, state.workItems, state.serviceProblems] = await Promise.all([api("GET", "inbox"), api("GET", "work").then((w) => w.items).catch(() => state.workItems ?? []), api("GET", "gateway/problems").catch(() => state.serviceProblems ?? [])]);
   } catch {
     state.mail ??= { messages: {}, names: {} };
   }
@@ -1714,6 +1715,7 @@ function mailMessages() {
     else if (n.kind === "budget") out.push({ id: `need:budget:${q.id}`, kind: "need", need: n, q, bot: q.bot, subject: `Stopped at its budget: ${q.title}`, snippet: "Reply “continue” to keep going.", at: q.updatedAt, activityAt: q.updatedAt, label: "failed" });
     else if (n.kind === "chat") out.push({ id: `need:chat:${n.c.id}`, kind: "need", need: n, bot: null, subject: "A chat is waiting for your approval", snippet: n.c.title, at: n.c.updatedAt ?? MONTH_START(), activityAt: n.c.updatedAt ?? MONTH_START(), label: "needs" });
     else if (n.kind === "monthly") out.push({ id: `need:monthly:${n.bot.id}:${MONTH_START().slice(0, 7)}`, kind: "need", need: n, bot: n.bot, subject: "I have reached my monthly budget", snippet: `${money(n.bot.month.spent)} of ${money(n.bot.month.limit)}. I start no new work until you raise it.`, at: MONTH_START(), activityAt: MONTH_START(), label: "needs" });
+    else if (n.kind === "service") out.push({ id: `need:service:${n.p.id}:${n.p.problem.slice(0, 40)}`, kind: "need", need: n, bot: null, subject: `${n.p.name} is not working`, snippet: n.p.problem, at: new Date().toISOString(), activityAt: new Date().toISOString(), label: "needs" });
     else if (n.kind === "total") out.push({ id: `need:total:${MONTH_START().slice(0, 7)}`, kind: "need", need: n, bot: null, subject: "Your agents have reached this month's budget", snippet: "No agent starts new work until you raise it or the month turns.", at: MONTH_START(), activityAt: MONTH_START(), label: "needs" });
   }
   // A change an agent suggested to a workspace page waits in the inbox too.
@@ -2043,6 +2045,7 @@ function readMail(m) {
       );
     } else if (n.kind === "chat") fill(body, h("p", {}, `The chat “${n.c.title}” is waiting for you to approve a step.`), h("button", { class: "primary", onclick: () => go("chat", n.c.id) }, "Open the chat"));
     else if (n.kind === "monthly") fill(body, h("p", {}, `I have spent ${money(n.bot.month.spent)} of my ${money(n.bot.month.limit)} monthly budget, so I won't start new work until you raise it or the month turns.`), h("button", { class: "primary", onclick: () => go("bot", n.bot.id) }, "Raise my budget"));
+    else if (n.kind === "service") fill(body, h("p", {}, `${n.p.name} stopped working: ${n.p.problem}`), h("p", { class: "note small" }, "Tasks on its models will fail, or go to a backup model if you set one, until it is fixed. A new key usually fixes it."), h("button", { class: "primary", onclick: () => ((ui.integration = "ai-models"), go("integrations")) }, "Open AI models"));
     else if (n.kind === "total") fill(body, h("p", {}, "All your agents together have reached this month's budget. No agent starts new work until you raise it or the month turns."), h("button", { class: "primary", onclick: () => go("team") }, "Change the budget"));
     else fill(body, h("p", {}, m.snippet), h("button", { class: "primary", onclick: () => go("quest", q.id) }, n.kind === "review" ? "Review the changes" : "Open the task"));
     return [tools, h("h2", { class: "readsubject" }, m.subject, h("span", { class: `mlabel ${m.label}` }, LABEL_WORDS[m.label])), from, body];
@@ -2544,6 +2547,13 @@ function renderOrg() {
     name.addEventListener("change", () => name.value.trim() && name.value.trim() !== g.name && patch({ name: name.value.trim() }, `Renamed ${g.name} to ${name.value.trim()}`));
     goal.addEventListener("change", () => patch({ goal: goal.value.trim() }, `Changed ${g.name}'s purpose`));
     budget.addEventListener("change", () => patch({ budget: budget.value === "" ? null : Number(budget.value) }, `Changed ${g.name}'s budget`));
+    // The group's model: the team's model, one of the backups, or one typed in. Agents with a model of their own keep it.
+    const known = [...new Set([state.config.model, ...(state.config.backups ?? []), g.model].filter(Boolean))];
+    const groupModel = h(
+      "select",
+      { "aria-label": "Group's model", onchange: (e) => patch({ model: e.target.value === state.config.model ? null : e.target.value }, e.target.value === state.config.model ? `${g.name} uses the team's model` : `${g.name} uses ${e.target.value.split("/").pop()}`) },
+      known.map((ref) => h("option", { value: ref, selected: (g.model ?? state.config.model) === ref }, ref === state.config.model ? `The team's model (${ref.split("/").pop()})` : ref.split("/").pop())),
+    );
     const others = groups.filter((x) => x.id !== g.id);
     const moveTo = h("select", { "aria-label": "Move its positions to" }, others.map((x) => h("option", { value: x.id }, x.name)));
     return [
@@ -2552,6 +2562,8 @@ function renderOrg() {
       h("label", {}, "Lead", h("select", { onchange: (e) => patch({ lead: e.target.value || null }, e.target.value ? `${nameOf(e.target.value)} leads ${g.name}` : `${g.name} has no lead`) }, h("option", { value: "", selected: !g.lead }, "Nobody yet"), members.map((m) => h("option", { value: m.bot, selected: m.bot === g.lead }, `${m.title}${m.department !== g.name ? ` (moves here)` : ""}`)))),
       h("p", { class: "note small" }, g.leadChosen ? "You chose this lead." : "Picked from the chart: the position at the top of the group. Choose one to keep it."),
       h("label", {}, "Purpose", goal),
+      h("label", {}, "Model for its positions", groupModel),
+      h("p", { class: "note small" }, "For example, a strong model for leadership and a cheaper one for a whole department. An agent with a model of its own keeps it. Add more choices as backup models under Integrations → AI models."),
       h("label", {}, "Monthly budget, all its positions together ($)", budget),
       h("p", { class: `note small ${groupState(g) === "stopped" ? "loudnote" : ""}` }, [
         `Spent this month: ${money(org.groupSpend?.[g.id] ?? 0)}.`,
@@ -6002,7 +6014,9 @@ function aiModelsSection(col) {
                         { class: `note small ${c.live.running && c.live.models ? "" : "warnline"}` },
                         !c.live.running ? `Not running right now. Start ${c.name} to use it.` : c.live.models ? `Running · ${c.live.models} model${c.live.models === 1 ? "" : "s"} on this computer` : `Running, but no models downloaded yet. Download one in ${c.name}, then press Models.`,
                       )
-                    : h("div", { class: "note small" }, [c.address ? short(c.address) : "Connected with your key", c.keys > 1 ? `${c.keys} keys, taking turns` : null].filter(Boolean).join(" · ")),
+                    : c.health && !c.health.ok
+                      ? h("div", { class: "note small warnline" }, `Not working: ${c.health.problem}`)
+                      : h("div", { class: "note small" }, [c.address ? short(c.address) : "Connected with your key", c.keys > 1 ? `${c.keys} keys, taking turns` : null, c.health?.ok ? `working, checked ${shortWhen(new Date(c.health.checkedAt).toISOString())}` : null].filter(Boolean).join(" · ")),
                 ),
                 h("button", { class: "small", onclick: () => modelsDialog(c) }, "Models"),
                 // More keys for the same service spread the work and keep going when one reaches its rate limit.

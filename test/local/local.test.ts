@@ -2675,3 +2675,60 @@ test("the owner writes, changes and renames a skill on the Skills page", async (
     server.close();
   }
 });
+
+test("a group can have its own model; its positions use it unless they have their own", async () => {
+  const { orgs, groupModelOf } = await import("../../src/local/orgs.ts");
+  const market = await import("../../src/local/marketplace.ts");
+  const org0 = orgs.create("Group Model Co", "Keep the books.", "custom");
+  try {
+    market.addTeam("finance-team");
+    const org = orgs.active();
+    const finance = org.groups.find((g) => g.name === "Finance")!;
+    assert.throws(() => orgs.updateGroup(org.id, finance.id, { model: "not a model" }), /from the list/);
+    orgs.updateGroup(org.id, finance.id, { model: "anthropic/claude-sonnet-5-5" });
+    assert.equal(groupModelOf(orgs.active(), "bookkeeper"), "anthropic/claude-sonnet-5-5");
+    // A task run by a position in the group uses the group's model.
+    const crew = await import("../../src/local/crew.ts");
+    const stamp = new Date().toISOString();
+    const quests = await import("../../src/local/quests.ts");
+    const q = { id: "9".repeat(15) + "a", title: "Reconcile", bot: crew.loadCrew().bots.find((b) => b.id === "bookkeeper")!, status: "running" as const, steps: 0, createdAt: stamp, updatedAt: stamp };
+    quests.questStore.save(q);
+    store.conversations.save({ id: q.id, title: "Reconcile", createdAt: stamp, updatedAt: stamp, source: "quest", messages: [{ role: "user", content: "Reconcile." }], allowed: [], usage: { input: 0, output: 0 } });
+    const spec = await tools.localRunSpec(app.jobs)(store.conversations.get(q.id)!);
+    assert.equal(spec.model.ref, "anthropic/claude-sonnet-5-5");
+    quests.questStore.remove(q.id);
+    // Back to the team's model.
+    orgs.updateGroup(org.id, finance.id, { model: "" });
+    assert.equal(groupModelOf(orgs.active(), "bookkeeper"), undefined);
+  } finally {
+    orgs.remove(org0.id);
+  }
+});
+
+test("each connected AI service is checked in the background, and one that stops working is flagged", async () => {
+  const gateway = await import("../../src/local/gateway.ts");
+  const http = await import("node:http");
+  let accept = true;
+  const server = http.createServer((req, res) => {
+    res.writeHead(accept ? 200 : 401, { "content-type": "application/json" });
+    res.end(JSON.stringify(accept ? { data: [{ id: "m" }] } : { error: "bad key" }));
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const before = store.getConfig().providers;
+  process.env.TALQAVA_CHECK_SERVICES = "1";
+  try {
+    store.saveConfig({ providers: [...before.filter((p) => p.id !== "groq"), { id: "groq", kind: "openai", service: "groq", name: "Groq", baseUrl: `http://localhost.test:${(server.address() as import("node:net").AddressInfo).port}/v1`.replace("localhost.test", "127.0.0.1"), apiKey: "gsk_k" }] });
+    gateway.forgetHealth();
+    await gateway.refreshHealth(true);
+    assert.deepEqual(gateway.serviceProblems().filter((p) => p.id === "groq"), []);
+    accept = false;
+    await gateway.refreshHealth(true);
+    const problem = gateway.serviceProblems().find((p) => p.id === "groq")!;
+    assert.match(problem.problem, /did not accept that key/);
+  } finally {
+    delete process.env.TALQAVA_CHECK_SERVICES;
+    store.saveConfig({ providers: before });
+    gateway.forgetHealth();
+    server.close();
+  }
+});

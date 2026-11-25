@@ -30,7 +30,7 @@ import { closeConnectors } from "./connectors.ts";
 import { resolveModel, splitRef } from "./models.ts";
 import { botId, loadCrew, removeBot, saveBot } from "./crew.ts";
 import { addMarketBot, addPack, addTeam, buildStructure, installStatus, loadMarketplace, loadTeams, onTeam, previewMarketBot, previewTeam, undoMarketUpdate, updateMarketBot } from "./marketplace.ts";
-import { assignRule, requestRule, orgs } from "./orgs.ts";
+import { assignRule, requestRule, orgs, groupModelOf } from "./orgs.ts";
 import { orgMemory } from "./orgmemory.ts";
 import { mcpIntegration, setClaudeDesktop } from "./mcpintegration.ts";
 import { EVERYONE, ensureFolders, library, libraryFolder, removeLibrary, syncLibrary } from "./library.ts";
@@ -38,7 +38,7 @@ import { execFile } from "node:child_process";
 import { needsFor } from "./preflight.ts";
 import { acceptSuggestion, suggestPositions } from "./suggest.ts";
 import { audit, readAudit, redact } from "./audit.ts";
-import { addKey, connect, disconnect, findLocal, gatewayState, listModels, setBackups, isLocalRef, memoryGb } from "./gateway.ts";
+import { addKey, connect, disconnect, refreshHealth, serviceProblems, findLocal, gatewayState, listModels, setBackups, isLocalRef, memoryGb } from "./gateway.ts";
 import { board } from "./board.ts";
 import { accessGraph, accessGraphs } from "./access.ts";
 import { loadModelList } from "./modelprices.ts";
@@ -444,7 +444,13 @@ function projectOrNull(folder: string | null): string | null {
 function botModel(bot: Bot, override?: string) {
   const cfg = getConfig();
   try {
-    const model = resolveModel(cfg, override ?? bot.model ?? cfg.model);
+    let group: string | undefined;
+    try {
+      group = groupModelOf(orgs.active(), bot.id);
+    } catch {
+      group = undefined;
+    }
+    const model = resolveModel(cfg, override ?? bot.model ?? group ?? cfg.model);
     return { ref: model.ref, label: model.label, kind: model.kind, free: model.prices?.input === 0 && model.prices?.output === 0 };
   } catch (err) {
     return { ref: bot.model ?? cfg.model, label: (err as Error).message, kind: null, free: false };
@@ -1000,6 +1006,8 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   // The gateway to AI models: every service Talqava can connect, and the ones that are.
   if (parts[0] === "gateway") {
     if (req.method === "GET" && !parts[1]) return send(res, 200, await gatewayState());
+    if (req.method === "GET" && parts[1] === "problems") return send(res, 200, serviceProblems());
+    if (req.method === "POST" && parts[1] === "check") return send(res, 200, await attempt(async () => (await refreshHealth(true), serviceProblems())));
     if (req.method === "POST" && parts[1] === "find-local") return send(res, 200, await attempt(() => findLocal()));
     if (req.method === "PUT" && parts[1] === "backups") return send(res, 200, await attempt(() => setBackups(body.backups)));
     if (req.method === "POST" && parts[1] && parts[2] === "connect") return send(res, 200, await attempt(() => connect(parts[1], body)));
@@ -1473,6 +1481,9 @@ export function start() {
   jobs.start(runJob);
   // The public list of model prices, so receipts are priced from the start (kept for a day; offline is fine).
   void loadModelList().catch(() => {});
+  // Each connected service is checked now and every few hours, so a dead key is found before a task fails.
+  void refreshHealth().catch(() => {});
+  setInterval(() => void refreshHealth().catch(() => {}), 3600 * 1000).unref();
   // Quests that were under way when the app last closed carry on.
   quests
     .resumeAll()

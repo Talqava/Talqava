@@ -25,7 +25,7 @@ import { boardPrompt, boardTool } from "./board.ts";
 import { MAX_DEPTH, MAX_OPEN_HANDOFFS, chainBudget, chainCost, chainOf, chainOver, questStore, quests, rootOf, whyPrompt } from "./quests.ts";
 import { propose } from "./proposals.ts";
 import { loadCrew } from "./crew.ts";
-import { assignableBy, memberOf, oneLine, orgs, reportsOf, requestableBy, rolePrompt } from "./orgs.ts";
+import { assignableBy, groupModelOf, memberOf, oneLine, orgs, reportsOf, requestableBy, rolePrompt } from "./orgs.ts";
 import { orgMemoryPrompt, teamMemoryTool } from "./orgmemory.ts";
 import { libraryPrompt, libraryTool, GENERAL_AGENT } from "./library.ts";
 import { workspacePrompt, workspaceTool } from "./workspace.ts";
@@ -691,7 +691,9 @@ export function localRunSpec(jobs: JobBook) {
       const bot = limitProjectBot(quest.bot, cfg);
       // A manager (anyone with someone to hand work to) keeps the main model; a member doing its own part gets a cheaper one.
       const manages = assignableBy(orgs.active(), bot.id).length > 0 || bot.lead;
-      const choice = costModel(cfg, bot, quest.kind ? "question" : manages ? "manager" : "member", quest.modelOverride);
+      // A group's own model counts as the agent's own, unless the agent has one.
+      const groupModel = bot.model ? undefined : groupModelOf(orgs.active(), bot.id);
+      const choice = costModel(cfg, groupModel ? { ...bot, model: groupModel } : bot, quest.kind ? "question" : manages ? "manager" : "member", quest.modelOverride);
       const model = resolveModel({ ...cfg, effort: choice.effort }, choice.ref);
       const claude = model.kind === "anthropic";
       const root = quest.copy?.worktree ?? WORKSPACE;
@@ -765,7 +767,7 @@ export function localRunSpec(jobs: JobBook) {
     // A chat with one bot in its role: that bot's instructions, powers, model and limits.
     const chatBot = conversation.bot ? loadCrew().bots.find((b) => b.id === conversation.bot) : undefined;
     if (chatBot) {
-      const model = resolveModel(cfg, chatBot.model ?? cfg.model);
+      const model = resolveModel(cfg, chatBot.model ?? groupModelOf(orgs.active(), chatBot.id) ?? cfg.model);
       const claude = model.kind === "anthropic";
       const linked = await connectors(chatBot.powers.includes("connectors"));
       const org = orgs.active();
