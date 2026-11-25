@@ -29,6 +29,7 @@ Talqava sends information off your computer only to services you choose to use, 
 | When you… | Talqava sends… | To |
 | --- | --- | --- |
 | Chat, or give an agent a task | Your message, the agent's instructions, and the parts of your memory, workspace pages (and rows of their tables an agent reads) and library documents that match the task (never documents or pages you marked Private) | The AI model provider you chose: Anthropic, OpenRouter, or any provider you add. A model running on your own computer receives it locally, and nothing leaves. |
+| Mark an item Confidential or Restricted and limit where that level may go (Security) | Nothing from those items, to any AI service you did not allow for that level | Only the services you allowed |
 | Let an agent search or read the web | The search words, or the address of the page | Your AI provider's web search, or the web page's own site |
 | Connect GitHub or a repository | Requests about the repositories you choose, signed with your GitHub sign-in | GitHub |
 | Connect a service from the connector catalogue (Stripe, Airtable, monday.com, Intercom, Linear, GitHub) | The key you paste, and what an agent sends to that connector's tools | Only that service's own connector address |

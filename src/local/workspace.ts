@@ -14,6 +14,8 @@ import type { Access } from "./library.ts";
 import { TEMPLATES } from "./workspace-templates.ts";
 import { loadCrew } from "./crew.ts";
 import { audit } from "./audit.ts";
+import { LEVEL_WORDS, levelOf, mayReceive } from "./sensitivity.ts";
+import type { Level } from "./sensitivity.ts";
 
 /** Who is acting: the owner (null), an agent's id, or the general chat agent. */
 export type Who = string | null;
@@ -30,6 +32,8 @@ export interface PageInfo {
   folder: string;
   /** A note's tags. */
   tags: string[];
+  /** How sensitive it is: decides which AI services may receive it, and hides a Restricted item from agents not named on it. */
+  level: Level;
   parent: string | null;
   position: number;
   title: string;
@@ -122,11 +126,13 @@ function db(orgId: string): DatabaseSync {
   if (!have.has("kind")) d.exec("alter table pages add column kind text not null default 'page'");
   if (!have.has("folder")) d.exec("alter table pages add column folder text not null default ''");
   if (!have.has("tags")) d.exec("alter table pages add column tags text not null default '[]'");
+  if (!have.has("level")) d.exec("alter table pages add column level text not null default 'internal'");
   ready.add(d);
   return d;
 }
 
 interface Row {
+  level: string;
   kind: string;
   folder: string;
   tags: string;
@@ -157,6 +163,19 @@ function accessOf(byId: Map<string, Row>, row: Row): { access: Access; set: bool
     if (a) return { access: a, set: false };
   }
   return { access: EVERYONE, set: false };
+}
+
+/**
+ * Whether `who` may be handed a page: by who may see it, by its sensitivity (a Restricted page is only for agents named
+ * on it), and by whether the AI service this run uses may receive that level.
+ */
+function seen(org: Org, byId: Map<string, Row>, row: Row, who: Who): boolean {
+  const { access } = accessOf(byId, row);
+  if (!mayUse(org, access, who)) return false;
+  if (who === OWNER) return true;
+  const level = levelOf(row.level);
+  if (level === "restricted" && !access.agents.includes(String(who))) return false;
+  return mayReceive(level);
 }
 
 /** Plain text of some Markdown, for summaries and search. */
@@ -308,6 +327,7 @@ function info(org: Org, d: DatabaseSync, row: Row, byId: Map<string, Row>, open:
     kind: kindOf(row.kind),
     folder: row.folder ?? "",
     tags: tagsOf(row.tags),
+    level: levelOf(row.level),
     parent: row.parent,
     position: row.position,
     title: row.title,
@@ -334,7 +354,13 @@ function visible(org: Org, d: DatabaseSync, id: string, who: Who): { row: Row; b
   const all = rows(d);
   const byId = new Map(all.map((r) => [r.id, r]));
   const row = byId.get(String(id));
-  if (!row || !mayUse(org, accessOf(byId, row).access, who)) throw new Error("There is no such page, or it is not one you may see.");
+  if (row && who !== OWNER && mayUse(org, accessOf(byId, row).access, who) && !seen(org, byId, row, who)) {
+    // The agent may know of the page but not be given it: say why, so it reports that instead of guessing.
+    const level = levelOf(row.level);
+    audit({ actor: "system", actorName: "Guardrails", kind: "guardrail", ok: false, action: `Kept back: “${row.title}” is ${LEVEL_WORDS[level].name}`, detail: level === "restricted" && !accessOf(byId, row).access.agents.includes(String(who)) ? `${nameOf(org, String(who))} is not named on it` : `${nameOf(org, String(who))}'s AI service may not receive that level` });
+    throw new Error(`“${row.title}” is marked ${LEVEL_WORDS[level].name}, and this organization's rules do not let you read it${level === "restricted" ? " unless you are named on it" : " on the AI service you are running on"}. Do not look for its content another way. Say in your report that you could not read it.`);
+  }
+  if (!row || !seen(org, byId, row, who)) throw new Error("There is no such page, or it is not one you may see.");
   return { row, byId };
 }
 
@@ -384,7 +410,7 @@ export const workspace = {
     const all = rows(d);
     const byId = new Map(all.map((r) => [r.id, r]));
     const open = openCounts(d);
-    return all.filter((r) => mayUse(org, accessOf(byId, r).access, who)).map((r) => info(org, d, r, byId, open));
+    return all.filter((r) => seen(org, byId, r, who)).map((r) => info(org, d, r, byId, open));
   },
 
   /** Office: the documents and notes `who` may see, newest first, with their folders, notebooks and tags. */
@@ -402,7 +428,7 @@ export const workspace = {
   },
 
   /** A new page. The owner may put it anywhere; an agent only under a page it may see, and it inherits who may see it. */
-  create(org: Org, who: Who, input: { parent?: unknown; title?: unknown; markdown?: unknown; icon?: unknown; template?: string; task?: string | null; position?: number; kind?: unknown; folder?: unknown; tags?: unknown }): Page {
+  create(org: Org, who: Who, input: { parent?: unknown; title?: unknown; markdown?: unknown; icon?: unknown; template?: string; task?: string | null; position?: number; kind?: unknown; folder?: unknown; tags?: unknown; level?: unknown }): Page {
     const d = db(org.id);
     const kind = kindOf(input.kind);
     // Documents and notes are not inside pages: a folder or notebook groups them.
@@ -418,6 +444,9 @@ export const workspace = {
     d.prepare("insert into pages (id, parent, position, title, icon, edit, protected, template, created_by, updated_by, created_at, updated_at) values (?, ?, ?, ?, ?, 'suggest', 0, ?, ?, ?, ?, ?)").run(
       id, parent, input.position ?? last + 1, title, cleanIcon(input.icon), input.template ?? null, author, author, now(), now(),
     );
+    // A page made inside another starts at that page's level, so a sensitive section stays sensitive.
+    if (parent) d.prepare("update pages set level = (select level from pages where id = ?) where id = ?").run(parent, id);
+    if (input.level !== undefined && who === OWNER) d.prepare("update pages set level = ? where id = ?").run(levelOf(input.level), id);
     if (kind !== "page") {
       // A note starts private: no agent sees it until the owner says so. A document an agent writes is seen by its
       // own group (and the owner); one the owner makes starts open to every agent, like a page.
@@ -451,7 +480,7 @@ export const workspace = {
   },
 
   /** The owner changes a page's title, icon, place, who may see it, or how agents may change it. */
-  update(org: Org, id: string, patch: { title?: unknown; icon?: unknown; parent?: unknown; position?: unknown; access?: unknown; edit?: unknown; protected?: unknown; kind?: unknown; folder?: unknown; tags?: unknown }): Page {
+  update(org: Org, id: string, patch: { title?: unknown; icon?: unknown; parent?: unknown; position?: unknown; access?: unknown; edit?: unknown; protected?: unknown; kind?: unknown; folder?: unknown; tags?: unknown; level?: unknown }): Page {
     const d = db(org.id);
     const { row, byId } = visible(org, d, id, OWNER);
     if (patch.title !== undefined) {
@@ -479,6 +508,10 @@ export const workspace = {
     if (patch.edit !== undefined) d.prepare("update pages set edit = ? where id = ?").run(patch.edit === "direct" ? "direct" : "suggest", row.id);
     if (patch.protected !== undefined) d.prepare("update pages set protected = ? where id = ?").run(patch.protected ? 1 : 0, row.id);
     if (patch.folder !== undefined) d.prepare("update pages set folder = ? where id = ?").run(cleanFolder(patch.folder), row.id);
+    if (patch.level !== undefined && levelOf(patch.level) !== levelOf(row.level)) {
+      d.prepare("update pages set level = ? where id = ?").run(levelOf(patch.level), row.id);
+      audit({ actor: "owner", actorName: "You", kind: "workspace", action: `Marked “${row.title}” ${LEVEL_WORDS[levelOf(patch.level)].name}`, detail: `It was ${LEVEL_WORDS[levelOf(row.level)].name}.` });
+    }
     if (patch.tags !== undefined) d.prepare("update pages set tags = ? where id = ?").run(JSON.stringify(cleanTags(patch.tags)), row.id);
     if (patch.kind !== undefined && kindOf(patch.kind) !== kindOf(row.kind)) {
       // Turning a note into a document or a page (or back): the text, history and who may see it stay as they are.
@@ -589,7 +622,7 @@ export const workspace = {
     const out: { page: string; title: string; heading: string; text: string }[] = [];
     for (const h of hits) {
       const row = byId.get(h.page);
-      if (!row || !mayUse(org, accessOf(byId, row).access, who)) continue;
+      if (!row || !seen(org, byId, row, who)) continue;
       if ((per.get(h.page) ?? 0) >= 3) continue;
       // A title match only counts when no passage of the same page matched.
       if (h.seq === 0 && hits.some((x) => x.page === h.page && x.seq > 0)) continue;

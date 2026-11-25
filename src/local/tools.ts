@@ -31,6 +31,7 @@ import { libraryPrompt, libraryTool, GENERAL_AGENT } from "./library.ts";
 import { workspacePrompt, workspaceTool } from "./workspace.ts";
 import { tableTool } from "./tables.ts";
 import { guard } from "./guardrails.ts";
+import { preparing, withLevels } from "./sensitivity.ts";
 import { sheetTool } from "./sheets.ts";
 import { goalsPrompt } from "./goals.ts";
 import { structureOf } from "./structures.ts";
@@ -698,7 +699,11 @@ export function localRunSpec(jobs: JobBook) {
   // The organization's guardrails are applied to every run, in this one place, after everything else is decided.
   return async (conversation: Conversation): Promise<RunSpec> => {
     const quest = conversation.source === "quest" ? questStore.get(conversation.id) : null;
-    return guard(await build(conversation), quest ? `the ${quest.bot.title || quest.bot.name}` : "the assistant");
+    // The model chosen while the run is prepared decides which sensitivity levels it may receive; every tool the
+    // run calls then carries that with it, so the workspace hands over nothing above it.
+    const { result, levels } = await preparing(() => build(conversation));
+    const spec = guard(result, quest ? `the ${quest.bot.title || quest.bot.name}` : "the assistant");
+    return { ...spec, tools: spec.tools.map((t) => ({ ...t, run: (input: any, context: any) => withLevels(levels, () => t.run(input, context)) }) as Tool) };
   };
 }
 

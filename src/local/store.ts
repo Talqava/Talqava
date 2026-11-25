@@ -110,6 +110,8 @@ export interface Config {
   planFirst?: "leads" | "all" | "never";
   /** The leads' daily check-in arrives in the Inbox each day (built from the tasks, at no cost). Default on. */
   checkIn?: boolean;
+  /** Which AI services may receive each sensitivity level, and which services are approved (see sensitivity.ts). */
+  sensitivity?: { services?: Record<string, string>; approved?: string[] };
   /** Rules above every agent's own settings (see guardrails.ts). None means today's behaviour. */
   guardrails?: { changes?: string; commands?: string; connectors?: string; web?: string; sites?: string[]; maxTaskSpend?: number; maxMinutes?: number };
   /** A stuck task tries once with a stronger model (the team's model or a backup) before stopping. Default on. */

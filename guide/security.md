@@ -37,6 +37,8 @@ These limits are enforced by the app itself. A person who tries something their 
 
 **The audit log names people.** Once people are set up, each entry in the **Audit log** says who did it and their role.
 
+**Sensitivity levels decide what may reach an AI service.** Every page, document, note and sheet has a level: **Public**, **Internal** (the starting level), **Confidential** or **Restricted**. Under **Sensitive information** you decide, for each level, where it may be sent: any connected AI service, only approved services, only models on this computer, or no AI model at all. An agent whose AI service may not receive a level is not given those items; it is told why, so it says so in its report, and the attempt is logged. A **Restricted** item is also hidden from every agent you have not named on it. Until you change these rules, every level may go to any service, as before.
+
 **Agent guardrails are rules above every agent.** Under **Agent guardrails** you set rules for the whole installation: whether changes always ask a person, whether agents may run commands, use connected services or the web, which sites are approved, and the most a task may spend or run. An agent's own settings can be stricter than these, never looser. They work whether or not people and sign-in are turned on, and apply to tasks that start after you change them.
 
 ## How to…
@@ -80,6 +82,20 @@ These limits are enforced by the app itself. A person who tries something their 
 1. Under **Rules for everyone**, press **See who is signed in**.
 2. Press **Sign everyone else out** if a computer was lost or you are unsure. You stay signed in.
 
+### Mark something as sensitive
+
+1. Open the page, document, note or sheet.
+2. In its side panel, under **Sensitivity**, choose **Confidential** or **Restricted**.
+3. For **Restricted**, also name the agents who may read it: under **Who can see it**, choose **Only some groups or agents** and tick those agents by name. Being in a ticked group is not enough for a Restricted item.
+
+A page made inside a sensitive page starts at the same level. Tables follow their page.
+
+### Decide which AI services may receive each level
+
+1. Open **Security** and find **Sensitive information**.
+2. For each level, choose where it may be sent. **Use the recommended settings** sets Confidential to approved services only and Restricted to models on this computer only.
+3. Under **Approved AI services**, tick the services you trust. Check each service's terms first: that it does not train on your data, and where it processes it.
+
 ### Hold agents to approved websites
 
 1. Under **Agent guardrails**, set **The web** to **Only the sites approved below**.
@@ -111,6 +127,7 @@ These limits are enforced by the app itself. A person who tries something their 
 
 - Signing in with your company account (single sign-on).
 - Approved sites hold page reading, including redirects, and the AI service's own web search. Calls to web services with saved keys and the built-in browser are checked at the address the agent gives; a redirect or a link clicked inside the browser is not checked yet.
+- Sensitivity levels on Library files and Memory; whether an item may leave by email or a connector; suggesting a higher level when card numbers or payroll figures are spotted; and a view of exactly what was sent to AI services.
 - Rules by kind of action (send, pay, delete) with named approvers, and a list of approved connectors and Marketplace items.
 - Limiting a manager or member to their own groups: a manager can change the whole chart.
 - Handing the Owner role to someone else.
@@ -121,6 +138,7 @@ These limits are enforced by the app itself. A person who tries something their 
 - **"That email and password do not match."** Check both. The message is the same whether the email or the password is wrong, on purpose.
 - **"Too many wrong passwords."** Wait 15 minutes, or ask an administrator for a new password.
 - **"That code is not right."** Type the code the app shows now; codes change every 30 seconds. Check the phone's clock is set automatically.
+- **An agent says it could not read something marked Confidential or Restricted.** Its AI service is not allowed that level, or it is not named on a Restricted item. Change the level, name the agent, approve its service under **Sensitive information**, or give the task to an agent that runs on a model on this computer.
 - **"Your role does not allow that."** Ask an owner or administrator to do it, or to change your role.
 - **The owner forgot their password and nobody else is an administrator.** On the computer Talqava runs on, quit Talqava, open its data folder, and move the file `people.json` out of it. Talqava then starts without sign-in and you can turn it on again. Everyone's accounts are made again; nothing else is lost. Anyone who can do this already has full use of that computer.
 
