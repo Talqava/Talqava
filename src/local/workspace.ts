@@ -19,7 +19,7 @@ import { audit } from "./audit.ts";
 export type Who = string | null;
 
 /** What a page is: a workspace page, an Office document, or a note. All three share the same rules and editor. */
-export const PAGE_KINDS = ["page", "doc", "note"] as const;
+export const PAGE_KINDS = ["page", "doc", "note", "sheet"] as const;
 export type PageKind = (typeof PAGE_KINDS)[number];
 
 export interface PageInfo {
@@ -321,7 +321,7 @@ function info(org: Org, d: DatabaseSync, row: Row, byId: Map<string, Row>, open:
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     suggestions: open.get(row.id) ?? 0,
-    summary: summaryOf(content(d, row.id).markdown),
+    summary: row.kind === "sheet" ? sheetSummary(content(d, row.id).markdown) : summaryOf(content(d, row.id).markdown),
   };
 }
 
@@ -349,7 +349,14 @@ const tagsOf = (text: string | null | undefined): string[] => {
     return [];
   }
 };
-const KIND_WORDS: Record<PageKind, string> = { page: "page", doc: "document", note: "note" };
+const KIND_WORDS: Record<PageKind, string> = { page: "page", doc: "document", note: "note", sheet: "sheet" };
+/** A sheet file in a few words: its sheets' names and how many cells are filled. Its text is one line per cell. */
+function sheetSummary(text: string): string {
+  const lines = text.split("\n");
+  const names = lines.filter((l) => l.startsWith("!sheet ")).map((l) => l.slice(7).trim());
+  const cells = lines.filter((l) => l && !l.startsWith("!")).length;
+  return `${names.join(", ") || "Sheet 1"} · ${cells} cell${cells === 1 ? "" : "s"} filled`;
+}
 const cleanTitle = (t: unknown) => String(t ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
 const cleanIcon = (t: unknown) => [...new Intl.Segmenter("en", { granularity: "grapheme" }).segment(String(t ?? "").trim())].slice(0, 1).map((g) => g.segment).join("");
 const MAX_PAGE = 400_000;
@@ -813,6 +820,7 @@ export function workspaceTool(who: (conversationId: string) => string | null): T
         const depth = (p: PageInfo): number => (p.parent ? 1 + depth(tree.find((x) => x.id === p.parent) ?? ({ parent: null } as PageInfo)) : 0);
         return tree.map((p) => `${"  ".repeat(Math.min(depth(p), 6))}- [${p.id}] ${p.title}${p.kind === "doc" ? ` (document${p.folder ? ` in ${p.folder}` : ""})` : p.kind === "note" ? " (note)" : ""}${p.protected ? " (protected)" : ""}`).join("\n");
       }
+      if ((input.action === "read" || input.action === "suggest") && input.page && workspace.tree(org, agent).find((p) => p.id === String(input.page))?.kind === "sheet") throw new Error("That is a sheet. Read and change it with the sheet tool.");
       if (input.action === "read") {
         const r = workspace.read(org, agent, String(input.page ?? ""), String(input.section ?? ""), Number(input.part) || 1);
         workspace.used(org, task, String(input.page), "read");
