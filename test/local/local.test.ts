@@ -2985,3 +2985,56 @@ test("page packs: the Marketplace lists them with what they add, adding makes th
     orgs.remove(org0.id);
   }
 });
+
+test("company templates and playbooks: a preview of what they add, routines arrive paused, and undo takes it all back", { timeout: 60_000 }, async () => {
+  const { orgs } = await import("../../src/local/orgs.ts");
+  const kits = await import("../../src/local/kits.ts");
+  const { workspace } = await import("../../src/local/workspace.ts");
+  const { work } = await import("../../src/local/work.ts");
+  const org0 = orgs.create("Kit Co", "Sell online.", "custom");
+  try {
+    const org = () => orgs.active();
+    // Four company templates and three playbooks are listed.
+    const listed = kits.listKits(org());
+    assert.equal(listed.filter((k) => k.kind === "company").length, 4);
+    assert.deepEqual(listed.filter((k) => k.kind === "playbook").map((k) => k.name), ["Month-end close", "Hiring", "Client onboarding"]);
+
+    // A playbook cannot run before its group exists, and says what to do.
+    assert.throws(() => kits.runPlaybook(org().id, "playbook-month-end"), /lead of your Finance group.*install a company template/);
+
+    // The preview says what the shop template adds; nothing has changed yet.
+    const preview = kits.previewKit(org(), "company-shop");
+    assert.ok(preview.positions.length >= 10);
+    assert.deepEqual(preview.packs.map((p) => p.name), ["SOP library", "Price list", "Sales playbook"]);
+    assert.equal(preview.routines.length, 2);
+    assert.equal(org().members.length, 0);
+
+    const done = await kits.installKit(org().id, "company-shop", app.jobs);
+    assert.equal(org().members.length, preview.positions.length);
+    assert.equal(done.pages.length, 3);
+    const jobs = (await app.jobs.list()).filter((j) => j.org === org().id);
+    assert.equal(jobs.length, 2);
+    // Routines arrive paused, each with the lead of its group.
+    assert.ok(jobs.every((j) => j.enabled === false && j.owner));
+    await assert.rejects(kits.installKit(org().id, "company-shop", app.jobs), /already installed/);
+
+    // A playbook on top: its page and a paused routine for the Finance lead; Run it now gives the lead a task.
+    await kits.installKit(org().id, "playbook-month-end", app.jobs);
+    assert.ok(workspace.tree(org()).some((p) => p.title === "Month-end close"));
+    const ran = kits.runPlaybook(org().id, "playbook-month-end");
+    assert.equal(ran.owner, "Head of Finance");
+    assert.equal(work.get(org(), ran.task).title, "Month-end close");
+    work.cancel(org(), ran.task);
+
+    // Undo, playbook first, then the company: the chart is empty again, pages deleted, routines gone.
+    await kits.undoKit(org().id, "playbook-month-end", app.jobs);
+    await kits.undoKit(org().id, "company-shop", app.jobs);
+    assert.equal(org().members.length, 0);
+    assert.equal(workspace.tree(org()).length, 0);
+    assert.equal((await app.jobs.list()).filter((j) => j.org === org().id).length, 0);
+    assert.equal(kits.listKits(org()).some((k) => k.installed), false);
+  } finally {
+    for (const j of (await app.jobs.list()).filter((x) => x.org === org0.id)) await app.jobs.remove(j.id).catch(() => {});
+    orgs.remove(org0.id);
+  }
+});

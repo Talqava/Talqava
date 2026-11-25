@@ -4385,6 +4385,57 @@ function marketCard(bot) {
   );
 }
 
+/** Before a company template or playbook is installed: exactly what it adds. Installing can be undone. */
+async function kitPreview(k) {
+  let p;
+  try {
+    p = await api("GET", `marketplace/kits/${k.id}/preview`);
+  } catch (err) {
+    return toast(err.message);
+  }
+  const dialog = h("dialog", { class: "aidialog" });
+  const close = () => (dialog.close(), dialog.remove());
+  const status = h("p", { class: "note", role: "status" });
+  const add = h("button", { class: "primary" }, "Install");
+  add.addEventListener("click", async () => {
+    add.disabled = true;
+    status.textContent = "Installing…";
+    try {
+      await api("POST", `marketplace/kits/${k.id}/install`);
+      state.market = null;
+      await Promise.all([loadCrew(), loadOrgs()]);
+      close();
+      toast(`${k.name} is installed.`, { label: "Undo", run: async () => (await api("POST", `marketplace/kits/${k.id}/undo`), (state.market = null), await Promise.all([loadCrew(), loadOrgs()]), go("market")) });
+      go(k.kind === "company" ? "team" : "market");
+    } catch (err) {
+      status.textContent = err.message;
+      status.className = "note bad";
+      add.disabled = false;
+    }
+  });
+  const few = (list, n = 8) => (list.length > n ? `${list.slice(0, n).join(", ")} and ${list.length - n} more` : list.join(", "));
+  fill(
+    dialog,
+    h("h3", {}, `${k.icon} ${k.name}`),
+    h("p", { class: "note" }, k.summary),
+    h("div", { class: "label" }, "What installing it does"),
+    h(
+      "ul",
+      {},
+      k.kind === "company" ? h("li", {}, p.positions.length ? `Adds ${p.positions.length} position${p.positions.length === 1 ? "" : "s"} to your chart: ${few(p.positions)}. Nothing you have is removed or moved.` : "Adds no positions: your chart already has them all.") : null,
+      p.packs.length ? h("li", {}, `Adds page packs to your Workspace: ${p.packs.map((x) => `${x.name} (${x.already ? "you already have it" : `${x.pages} pages`})`).join(", ")}.`) : null,
+      p.page ? h("li", {}, `Adds the page “${p.page}” to your Workspace: the procedure your agents follow.`) : null,
+      p.routines.length ? h("li", {}, `Adds ${p.routines.length} routine${p.routines.length === 1 ? "" : "s"}, paused: ${p.routines.map((r) => `${r.name} (${r.owner ? `the ${r.owner}` : `the lead of ${r.group}`})`).join(", ")}. A routine costs money each time it runs, so you switch each one on under Routines.`) : null,
+      p.run ? h("li", {}, p.run.owner ? `Run it now gives the work to the ${p.run.owner}, who sends you a plan to approve first.` : `Run it now needs a ${p.run.groups[0]} group with a lead on your chart. Add one, or install a company template, before running it.`) : null,
+      h("li", {}, `Nothing is spent by installing. Undo takes it all back: ${k.kind === "company" ? "your chart as it was, " : ""}its pages to Deleted, its routines removed.`),
+    ),
+    status,
+    h("div", { class: "row" }, add, h("button", { class: "plain", onclick: close }, "Cancel")),
+  );
+  document.body.append(dialog);
+  dialog.showModal();
+}
+
 /** Before a page pack is added: its pages, who will see them, which start protected. Adding can be undone. */
 function packPreview(k) {
   const dialog = h("dialog", { class: "aidialog" });
@@ -4482,8 +4533,36 @@ async function marketView() {
         h("div", { class: "mfoot" }, h("span", { class: "mono small muted" }, k.added ? "✓ In your workspace" : "Free · can be undone"), add),
       );
     };
+    // Company templates and playbooks: several things set up at once, previewed first, undone in one step.
+    const kits = (market.kits ?? []).filter((k) => !cat && (!needle || `${k.name} ${k.summary}`.toLowerCase().includes(needle)));
+    const kitCard = (k) => {
+      const main = h("button", { class: k.installed ? "madd" : "madd primary" }, k.installed ? (k.canRun ? "Run it now" : "✓ Installed") : "Preview and install");
+      main.disabled = k.installed && !k.canRun;
+      main.addEventListener("click", () =>
+        k.installed
+          ? attempt(async () => {
+              const r = await api("POST", `marketplace/kits/${k.id}/run`);
+              toast(`Given to the ${r.owner}. Its plan will come to you for approval.`);
+              openTask(r.task);
+            }, ui.body)
+          : kitPreview(k),
+      );
+      const undo = k.installed
+        ? h("button", { class: "plain small", onclick: () => confirm(`Undo “${k.name}”?\n\n${k.kind === "company" ? "Your chart goes back to how it was before it was installed. " : ""}Its pages go to Deleted (kept 30 days) and its routines are removed.`) && attempt(async () => (await api("POST", `marketplace/kits/${k.id}/undo`), (state.market = null), await Promise.all([loadCrew(), loadOrgs()]), marketView()), ui.body) }, "Undo")
+        : null;
+      return h(
+        "article",
+        { class: "mcard tcard" },
+        h("div", { class: "mhead" }, h("span", { class: "packicon", "aria-hidden": "true" }, k.icon), h("div", {}, h("b", {}, k.name), h("div", { class: "by" }, k.kind === "company" ? "Company template" : "Playbook"))),
+        h("p", { class: "mdesc" }, k.summary),
+        h("div", { class: "mfoot" }, h("span", { class: "mono small muted" }, k.installed ? "✓ Installed" : "Free · can be undone"), undo, main),
+      );
+    };
+    const kitSection = (kind, title, note) => ((list) => (list.length ? h("section", {}, h("h2", {}, title), h("p", { class: "note", style: "margin: -6px 0 12px" }, note), h("div", { class: "mgrid wide" }, list.map(kitCard))) : null))(kits.filter((k) => k.kind === kind));
     fill(
       results,
+      kitSection("company", "Company templates", "A running start for your kind of business: the positions on your chart, the pages your agents follow, and routines, set up together."),
+      kitSection("playbook", "Playbooks", "One known process, ready to run: its procedure as a page, a routine for the group that owns it, and Run it now."),
       featured.length
         ? h(
             "section",
@@ -4507,8 +4586,8 @@ async function marketView() {
   search.addEventListener("input", () => ((ui.marketSearch = search.value), draw()));
   col.append(
     h("h1", {}, "Marketplace"),
-    h("p", { class: "lead" }, "Agents for every department, ready-made teams, and page packs for your Workspace. Read exactly what each one does before you add it to your organization."),
-    market.updates ? h("div", { class: "banner" }, `${market.updates} agent${market.updates === 1 ? "" : "s"} on your team ${market.updates === 1 ? "has" : "have"} a newer version. Open ${market.updates === 1 ? "it" : "one"} to see what changed and update, or keep yours.`, " ", h("button", { class: "plain link", onclick: () => ((ui.marketCat = "+mine"), marketView()) }, "Show them")) : null,
+    h("p", { class: "lead" }, "Company templates, playbooks, page packs, ready-made teams and agents for every department. Read exactly what each one does before you add it to your organization."),
+    ...(market.updates ? [h("div", { class: "banner" }, `${market.updates} agent${market.updates === 1 ? "" : "s"} on your team ${market.updates === 1 ? "has" : "have"} a newer version. Open ${market.updates === 1 ? "it" : "one"} to see what changed and update, or keep yours.`, " ", h("button", { class: "plain link", onclick: () => ((ui.marketCat = "+mine"), marketView()) }, "Show them"))] : []),
     pills,
     search,
     ...(market.problems?.length ? [h("div", { class: "banner error small" }, market.problems.map((p) => h("div", {}, p)))] : []),
