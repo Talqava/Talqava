@@ -1660,7 +1660,8 @@ dialog.needs.legaldialog[open] { display: flex; }
 .aicard { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: var(--r-m, 8px); background: var(--panel); border: 1px solid var(--glass-line, var(--line)); }
 .aicard.on { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .aicard p { margin: 0; flex: 1; }
-.aicardhead { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.aicardhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.svctile { flex: none; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: #0A0A0A; border: 1px solid #2A2A2A; color: #F2F2F2; font: 600 10.5px/1 "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.3px; }
 .aibackups { display: flex; flex-direction: column; gap: 6px; }
 .aibackups p { margin: 0; }
 .aibackuplist { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }

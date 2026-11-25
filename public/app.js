@@ -5929,8 +5929,7 @@ function aiModelsSection(col) {
                 h(
                   "div",
                   { class: "grow" },
-                  h("strong", {}, c.name),
-                  c.inUse ? h("span", { class: "tag ok" }, "Your team's model") : null,
+                  h("div", { class: "row" }, serviceTile(c.name), h("strong", {}, c.name), c.inUse ? h("span", { class: "tag ok" }, "Your team's model") : null),
                   // A model program on this computer is checked now: it may have been closed, or have no models yet.
                   c.live
                     ? h(
@@ -5971,7 +5970,7 @@ function aiModelsSection(col) {
                 return h(
                   "div",
                   { class: `aicard${on ? " on" : ""}` },
-                  h("div", { class: "aicardhead" }, h("strong", {}, s.name), on ? h("span", { class: "tag ok" }, "Connected") : null),
+                  h("div", { class: "aicardhead" }, serviceTile(s.name), h("strong", { class: "grow" }, s.name), on ? h("span", { class: "tag ok" }, "Connected") : null),
                   h("p", { class: "note small" }, s.about),
                   h(
                     "div",
@@ -6296,9 +6295,23 @@ function settingsView() {
   col.append(
     h("h3", {}, "About and legal"),
     h("p", { class: "note" }, "Talqava is open-source software under the MIT licence, developed by GR Investments LLC. It runs on your computer and sends nothing to us: your data goes only to the services you connect, such as your AI model provider."),
+    h("p", { class: "note small" }, TRADEMARKS),
     h("p", { class: "note small" }, "Files your agents work on are kept in ", h("code", {}, c.workspace), ". Everything else Talqava knows is in ", h("code", {}, c.dataDir), "."),
     legal,
   );
+}
+
+/** Said wherever other companies' services are named: their names are used only to say Talqava works with them. */
+const TRADEMARKS = "Product and company names are trademarks of their owners and are used only to say which services Talqava can connect to. Talqava is not affiliated with or endorsed by them.";
+
+/**
+ * A small tile for an AI service, in Talqava's own style: its initials on the brand's dark tile. Companies' own logos
+ * are not shown; most of their brand rules allow their names in text, but not their logos without permission.
+ */
+function serviceTile(name) {
+  const words = String(name).replace(/\(.*\)/, "").trim().split(/\s+/).filter(Boolean);
+  const letters = (words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? "?").slice(0, 2)).toUpperCase();
+  return h("span", { class: "svctile", "aria-hidden": "true" }, letters);
 }
 
 boot();
