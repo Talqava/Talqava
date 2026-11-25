@@ -90,6 +90,20 @@ Your mission is at the top. Below it are goal cards, grouped under "The whole or
 
 A task that is still working must be stopped first, and a finished task cannot be moved: create a new task instead.
 
+**Pause and resume a task**
+1. Open the task and press **⏸ Pause** (or **⏸ Pause it and its sub-tasks** when it has open sub-tasks).
+2. If it was working, it stops at a clean point and leaves a hand-over note. If it hadn't started, it stays in its queue without starting. Its card shows **⏸ Paused** in **To do**.
+3. Press **Resume** when you're ready. It carries on from its hand-over note, and comments you left while it was paused reach the agent then.
+
+A paused task can also be given to someone else, the same way as a stuck one.
+
+**Pause one agent, or all work**
+1. On the Board, choose the agent under **Everyone**, then press **⏸ Pause the …**. Or press **⏸ Pause all work** to pause every agent on your chart.
+2. Whatever a paused agent is doing stops at a clean point, and it starts nothing new: not its queued tasks, hand-offs from other agents, or questions. A banner says who is paused.
+3. Press **Resume the …**, **Resume all** or **Resume all work**. Work that the pause stopped carries on from its hand-over notes, and queues start again.
+
+Chats with Talqava itself keep working while agents are paused.
+
 **Approve a plan, or ask for changes**
 1. Open the task: on its panel, press **Review its plan**.
 2. Read the summary, the steps and who does each, and the estimate.
@@ -174,6 +188,8 @@ A task that is still working must be stopped first, and a finished task cannot b
 - **"Say what should change in the plan."**: write what should change in the box before pressing **Ask for changes**.
 - **"There is no plan waiting for your approval on this task."**: the plan was already approved, or the agent is still revising it. Reload the page.
 - **"This task's board is full"**: a task's board keeps up to 60 notes; the agents put the rest in their reports.
+- **"This task is paused. Resume it instead."**: press **Resume** on the task rather than **Try again**.
+- **"The … is paused, so it starts no new work."**: that agent is paused. Resume it from the banner on the Board, or give the task to someone else.
 - **"Its agent is no longer on your team."**: the agent was removed. Reassign the task, then click **Try again**.
 - **"It reached its budget."** or a monthly budget message: raise the budget (per task in Settings, per agent on the agent's page, or per group on the Organization page), then click **Try again**.
 - **"Stopped: it tried the same step … a third time"** or **"Stopped: every step failed 4 times in a row"**: the agent is stuck. Read its **Hand-over note** and the last errors, add a comment with a hint (for example where the file really is), then click **Try again**.
