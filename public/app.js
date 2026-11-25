@@ -284,6 +284,8 @@ const ICONS = {
   audit: "M6 3.5h6l3 3v10H6A1.5 1.5 0 0 1 4.5 15V5A1.5 1.5 0 0 1 6 3.5zM7.5 9h5M7.5 11.5h5M7.5 14h3",
   workspace: "M5.5 3.5h6l3 3v10h-9zM11.5 3.5v3h3M7.5 10h5M7.5 12.5h5M7.5 7.5h2",
   tasks: "M4 4.5h3v11H4zM8.5 4.5h3v7h-3zM13 4.5h3v4h-3z",
+  docs: "M6 3.5h5.5l3 3V15A1.5 1.5 0 0 1 13 16.5H6A1.5 1.5 0 0 1 4.5 15V5A1.5 1.5 0 0 1 6 3.5zM11.5 3.5v3h3M7 9.5h6M7 12h6M7 14.5h3.5",
+  notes: "M5 4.5h10v7.5l-3.5 3.5H5zM15 12h-3.5v3.5M7.5 7.5h5M7.5 10h3",
   projects: "M3 6.5a1.5 1.5 0 0 1 1.5-1.5h3l1.5 1.5h6.5A1.5 1.5 0 0 1 17 8v6.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5z",
   guide: "M10 5.5C8.5 4.3 6.5 4 4 4v11c2.5 0 4.5.3 6 1.5 1.5-1.2 3.5-1.5 6-1.5V4c-2.5 0-4.5.3-6 1.5zM10 5.5v11",
   library: "M3.5 6A1.5 1.5 0 0 1 5 4.5h3l1.5 2H15A1.5 1.5 0 0 1 16.5 8v6A1.5 1.5 0 0 1 15 15.5H5A1.5 1.5 0 0 1 3.5 14zM7 10.5h6M7 12.8h4",
@@ -316,6 +318,8 @@ function renderRail() {
     ),
     h("div", { class: "raillabel" }, "Team"),
     h("div", { class: "railgroup" }, item("team", "Organization", v === "team", "The org chart, departments and budgets"), item("market", "Marketplace", v === "market" || v === "marketbot", "Ready-made agents and teams for every department")),
+    h("div", { class: "raillabel" }, "Office"),
+    h("div", { class: "railgroup" }, item("docs", "Documents", v === "docs", "Letters, proposals and reports you and your agents write together"), item("notes", "Notes", v === "notes", "Quick notes, meeting notes and ideas, private until you share them")),
     h("div", { class: "raillabel" }, "Knowledge"),
     h(
       "div",
@@ -340,7 +344,7 @@ function renderRail() {
 
 function go(view, id = null) {
   ui.wsFlush?.();
-  if (view !== "workspace") (ui.wsEditor?.destroy(), (ui.wsEditor = null), (ui.wsFlush = null));
+  if (!["workspace", "docs", "notes"].includes(view)) (ui.wsEditor?.destroy(), (ui.wsEditor = null), (ui.wsFlush = null));
   state.view = view;
   state.convId = view === "chat" || view === "quest" ? id : null;
   state.botId = view === "bot" ? id : null;
@@ -371,7 +375,7 @@ function renderBody() {
   state.source = null;
   ui.log = null;
   ui.body.className = "body";
-  const views = { home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView };
+  const views = { home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView, docs: docsView, notes: notesView };
   (views[state.view] || homeView)();
 }
 
@@ -6732,15 +6736,24 @@ let editorModule = null;
 const loadEditor = () => (editorModule ??= import("/vendor/editor.js"));
 
 /** Opens the workspace, at a page or at its home. */
-function openPage(id) {
+async function openPage(id) {
   ui.ws ??= { collapsed: new Set() };
+  // A document or a note opens in Office; a page opens in the Workspace.
+  let kind = "page";
+  if (id) kind = await api("GET", `workspace/pages/${id}`).then((p) => p.kind).catch(() => (ui.ws.data?.tree ?? []).find((p) => p.id === id)?.kind ?? "page");
+  const host = kind === "doc" ? "docs" : kind === "note" ? "notes" : "workspace";
+  ui.ws.host = host;
   ui.ws.open = id;
-  if (state.view !== "workspace") go("workspace");
-  else workspaceView();
+  if (state.view !== host) go(host);
+  else wsReload();
 }
+
+/** Draws again whichever screen is showing the page editor. */
+const wsReload = () => (ui.ws?.host === "docs" ? docsView() : ui.ws?.host === "notes" ? notesView() : workspaceView());
 
 async function workspaceView() {
   ui.ws ??= { collapsed: new Set() };
+  ui.ws.host = "workspace";
   ui.wsFlush?.();
   ui.wsFlush = null;
   ui.wsEditor?.destroy();
@@ -6948,7 +6961,9 @@ async function renderWsPage(col, id) {
     return fill(col, h("div", { class: "banner error" }, err.message));
   }
   const { createEditor, BLOCKS } = await loadEditor();
-  if (state.view !== "workspace" || ui.ws.open !== id) return;
+  if (state.view !== (ui.ws.host ?? "workspace") || ui.ws.open !== id) return;
+  const office = page.kind === "doc" || page.kind === "note";
+  const kindWord = page.kind === "doc" ? "document" : page.kind === "note" ? "note" : "page";
   const byId = new Map(ui.ws.data.tree.map((p) => [p.id, p]));
   const trail = [];
   for (let at = byId.get(page.parent); at; at = byId.get(at.parent)) trail.unshift(at);
@@ -6972,7 +6987,7 @@ async function renderWsPage(col, id) {
         status.textContent = "Saved";
       } catch (err) {
         status.textContent = "Not saved";
-        fill(conflict, h("div", { class: "banner error" }, err.message, " ", h("button", { class: "small", onclick: () => workspaceView() }, "Reload")));
+        fill(conflict, h("div", { class: "banner error" }, err.message, " ", h("button", { class: "small", onclick: () => wsReload() }, "Reload")));
       }
     });
     return saving;
@@ -6991,13 +7006,14 @@ async function renderWsPage(col, id) {
     if (t === page.title) return;
     page.title = t;
     await api("PATCH", `workspace/pages/${id}`, { title: t });
+    if (office) return ui.ws.refreshSide?.();
     ui.ws.data = await api("GET", "workspace");
     renderWsTree(document.querySelector(".wsside"));
   }, col);
   title.addEventListener("change", saveTitle);
   title.addEventListener("keydown", (e) => e.key === "Enter" && (e.preventDefault(), saveTitle(), ui.wsEditor?.focus("start")));
   const iconBtn = h("button", { class: "plain wspageicon", title: "Change the icon", "aria-label": "Change the page's icon", "aria-haspopup": "dialog", onclick: () =>
-    iconPicker(iconBtn, page.icon || "", (next) => attempt(async () => (await api("PATCH", `workspace/pages/${id}`, { icon: next }), workspaceView()), col)),
+    iconPicker(iconBtn, page.icon || "", (next) => attempt(async () => (await api("PATCH", `workspace/pages/${id}`, { icon: next }), wsReload()), col)),
   }, page.icon || "📄");
 
   // ----- the editor, its toolbar and the slash menu -----
@@ -7073,7 +7089,7 @@ async function renderWsPage(col, id) {
               await api("POST", `workspace/suggestions/${s.id}`, { decision, replace: true });
             }
             loadPageSuggestions();
-            workspaceView();
+            wsReload();
           }, suggestBox);
         return h(
           "section",
@@ -7091,7 +7107,7 @@ async function renderWsPage(col, id) {
   // ----- the page's settings -----
   const org = activeOrg();
   const groups = [...new Set((org.groups ?? []).map((g) => g.name).concat(org.members.map((m) => m.department)))].filter(Boolean).sort();
-  const patch = (body) => attempt(async () => (await api("PATCH", `workspace/pages/${id}`, body), workspaceView()), col);
+  const patch = (body) => attempt(async () => (await api("PATCH", `workspace/pages/${id}`, body), wsReload()), col);
   const mode = page.access.private ? "private" : !page.accessSet ? "inherit" : page.access.everyone ? "everyone" : "some";
   const who = h(
     "select",
@@ -7152,12 +7168,13 @@ async function renderWsPage(col, id) {
     edit,
     h("label", { class: "power" }, protect, "Protected: agents never change it directly"),
     h("p", { class: "note small" }, "Use Protected for prices, legal and people policies."),
-    org.members.length ? [h("div", { class: "label" }, "Give this page to an agent"), giveTo, giveWhat, h("button", { class: "small", onclick: give }, "Give the task")] : null,
+    org.members.length ? [h("div", { class: "label" }, `Give this ${kindWord} to an agent`), giveTo, giveWhat, h("button", { class: "small", onclick: give }, "Give the task")] : null,
+    office ? officePanel(page, id, surface, patch, col) : null,
     h("div", { class: "label" }, "Linked from"),
     backlinksBox,
     h("div", { class: "label" }, "Used by"),
     tasksBox,
-    h("div", { class: "row wrap wspanelend" }, h("button", { class: "small", onclick: () => pageHistory(page) }, "History"), h("button", { class: "small danger", onclick: () => confirm(`Delete “${page.title}”${ui.ws.data.tree.some((p) => p.parent === id) ? " and the pages inside it" : ""}? You can restore it from Deleted.`) && attempt(async () => (await api("DELETE", `workspace/pages/${id}`), (ui.ws.open = page.parent), workspaceView()), col) }, "Delete")),
+    h("div", { class: "row wrap wspanelend" }, h("button", { class: "small", onclick: () => pageHistory(page) }, "History"), h("button", { class: "small danger", onclick: () => confirm(`Delete “${page.title}”${ui.ws.data.tree.some((p) => p.parent === id) ? " and the pages inside it" : ""}? You can restore it from Deleted.`) && attempt(async () => (await api("DELETE", `workspace/pages/${id}`), (ui.ws.open = page.parent), wsReload()), col) }, "Delete")),
   );
 
   fill(
@@ -7167,7 +7184,8 @@ async function renderWsPage(col, id) {
       { class: "wspage" },
       h(
         "article",
-        { class: "wsdoc" },
+        { class: `wsdoc ${page.kind === "doc" ? "paper" : ""}` },
+        office ? h("nav", { class: "wstrail note small", "aria-label": "Where this is" }, h("button", { class: "plain link", onclick: () => ((ui.ws.open = null), wsReload()) }, page.kind === "doc" ? "Documents" : "Notes"), page.folder ? ` › ${page.folder}` : "") : null,
         trail.length ? h("nav", { class: "wstrail note small", "aria-label": "Where this page is" }, trail.map((t) => [h("button", { class: "plain link", onclick: () => openPage(t.id) }, t.title), " › "])) : null,
         h("div", { class: "wshead" }, iconBtn, title),
         h("p", { class: "note small wsmeta" }, `Edited by ${page.updatedBy} · ${when(page.updatedAt)}${page.protected ? " · Protected" : ""}`),
@@ -7195,6 +7213,223 @@ async function renderWsPage(col, id) {
     ui.ws.focusTitle = false;
     title.focus();
   }
+}
+
+/** In a document's or note's side panel: its folder or notebook, tags, what it can become, and downloads. */
+function officePanel(page, id, surface, patch, col) {
+  const isNote = page.kind === "note";
+  const names = (isNote ? ui.ws.data?.notebooks : ui.ws.data?.folders) ?? [];
+  const listId = `folders-${id}`;
+  const folder = h("input", { value: page.folder, placeholder: isNote ? "e.g. Meetings" : "e.g. Customers", list: listId, maxlength: 60, "aria-label": isNote ? "Notebook" : "Folder" });
+  folder.addEventListener("change", () => patch({ folder: folder.value }));
+  const tags = h("input", { value: page.tags.join(", "), placeholder: "e.g. follow-up, pricing", "aria-label": "Tags" });
+  tags.addEventListener("change", () => patch({ tags: tags.value }));
+  const html = () => (surface.querySelector(".ProseMirror") ?? surface).innerHTML;
+  const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const forWord = () => {
+    const doc = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(page.title)}</title><style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.4}table{border-collapse:collapse}td,th{border:1px solid #999;padding:4px 8px}</style></head><body><h1>${esc(page.title)}</h1>${html()}</body></html>`;
+    const a = h("a", { href: URL.createObjectURL(new Blob(["﻿", doc], { type: "application/msword" })), download: `${page.title.replace(/[^\w -]+/g, "").trim() || "document"}.doc` });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  const print = () => {
+    document.body.classList.add("printing");
+    const done = () => (document.body.classList.remove("printing"), window.removeEventListener("afterprint", done));
+    window.addEventListener("afterprint", done);
+    window.print();
+  };
+  const become = (kind, words) => attempt(async () => (await api("PATCH", `workspace/pages/${id}`, { kind }), toast(`It is now ${words}.`), openPage(id)), col);
+  const remember = () =>
+    attempt(async () => {
+      const text = `${page.title}\n\n${ui.wsEditor?.markdown() ?? ""}`.trim();
+      if (text.length > 2000) throw new Error("This note is too long to remember whole. Select the part that matters, put it in a shorter note, and remember that.");
+      await api("POST", "memory", { text });
+      toast("Saved to Memory. Your agents will remember it.");
+    }, col);
+  return [
+    h("div", { class: "label" }, isNote ? "Notebook" : "Folder"),
+    folder,
+    h("datalist", { id: listId }, names.map((n) => h("option", { value: n }))),
+    isNote ? [h("div", { class: "label" }, "Tags"), tags, h("p", { class: "note small" }, "Separate tags with commas.")] : null,
+    h("div", { class: "label" }, "Turn it into"),
+    h(
+      "div",
+      { class: "officeturn" },
+      isNote ? h("button", { class: "small", onclick: () => become("doc", "a document, under Documents") }, "A document") : h("button", { class: "small", onclick: () => become("note", "a note, under Notes") }, "A note"),
+      h("button", { class: "small", onclick: () => confirm(`Move “${page.title}” to the Workspace as a page? Agents follow Workspace pages as procedures.`) && become("page", "a page in the Workspace") }, "A Workspace page"),
+      isNote ? h("button", { class: "small", onclick: remember }, "Something to remember") : null,
+    ),
+    h("div", { class: "label" }, "Download"),
+    h("div", { class: "officeturn" }, h("button", { class: "small", onclick: forWord }, "For Word"), h("button", { class: "small", onclick: print }, "Print or save as PDF")),
+  ];
+}
+
+/** What the two Office screens share: load the files, keep the editor tidy, and say who can use a file. */
+async function officeLoad(view, side, col) {
+  ui.ws ??= { collapsed: new Set() };
+  ui.ws.host = view;
+  ui.wsFlush?.();
+  ui.wsFlush = null;
+  ui.wsEditor?.destroy();
+  ui.wsEditor = null;
+  ui.body.className = "body two wsbody";
+  ui.log = null;
+  fill(ui.body, side, col);
+  let data;
+  try {
+    [data] = await Promise.all([api("GET", "workspace/office"), state.crew ? null : loadCrew(), state.orgs ? null : loadOrgs()]);
+  } catch (err) {
+    fill(col, h("div", { class: "banner error" }, err.message));
+    return null;
+  }
+  if (state.view !== view) return null;
+  ui.ws.data = data;
+  const kind = view === "docs" ? "doc" : "note";
+  if (ui.ws.open && !data.files.some((f) => f.id === ui.ws.open && f.kind === kind)) ui.ws.open = null;
+  return data;
+}
+const officeWho = (f) => (f.access.private ? "Private" : f.access.everyone ? "Every agent" : [...f.access.departments, ...(f.access.agents.length ? [`${f.access.agents.length} agent${f.access.agents.length === 1 ? "" : "s"}`] : [])].join(", ") || "Every agent");
+const officeDay = (iso) => new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" });
+const officeNew = (kind, folder = "") =>
+  attempt(async () => {
+    const page = await api("POST", "workspace/pages", { kind, folder, title: "Untitled" });
+    ui.ws.focusTitle = true;
+    ui.ws.open = page.id;
+    wsReload();
+  });
+
+/** Office › Documents: letters, proposals and reports, by folder. Agents write them, suggest changes, or read them. */
+async function docsView() {
+  const side = h("aside", { class: "side wsside", "aria-label": "Documents" });
+  const col = h("main", { class: "center wscenter" });
+  const data = await officeLoad("docs", side, col);
+  if (!data) return;
+  const docs = data.files.filter((f) => f.kind === "doc");
+  const org = activeOrg();
+  const drawSide = (files = docs) => {
+    const groups = new Map();
+    for (const f of files) (groups.get(f.folder || "") ?? groups.set(f.folder || "", []).get(f.folder || "")).push(f);
+    const row = (f) => h("button", { class: `plain wsrow officerow ${ui.ws.open === f.id ? "on" : ""}`, "aria-current": ui.ws.open === f.id ? "true" : null, onclick: () => ((ui.ws.open = f.id), docsView()) }, h("span", { class: "grow" }, f.title), f.suggestions ? h("span", { class: "count", title: "Suggested changes waiting for you" }, String(f.suggestions)) : null);
+    fill(
+      side,
+      h("div", { class: "wssidehead" }, h("button", { class: `plain wshome ${ui.ws.open ? "" : "on"}`, onclick: () => ((ui.ws.open = null), docsView()) }, "Documents"), h("button", { class: "small", onclick: () => officeNew("doc") }, "+ Document")),
+      [...groups.keys()].sort((a, b) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b))).map((name) => [h("div", { class: "label officegroup" }, name || (groups.size > 1 ? "No folder" : "All documents")), groups.get(name).map(row)]),
+      docs.length ? null : h("p", { class: "note small", style: "padding: 8px 10px" }, "No documents yet."),
+    );
+  };
+  ui.ws.refreshSide = async () => ((ui.ws.data = await api("GET", "workspace/office")), state.view === "docs" && docsView.side?.(ui.ws.data.files.filter((f) => f.kind === "doc")));
+  docsView.side = drawSide;
+  drawSide();
+  if (ui.ws.open) return renderWsPage(col, ui.ws.open);
+
+  const what = h("input", { placeholder: "e.g. A one-page proposal for a new customer, using our price list", "aria-label": "What should the document say" });
+  const who = h("select", { "aria-label": "Agent" }, org.members.map((m) => h("option", { value: m.bot }, m.title)));
+  const ask = () =>
+    attempt(async () => {
+      const text = what.value.trim();
+      if (!text) throw new Error("Say what the document should be.");
+      const quest = await startTask({ bot: who.value, text: `Write this document: ${text}\n\nBefore you write, look in the workspace for pages that apply (prices, procedures, rules) and follow them. Save the finished document with the workspace tool: action "file", kind "document", with a clear title. Say in your report where it is.`, title: `Write: ${text}`.slice(0, 80) });
+      if (quest?.id) go("quest", quest.id);
+      else if (quest?.queued) openTask(quest.queued.id);
+    }, col);
+  const waiting = docs.filter((f) => f.suggestions);
+  const q = h("input", { type: "search", placeholder: "Find a document by name or folder", "aria-label": "Find a document" });
+  const table = h("div");
+  const drawTable = () => {
+    const needle = q.value.trim().toLowerCase();
+    const shown = docs.filter((f) => !needle || `${f.title} ${f.folder} ${f.summary}`.toLowerCase().includes(needle));
+    drawSide(shown);
+    fill(
+      table,
+      shown.length
+        ? h(
+            "div",
+            { class: "card officetable" },
+            h(
+              "table",
+              {},
+              h("thead", {}, h("tr", {}, ["Name", "Folder", "Last change", "Who can read it", "Agents' changes"].map((t) => h("th", { scope: "col" }, t)))),
+              h(
+                "tbody",
+                {},
+                shown.map((f) =>
+                  h(
+                    "tr",
+                    {},
+                    h("td", {}, h("button", { class: "plain link", onclick: () => ((ui.ws.open = f.id), docsView()) }, f.title), f.protected ? h("span", { class: "tag" }, "protected") : null),
+                    h("td", {}, f.folder || "—"),
+                    h("td", {}, `${f.updatedBy} · ${officeDay(f.updatedAt)}`),
+                    h("td", {}, officeWho(f)),
+                    h("td", {}, f.protected || f.edit !== "direct" ? "Wait for you" : "Straight away"),
+                  ),
+                ),
+              ),
+            ),
+          )
+        : h("p", { class: "note" }, docs.length ? "No document matches that." : "No documents yet. Start one with + Document, or ask an agent to write one."),
+    );
+  };
+  q.addEventListener("input", drawTable);
+  fill(
+    col,
+    h("div", { class: "officehome" }, h("h1", {}, "Documents"), h("p", { class: "lead" }, "Letters, proposals and reports. You write them, or an agent does; an agent's changes to your document wait for you to accept, unless you let them through.")),
+    h("div", { class: "row wrap" }, h("button", { class: "primary", onclick: () => officeNew("doc") }, "+ New document"), q),
+    org.members.length ? h("form", { class: "card form officeask", onsubmit: (e) => (e.preventDefault(), ask()) }, h("b", {}, "Or ask an agent to write it"), h("div", { class: "row wrap" }, what, who, h("button", {}, "Give the task")), h("p", { class: "note small" }, "The agent's document appears here when the task is done. It follows your Workspace pages, such as your price list.")) : null,
+    waiting.length ? h("section", {}, h("div", { class: "label" }, `Waiting for you · ${waiting.length}`), waiting.map((f) => h("button", { class: "plain card officewait", onclick: () => ((ui.ws.open = f.id), docsView()) }, h("b", {}, f.title), h("span", { class: "note small" }, ` · ${f.suggestions} suggested change${f.suggestions === 1 ? "" : "s"} to review`)))) : null,
+    table,
+  );
+  drawTable();
+}
+
+/** Office › Notes: quick notes in notebooks, with tags. A note is private until the owner shares it. */
+async function notesView() {
+  const side = h("aside", { class: "side wsside notesside", "aria-label": "Notes" });
+  const col = h("main", { class: "center wscenter" });
+  const data = await officeLoad("notes", side, col);
+  if (!data) return;
+  ui.notes ??= { notebook: null, tag: null, q: "" };
+  const f0 = ui.notes;
+  const drawSide = (files = ui.ws.data.files) => {
+    const notes = files.filter((f) => f.kind === "note");
+    const notebooks = [...new Set(notes.map((n) => n.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    const tags = [...new Set(notes.flatMap((n) => n.tags))].sort();
+    if (f0.notebook && !notebooks.includes(f0.notebook)) f0.notebook = null;
+    if (f0.tag && !tags.includes(f0.tag)) f0.tag = null;
+    const needle = f0.q.trim().toLowerCase();
+    const shown = notes.filter((n) => (!f0.notebook || n.folder === f0.notebook) && (!f0.tag || n.tags.includes(f0.tag)) && (!needle || `${n.title} ${n.summary} ${n.tags.join(" ")} ${n.folder}`.toLowerCase().includes(needle)));
+    const q = h("input", { type: "search", value: f0.q, placeholder: "Search notes", "aria-label": "Search notes" });
+    q.addEventListener("input", () => ((f0.q = q.value), drawSide(), side.querySelector("input[type=search]")?.focus()));
+    const pick = (label, on, set, n) => h("button", { class: `plain wsrow officerow ${on ? "on" : ""}`, "aria-pressed": String(on), onclick: () => (set(), drawSide()) }, h("span", { class: "grow" }, label), h("span", { class: "note small" }, String(n)));
+    fill(
+      side,
+      h("div", { class: "wssidehead" }, h("button", { class: `plain wshome ${ui.ws.open ? "" : "on"}`, onclick: () => ((ui.ws.open = null), notesView()) }, "Notes"), h("button", { class: "small", onclick: () => officeNew("note", f0.notebook ?? "") }, "+ Note")),
+      q,
+      h("div", { class: "label officegroup" }, "Notebooks"),
+      pick("All notes", !f0.notebook, () => (f0.notebook = null), notes.length),
+      notebooks.map((name) => pick(name, f0.notebook === name, () => (f0.notebook = name), notes.filter((n) => n.folder === name).length)),
+      tags.length ? [h("div", { class: "label officegroup" }, "Tags"), h("div", { class: "officetags" }, tags.map((t) => h("button", { class: `mpill ${f0.tag === t ? "on" : ""}`, "aria-pressed": String(f0.tag === t), onclick: () => ((f0.tag = f0.tag === t ? null : t), drawSide()) }, t)))] : null,
+      h("div", { class: "label officegroup" }, `${shown.length} note${shown.length === 1 ? "" : "s"}`),
+      shown.map((n) =>
+        h(
+          "button",
+          { class: `plain notecard ${ui.ws.open === n.id ? "on" : ""}`, "aria-current": ui.ws.open === n.id ? "true" : null, onclick: () => ((ui.ws.open = n.id), notesView()) },
+          h("b", {}, n.title),
+          n.summary ? h("span", { class: "notesum" }, n.summary.slice(0, 110)) : null,
+          h("span", { class: "note small" }, `${officeDay(n.updatedAt)}${n.folder ? ` · ${n.folder}` : ""}${n.access.private ? " · private" : " · shared with agents"}`),
+        ),
+      ),
+      notes.length ? null : h("p", { class: "note small", style: "padding: 8px 10px" }, "No notes yet."),
+    );
+  };
+  ui.ws.refreshSide = async () => ((ui.ws.data = await api("GET", "workspace/office")), state.view === "notes" && drawSide());
+  drawSide();
+  if (ui.ws.open) return renderWsPage(col, ui.ws.open);
+  fill(
+    col,
+    h("div", { class: "officehome" }, h("h1", {}, "Notes"), h("p", { class: "lead" }, "Quick notes, meeting notes and ideas. A note is private: no agent can find or read it, and it is never sent to an AI model, until you choose who can see it.")),
+    h("div", { class: "row wrap" }, h("button", { class: "primary", onclick: () => officeNew("note", f0.notebook ?? "") }, "+ New note")),
+    h("div", { class: "card form" }, h("b", {}, "What a note can become"), h("ul", {}, h("li", {}, "A task: open the note and give it to an agent."), h("li", {}, "A document, when it grows into a letter or proposal."), h("li", {}, "A Workspace page, when it becomes a procedure agents should follow."), h("li", {}, "Something your agents remember, in Memory."))),
+  );
 }
 
 /** A table's columns: names, types and choices. Saving keeps the values that still fit. */
@@ -7343,7 +7578,7 @@ async function drawTables(box, pageId) {
 }
 
 /** Which guide explains each page. */
-const GUIDES_BY_VIEW = { chat: "chat", inbox: "inbox", tasks: "tasks", projects: "projects", project: "projects", home: "work-in-progress", quest: "work-in-progress", bot: "work-in-progress", jobs: "schedules", team: "organization", market: "marketplace", marketbot: "marketplace", workspace: "workspace", library: "library", memory: "memory", skills: "skills", audit: "audit-log", integrations: "integrations", settings: "settings" };
+const GUIDES_BY_VIEW = { chat: "chat", inbox: "inbox", tasks: "tasks", projects: "projects", project: "projects", home: "work-in-progress", quest: "work-in-progress", bot: "work-in-progress", jobs: "schedules", team: "organization", market: "marketplace", marketbot: "marketplace", workspace: "workspace", docs: "office", notes: "office", library: "library", memory: "memory", skills: "skills", audit: "audit-log", integrations: "integrations", settings: "settings" };
 const guideFor = (view) => (view === "integrations" && ui.integration === "ai-models" ? "ai-models" : GUIDES_BY_VIEW[view] ?? null);
 
 /** Shows a user guide in a reader beside the page. Links between guides open in the reader; the list of guides is on the left. */

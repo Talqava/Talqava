@@ -80,6 +80,7 @@ const GUIDES = [
   ["organization", "Organization"],
   ["marketplace", "Marketplace"],
   ["workspace", "Workspace"],
+  ["office", "Office: Documents and Notes"],
   ["library", "Library"],
   ["memory", "Memory"],
   ["skills", "Skills"],
@@ -1162,7 +1163,9 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   if (parts[0] === "workspace") {
     const org = orgs.active();
     const [, area, id, sub, extra] = parts;
-    if (route === "GET workspace" && !area) return send(res, 200, { tree: workspace.tree(org), templates: workspace.templates(), deleted: workspace.deleted(org), suggestions: workspace.suggestions(org) });
+    // Office: documents and notes. They are pages of another kind, so every pages route works on them too.
+    if (route === "GET workspace" && area === "office") return send(res, 200, { ...workspace.office(org), tree: workspace.tree(org), deleted: workspace.deleted(org), suggestions: workspace.suggestions(org) });
+    if (route === "GET workspace" && !area) return send(res, 200, { tree: workspace.tree(org).filter((p) => p.kind === "page"), templates: workspace.templates(), deleted: workspace.deleted(org), suggestions: workspace.suggestions(org) });
     if (route === "GET workspace" && area === "search") return send(res, 200, workspace.search(org, null, url.searchParams.get("q") ?? "", 20));
     if (route === "POST workspace" && area === "templates" && id) return send(res, 200, await attempt(() => workspace.addTemplate(org, id)));
     if (area === "suggestions") {
@@ -1184,7 +1187,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       if (route === "POST workspace" && id && sub === "changes" && extra) return send(res, 200, await attempt(() => tables.decide(org, id, extra, body.decision)));
     }
     if (area === "pages") {
-      if (route === "POST workspace" && !id) return send(res, 200, await attempt(() => workspace.create(org, null, { parent: body.parent, title: body.title, markdown: body.markdown, icon: body.icon })));
+      if (route === "POST workspace" && !id) return send(res, 200, await attempt(() => workspace.create(org, null, { parent: body.parent, title: body.title, markdown: body.markdown, icon: body.icon, kind: body.kind, folder: body.folder, tags: body.tags })));
       if (route === "GET workspace" && id && !sub) return send(res, 200, await attempt(() => workspace.get(org, id)));
       if (route === "PUT workspace" && id && !sub) return send(res, 200, await attempt(() => workspace.save(org, id, body.markdown, body.baseRev)));
       if (route === "PATCH workspace" && id && !sub) return send(res, 200, await attempt(() => workspace.update(org, id, body)));

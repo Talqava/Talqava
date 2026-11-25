@@ -147,6 +147,7 @@ When an agent asks to add or change a row, it appears on the table under **Waiti
 
 ## Related guides
 
+- [Office: Documents and Notes](office.md) (letters, proposals and notes use the same editor and rules)
 - [Library](library.md)
 - [Memory](memory.md)
 - [Skills](skills.md)

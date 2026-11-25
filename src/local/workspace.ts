@@ -18,8 +18,18 @@ import { audit } from "./audit.ts";
 /** Who is acting: the owner (null), an agent's id, or the general chat agent. */
 export type Who = string | null;
 
+/** What a page is: a workspace page, an Office document, or a note. All three share the same rules and editor. */
+export const PAGE_KINDS = ["page", "doc", "note"] as const;
+export type PageKind = (typeof PAGE_KINDS)[number];
+
 export interface PageInfo {
   id: string;
+  /** "page" in the Workspace; "doc" and "note" in Office. */
+  kind: PageKind;
+  /** A document's folder or a note's notebook; empty for none. */
+  folder: string;
+  /** A note's tags. */
+  tags: string[];
   parent: string | null;
   position: number;
   title: string;
@@ -107,11 +117,19 @@ function db(orgId: string): DatabaseSync {
     create trigger if not exists page_passages_ad after delete on page_passages begin insert into page_passages_fts(page_passages_fts, rowid, text) values ('delete', old.id, old.text); end;
     create table if not exists page_uses (task text not null, page text not null, how text not null, at text not null, primary key (task, page, how));
   `);
+  // Office documents and notes are pages of another kind, with a folder (or notebook) and tags.
+  const have = new Set((d.prepare("pragma table_info(pages)").all() as unknown as { name: string }[]).map((c) => c.name));
+  if (!have.has("kind")) d.exec("alter table pages add column kind text not null default 'page'");
+  if (!have.has("folder")) d.exec("alter table pages add column folder text not null default ''");
+  if (!have.has("tags")) d.exec("alter table pages add column tags text not null default '[]'");
   ready.add(d);
   return d;
 }
 
 interface Row {
+  kind: string;
+  folder: string;
+  tags: string;
   id: string;
   parent: string | null;
   position: number;
@@ -287,6 +305,9 @@ function info(org: Org, d: DatabaseSync, row: Row, byId: Map<string, Row>, open:
   const { access, set } = accessOf(byId, row);
   return {
     id: row.id,
+    kind: kindOf(row.kind),
+    folder: row.folder ?? "",
+    tags: tagsOf(row.tags),
     parent: row.parent,
     position: row.position,
     title: row.title,
@@ -317,6 +338,18 @@ function visible(org: Org, d: DatabaseSync, id: string, who: Who): { row: Row; b
   return { row, byId };
 }
 
+const kindOf = (k: unknown): PageKind => (PAGE_KINDS.includes(k as PageKind) ? (k as PageKind) : "page");
+const cleanFolder = (t: unknown) => String(t ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+/** Tags as given (a list, or text separated by commas), tidied: lower case, no "#", each once, up to 20. */
+const cleanTags = (t: unknown): string[] => [...new Set((Array.isArray(t) ? t : String(t ?? "").split(",")).map((x) => String(x).replace(/^#/, "").replace(/\s+/g, " ").trim().toLowerCase().slice(0, 30)).filter(Boolean))].slice(0, 20);
+const tagsOf = (text: string | null | undefined): string[] => {
+  try {
+    return cleanTags(JSON.parse(text || "[]"));
+  } catch {
+    return [];
+  }
+};
+const KIND_WORDS: Record<PageKind, string> = { page: "page", doc: "document", note: "note" };
 const cleanTitle = (t: unknown) => String(t ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
 const cleanIcon = (t: unknown) => [...new Intl.Segmenter("en", { granularity: "grapheme" }).segment(String(t ?? "").trim())].slice(0, 1).map((g) => g.segment).join("");
 const MAX_PAGE = 400_000;
@@ -327,6 +360,8 @@ function accessFrom(input: unknown): Access | null {
   if (a.private) return { everyone: false, private: true, departments: [], agents: [] };
   return { everyone: a.everyone === true, private: false, departments: Array.isArray(a.departments) ? a.departments.map(String).slice(0, 50) : [], agents: Array.isArray(a.agents) ? a.agents.map(String).slice(0, 100) : [] };
 }
+
+const all_children = (byId: Map<string, Row>, id: string) => [...byId.values()].some((r) => r.parent === id);
 
 /** Where a link to another page points, in a page's Markdown; the app opens it. The same form as the editor's. */
 export const pageHref = (id: string) => `#page/${id}`;
@@ -345,6 +380,13 @@ export const workspace = {
     return all.filter((r) => mayUse(org, accessOf(byId, r).access, who)).map((r) => info(org, d, r, byId, open));
   },
 
+  /** Office: the documents and notes `who` may see, newest first, with their folders, notebooks and tags. */
+  office(org: Org, who: Who = OWNER) {
+    const files = this.tree(org, who).filter((p) => p.kind !== "page").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const names = (kind: PageKind) => [...new Set(files.filter((f) => f.kind === kind && f.folder).map((f) => f.folder))].sort((a, b) => a.localeCompare(b));
+    return { files, folders: names("doc"), notebooks: names("note"), tags: [...new Set(files.flatMap((f) => f.tags))].sort() };
+  },
+
   /** One page with its text. */
   get(org: Org, id: string, who: Who = OWNER): Page {
     const d = db(org.id);
@@ -353,10 +395,13 @@ export const workspace = {
   },
 
   /** A new page. The owner may put it anywhere; an agent only under a page it may see, and it inherits who may see it. */
-  create(org: Org, who: Who, input: { parent?: unknown; title?: unknown; markdown?: unknown; icon?: unknown; template?: string; task?: string | null; position?: number }): Page {
+  create(org: Org, who: Who, input: { parent?: unknown; title?: unknown; markdown?: unknown; icon?: unknown; template?: string; task?: string | null; position?: number; kind?: unknown; folder?: unknown; tags?: unknown }): Page {
     const d = db(org.id);
-    const parent = input.parent ? visible(org, d, String(input.parent), who).row.id : null;
-    if (who !== OWNER && !parent) throw new Error("Put the page under a page you may see.");
+    const kind = kindOf(input.kind);
+    // Documents and notes are not inside pages: a folder or notebook groups them.
+    const parent = kind === "page" && input.parent ? visible(org, d, String(input.parent), who).row.id : null;
+    if (who !== OWNER && kind === "page" && !parent) throw new Error("Put the page under a page you may see.");
+    if (who !== OWNER && kind === "note") throw new Error("Notes are the owner's. Save your result as a document instead.");
     const title = cleanTitle(input.title) || "Untitled";
     const md = String(input.markdown ?? "");
     if (md.length > MAX_PAGE) throw new Error("That page is too long.");
@@ -366,9 +411,16 @@ export const workspace = {
     d.prepare("insert into pages (id, parent, position, title, icon, edit, protected, template, created_by, updated_by, created_at, updated_at) values (?, ?, ?, ?, ?, 'suggest', 0, ?, ?, ?, ?, ?)").run(
       id, parent, input.position ?? last + 1, title, cleanIcon(input.icon), input.template ?? null, author, author, now(), now(),
     );
+    if (kind !== "page") {
+      // A note starts private: no agent sees it until the owner says so. A document an agent writes is seen by its
+      // own group (and the owner); one the owner makes starts open to every agent, like a page.
+      const me = who !== OWNER ? memberOf(org, String(who)) : undefined;
+      const access: Access | null = kind === "note" ? { everyone: false, private: true, departments: [], agents: [] } : who !== OWNER ? { everyone: false, private: false, departments: me ? [me.department] : [], agents: [String(who)] } : null;
+      d.prepare("update pages set kind = ?, folder = ?, tags = ?, access = ? where id = ?").run(kind, cleanFolder(input.folder), JSON.stringify(cleanTags(input.tags)), access ? JSON.stringify(access) : null, id);
+    }
     const row = d.prepare("select * from pages where id = ?").get(id) as unknown as Row;
     write(d, row, md, author, input.task ?? null);
-    if (who !== OWNER) audit({ actor: String(who), actorName: nameOf(org, author), kind: "workspace", task: input.task ?? undefined, action: `Created the page “${title}”` });
+    if (who !== OWNER) audit({ actor: String(who), actorName: nameOf(org, author), kind: "workspace", task: input.task ?? undefined, action: `Created the ${KIND_WORDS[kind]} “${title}”` });
     return this.get(org, id, OWNER);
   },
 
@@ -392,7 +444,7 @@ export const workspace = {
   },
 
   /** The owner changes a page's title, icon, place, who may see it, or how agents may change it. */
-  update(org: Org, id: string, patch: { title?: unknown; icon?: unknown; parent?: unknown; position?: unknown; access?: unknown; edit?: unknown; protected?: unknown }): Page {
+  update(org: Org, id: string, patch: { title?: unknown; icon?: unknown; parent?: unknown; position?: unknown; access?: unknown; edit?: unknown; protected?: unknown; kind?: unknown; folder?: unknown; tags?: unknown }): Page {
     const d = db(org.id);
     const { row, byId } = visible(org, d, id, OWNER);
     if (patch.title !== undefined) {
@@ -419,6 +471,14 @@ export const workspace = {
     if (patch.access !== undefined) d.prepare("update pages set access = ? where id = ?").run(((a) => (a ? JSON.stringify(a) : null))(accessFrom(patch.access)), row.id);
     if (patch.edit !== undefined) d.prepare("update pages set edit = ? where id = ?").run(patch.edit === "direct" ? "direct" : "suggest", row.id);
     if (patch.protected !== undefined) d.prepare("update pages set protected = ? where id = ?").run(patch.protected ? 1 : 0, row.id);
+    if (patch.folder !== undefined) d.prepare("update pages set folder = ? where id = ?").run(cleanFolder(patch.folder), row.id);
+    if (patch.tags !== undefined) d.prepare("update pages set tags = ? where id = ?").run(JSON.stringify(cleanTags(patch.tags)), row.id);
+    if (patch.kind !== undefined && kindOf(patch.kind) !== kindOf(row.kind)) {
+      // Turning a note into a document or a page (or back): the text, history and who may see it stay as they are.
+      const kind = kindOf(patch.kind);
+      if (all_children(byId, row.id)) throw new Error("This page has pages inside it. Move them out first.");
+      d.prepare("update pages set kind = ?, parent = null where id = ?").run(kind, row.id);
+    }
     d.prepare("update pages set updated_at = ? where id = ?").run(now(), row.id);
     return this.get(org, id);
   },
@@ -720,13 +780,14 @@ export function workspacePrompt(org: Org, who: Who, about = ""): string {
 
 /** The tool agents use for the workspace. `who` says which agent is calling, and `task` which task it is working on. */
 export function workspaceTool(who: (conversationId: string) => string | null): Tool {
-  return defineTool<{ action: "search" | "read" | "list" | "suggest" | "file"; query?: string; page?: string; section?: string; part?: number; markdown?: string; note?: string; title?: string; parent?: string }>({
+  return defineTool<{ action: "search" | "read" | "list" | "suggest" | "file"; kind?: string; folder?: string; query?: string; page?: string; section?: string; part?: number; markdown?: string; note?: string; title?: string; parent?: string }>({
     name: "workspace",
     description:
       "The organization's workspace: pages the owner keeps (procedures, checklists, decisions, notes). " +
       "\"search\" finds the pages and passages that match some words. \"read\" returns a page (or one section of it, by heading) in Markdown. \"list\" shows the pages you may read. " +
       "\"suggest\" proposes a change to a page: give the page's whole new text in Markdown and a one-line note on what changed and why; the owner accepts or declines it, unless the page takes edits directly. " +
-      "\"file\" saves your result as a new page under a page you may read (give a title and the Markdown). " +
+      "\"file\" saves your result as a new page under a page you may read (give a title and the Markdown), or, with kind \"document\", as an Office document the owner can open, edit and download (letters, proposals, reports; a folder is optional). " +
+      "Documents the owner keeps in Office are listed, searched, read and suggested on in the same way as pages. " +
       "Read a page before suggesting a change to it.",
     properties: {
       action: { type: "string", enum: ["search", "read", "list", "suggest", "file"] },
@@ -738,6 +799,8 @@ export function workspaceTool(who: (conversationId: string) => string | null): T
       note: { type: "string", description: "For suggest: one line on what you changed and why, for the owner." },
       title: { type: "string", description: "For file: the new page's title." },
       parent: { type: "string", description: "For file: the id of the page to put it under." },
+      kind: { type: "string", enum: ["page", "document"], description: "For file: \"document\" saves an Office document instead of a workspace page." },
+      folder: { type: "string", description: "For file with kind document: the folder to put it in, e.g. Customers." },
     },
     required: ["action"],
     async run(input, { conversation }) {
@@ -748,7 +811,7 @@ export function workspaceTool(who: (conversationId: string) => string | null): T
         const tree = workspace.tree(org, agent);
         if (!tree.length) return "The workspace has no pages you may read yet.";
         const depth = (p: PageInfo): number => (p.parent ? 1 + depth(tree.find((x) => x.id === p.parent) ?? ({ parent: null } as PageInfo)) : 0);
-        return tree.map((p) => `${"  ".repeat(Math.min(depth(p), 6))}- [${p.id}] ${p.title}${p.protected ? " (protected)" : ""}`).join("\n");
+        return tree.map((p) => `${"  ".repeat(Math.min(depth(p), 6))}- [${p.id}] ${p.title}${p.kind === "doc" ? ` (document${p.folder ? ` in ${p.folder}` : ""})` : p.kind === "note" ? " (note)" : ""}${p.protected ? " (protected)" : ""}`).join("\n");
       }
       if (input.action === "read") {
         const r = workspace.read(org, agent, String(input.page ?? ""), String(input.section ?? ""), Number(input.part) || 1);
@@ -760,8 +823,13 @@ export function workspaceTool(who: (conversationId: string) => string | null): T
         return r.applied ? `Changed “${r.page.title}”: this page takes agents' edits directly. Say so in your report.` : `Suggested a change to “${r.page.title}”. The owner will accept or decline it; the page stays as it was until then. Say so in your report.`;
       }
       if (input.action === "file") {
+        if (input.kind === "document") {
+          const doc = workspace.create(org, agent, { kind: "doc", folder: input.folder, title: input.title, markdown: input.markdown, task });
+          workspace.used(org, task, doc.id, "filed");
+          return `Saved as the document “${doc.title}” (page ${doc.id}) in Office${doc.folder ? `, in the folder ${doc.folder}` : ""}. Say so in your report.`;
+        }
         const parent = String(input.parent ?? "");
-        if (!parent) throw new Error("Say which page to put it under (parent). List the pages to choose one.");
+        if (!parent) throw new Error("Say which page to put it under (parent), or give kind: \"document\" to save it as an Office document. List the pages to choose one.");
         const page = workspace.create(org, agent, { parent, title: input.title, markdown: input.markdown, task });
         workspace.used(org, task, page.id, "filed");
         return `Saved as the page “${page.title}” (page ${page.id}). Say so in your report.`;
