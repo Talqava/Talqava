@@ -13,6 +13,7 @@ let site: http.Server;
 let url = "";
 const posts = new Map<number, any>();
 let nextId = 10;
+const tagList: { id: number; name: string }[] = [{ id: 50, name: "bread" }];
 const calls: { method: string; path: string; body: any }[] = [];
 const GOOD = `Basic ${Buffer.from("ada:abcd efgh ijkl mnop").toString("base64")}`;
 
@@ -33,13 +34,20 @@ before(async () => {
       const body = raw ? JSON.parse(raw) : null;
       calls.push({ method: req.method!, path: route, body });
       if (route === "users/me") return json(200, { name: "Ada", capabilities: { edit_posts: true } });
+      if (route === "categories" || route === "tags") {
+        const list = route === "tags" ? tagList : [{ id: 1, name: "Recipes" }, { id: 2, name: "Tips &amp; tricks" }];
+        if (req.method === "POST") return (tagList.push({ id: 50 + tagList.length, name: body.name }), json(201, tagList.at(-1)));
+        const q = u.searchParams.get("search")?.toLowerCase();
+        return json(200, list.filter((t) => !q || t.name.replace("&amp;", "&").toLowerCase().includes(q)));
+      }
+      if (route === "media") return json(200, [{ id: 31, title: { rendered: "Sourdough loaf" }, source_url: "https://blog.example/loaf.jpg" }]);
       const m = /^(posts|pages)(?:\/(\d+))?$/.exec(route);
       if (!m) return json(404, { message: "No route" });
       if (req.method === "GET" && !m[2]) return json(200, [...posts.values()].filter((p) => !u.searchParams.get("search") || p.title.raw.toLowerCase().includes(u.searchParams.get("search")!.toLowerCase())));
       if (req.method === "GET") return posts.has(Number(m[2])) ? json(200, posts.get(Number(m[2]))) : json(404, { message: "Invalid post ID." });
       const id = m[2] ? Number(m[2]) : nextId++;
       const before = posts.get(id) ?? { id, status: "draft", link: `https://blog.example/?p=${id}`, date: "2026-11-26T09:00:00", modified: "2026-11-26T09:00:00", title: { rendered: "", raw: "" }, content: { rendered: "", raw: "" } };
-      const p = { ...before, ...(body.status ? { status: body.status } : {}), ...(body.title ? { title: { rendered: body.title, raw: body.title } } : {}), ...(body.content ? { content: { rendered: body.content, raw: body.content } } : {}) };
+      const p = { ...before, ...(body.categories ? { categories: body.categories } : {}), ...(body.tags ? { tags: body.tags } : {}), ...(body.featured_media ? { featured_media: body.featured_media } : {}), ...(body.status ? { status: body.status } : {}), ...(body.title ? { title: { rendered: body.title, raw: body.title } } : {}), ...(body.content ? { content: { rendered: body.content, raw: body.content } } : {}) };
       posts.set(id, p);
       json(m[2] ? 200 : 201, p);
     });
@@ -125,6 +133,7 @@ test("when the host drops the sign-in details, Talqava uses WordPress's other en
   // A site whose host strips the Authorization header: the REST API never sees a sign-in, XML-RPC carries it inside.
   const items = new Map<number, any>([[3, { post_id: "3", post_title: "Old news", post_status: "publish", link: "https://shop.example/old-news", post_modified: "20261120T10:00:00", post_content: "<p>Fish &amp; chips</p>" }]]);
   let next = 20;
+  let lastNew = "";
   const seen: { method: string; fields: Record<string, string> }[] = [];
   const val = (v: any): string => (Array.isArray(v) ? `<value><array><data>\n${v.map(val).join("\n")}\n</data></array></value>` : v && typeof v === "object" ? `<value><struct>\n${Object.entries(v).map(([k, x]) => `  <member><name>${k}</name>${k === "post_modified" ? `<value><dateTime.iso8601>${x}</dateTime.iso8601></value>` : val(x)}</member>`).join("\n")}\n</struct></value>` : typeof v === "boolean" ? `<value><boolean>${v ? 1 : 0}</boolean></value>` : `<value><string>${String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</string></value>`);
   const answer = (v: any) => `<?xml version="1.0" encoding="UTF-8"?>\n<methodResponse>\n  <params>\n    <param>\n      ${val(v)}\n    </param>\n  </params>\n</methodResponse>`;
@@ -147,7 +156,10 @@ test("when the host drops the sign-in details, Talqava uses WordPress's other en
       if (method === "wp.getProfile") return send(answer({ user_id: "1", roles: ["editor"] }));
       if (method === "wp.getPosts") return send(answer([...items.values()].filter((p) => !fields.s || p.post_title.toLowerCase().includes(fields.s.toLowerCase()))));
       if (method === "wp.getPost") return items.has(ints[1]) ? send(answer(items.get(ints[1]))) : send(fault(404, "Invalid post ID."));
+      if (method === "wp.getTerms") return send(answer(strings[2] === "category" ? [{ name: "News" }, { name: "Offers &amp; deals" }] : [{ name: "winter" }]));
+      if (method === "wp.getMediaLibrary") return send(answer([{ attachment_id: "41", title: "Shop front", link: "https://shop.example/front.jpg" }, { attachment_id: "42", title: "Till", link: "https://shop.example/till.jpg" }]));
       if (method === "wp.newPost") {
+        lastNew = raw;
         const id = next++;
         items.set(id, { post_id: String(id), post_title: fields.post_title, post_status: fields.post_status, link: `https://shop.example/?p=${id}`, post_modified: "20261126T09:00:00", post_content: fields.post_content });
         return send(answer(String(id)));
@@ -187,9 +199,32 @@ test("when the host drops the sign-in details, Talqava uses WordPress's other en
     assert.equal(last.fields.post_status, "future");
     assert.equal(last.fields.post_date_gmt, "20310102T09:00:00");
     await assert.rejects(run("wordpress__content", { action: "read", id: 99 }), /WordPress answered: Invalid post ID/);
+    assert.equal(await run("wordpress__content", { action: "terms" }), "Categories: News, Offers & deals\nTags: winter");
+    assert.equal(await run("wordpress__content", { action: "images", search: "front" }), "[41] Shop front · https://shop.example/front.jpg");
+    await assert.rejects(run("wordpress__content", { action: "draft", title: "Sale", markdown: "Soon.", categories: ["Events"] }), /no category called “Events”\. Use one of: News, Offers & deals/);
+    await run("wordpress__content", { action: "draft", title: "Sale", markdown: "Soon.", categories: ["offers & deals"], tags: ["sale", "january"], image: 41 });
+    assert.match(lastNew, /<name>terms_names<\/name><value><struct><member><name>category<\/name><value><array><data><value><string>Offers &amp; deals<\/string><\/value><\/data><\/array><\/value><\/member><member><name>post_tag<\/name><value><array><data><value><string>sale<\/string><\/value><value><string>january<\/string>/);
+    assert.match(lastNew, /<name>post_thumbnail<\/name><value><int>41<\/int>/);
     assert.equal((await W.listContent(s.id))[0].title, "Old news");
     W.removeSite(s.id);
   } finally {
     older.close();
   }
+});
+
+test("a post can carry the site's own categories, tags made as needed, and a picture from the media library", async () => {
+  const s = await W.connectSite({ url, user: "ada", password: "abcd efgh ijkl mnop" });
+  assert.equal(await run("wordpress__content", { action: "terms" }), "Categories: Recipes, Tips & tricks\nTags: bread");
+  assert.equal(await run("wordpress__content", { action: "images" }), "[31] Sourdough loaf · https://blog.example/loaf.jpg");
+  await assert.rejects(run("wordpress__content", { action: "draft", title: "A", markdown: "B", categories: ["Events"] }), /no category called “Events”\. Use one of: Recipes, Tips & tricks\. Categories are the owner's to add/);
+  await assert.rejects(run("wordpress__content", { action: "draft", kind: "page", title: "A", markdown: "B", tags: ["x"] }), /Pages have no categories or tags/);
+  const out = await run("wordpress__content", { action: "draft", title: "Rye for beginners", markdown: "Start here.", categories: ["tips & tricks"], tags: ["Bread", "rye"], image: 31 });
+  const id = Number(/post (\d+)/.exec(out)![1]);
+  assert.deepEqual(posts.get(id).categories, [2]);
+  assert.deepEqual(posts.get(id).tags, [50, 51], "an existing tag is reused and a new one is made");
+  assert.equal(posts.get(id).featured_media, 31);
+  assert.match(await run("wordpress__content", { action: "update", id, tags: ["rye"] }), /Updated “Rye for beginners”/);
+  assert.deepEqual(posts.get(id).tags, [51]);
+  assert.match(W.dailyPostPrompt(W.listSites()[0], "Bread"), /one fitting category from the site's own/);
+  W.removeSite(s.id);
 });

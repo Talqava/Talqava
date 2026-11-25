@@ -309,7 +309,10 @@ interface XItem {
 }
 const fromRest = (p: WpItem): Item => ({ id: p.id, title: plainText(p.title.raw ?? p.title.rendered) || "(no title)", status: p.status, link: p.link, date: p.modified || p.date, html: p.content.raw ?? p.content.rendered });
 const fromXml = (p: XItem): Item => ({ id: Number(p.post_id), title: plainText(p.post_title) || "(no title)", status: p.post_status, link: p.link, date: String(p.post_modified ?? ""), html: p.post_content ?? "" });
-type Change = { title?: string; html?: string; excerpt?: string; status?: string; date?: Date };
+type Change = { title?: string; html?: string; excerpt?: string; status?: string; date?: Date; categories?: string[]; tags?: string[]; image?: number };
+const same = (a: string, b: string) => plainText(a).toLowerCase() === b.trim().toLowerCase();
+/** Categories are the site's own structure, so an agent picks from the ones the owner made; tags are made as needed. */
+const noCategory = (name: string, have: string[]) => new Error(`This site has no category called “${name}”. ${have.length ? `Use one of: ${have.join(", ")}.` : "It has no categories yet."} Categories are the owner's to add in WordPress; say so in your report if a new one is needed.`);
 
 /** The site's posts and pages: list, read, make and change, whichever entrance the site is reached by. */
 function siteCalls(site: WordPressSite) {
@@ -317,20 +320,50 @@ function siteCalls(site: WordPressSite) {
   const type = (kind: unknown) => (kind === "page" ? "page" : "post");
   if (site.via === "xmlrpc") {
     const call = <T>(method: string, ...rest: unknown[]) => xmlrpc<T>(site, method, [0, site.user, site.password, ...rest]);
-    const fields = (c: Change) => ({ ...(c.title !== undefined ? { post_title: c.title } : {}), ...(c.html !== undefined ? { post_content: c.html } : {}), ...(c.excerpt ? { post_excerpt: c.excerpt } : {}), ...(c.status ? { post_status: c.status } : {}), ...(c.date ? { post_date_gmt: c.date } : {}) });
+    const names = async (taxonomy: string) => (await call<{ name: string }[]>("wp.getTerms", taxonomy, { number: 200, orderby: "count", order: "DESC" })).map((t) => plainText(t.name));
+    const termNames = async (c: Change) => {
+      if (!c.categories && !c.tags) return {};
+      const out: Record<string, string[]> = {};
+      if (c.categories) {
+        const have = await names("category");
+        out.category = c.categories.map((n) => have.find((h) => same(h, n)) ?? (() => { throw noCategory(n, have); })());
+      }
+      if (c.tags) out.post_tag = c.tags;
+      return { terms_names: out };
+    };
+    const fields = async (c: Change) => ({ ...(await termNames(c)), ...(c.image ? { post_thumbnail: c.image } : {}), ...(c.title !== undefined ? { post_title: c.title } : {}), ...(c.html !== undefined ? { post_content: c.html } : {}), ...(c.excerpt ? { post_excerpt: c.excerpt } : {}), ...(c.status ? { post_status: c.status } : {}), ...(c.date ? { post_date_gmt: c.date } : {}) });
     return {
       list: async (kind: unknown, search: string, count: number) => (await call<XItem[]>("wp.getPosts", { post_type: type(kind), number: count, orderby: "post_modified", order: "DESC", ...(search ? { s: search } : {}) })).map(fromXml),
       get: async (kind: unknown, id: number) => fromXml(await call<XItem>("wp.getPost", id)),
-      create: async (kind: unknown, c: Change) => fromXml(await call<XItem>("wp.getPost", Number(await call<string>("wp.newPost", { post_type: type(kind), post_status: "draft", ...fields(c) })))),
-      update: async (kind: unknown, id: number, c: Change) => (await call<boolean>("wp.editPost", id, fields(c)), fromXml(await call<XItem>("wp.getPost", id))),
+      create: async (kind: unknown, c: Change) => fromXml(await call<XItem>("wp.getPost", Number(await call<string>("wp.newPost", { post_type: type(kind), post_status: "draft", ...(await fields(c)) })))),
+      update: async (kind: unknown, id: number, c: Change) => (await call<boolean>("wp.editPost", id, await fields(c)), fromXml(await call<XItem>("wp.getPost", id))),
+      terms: async () => ({ categories: await names("category"), tags: await names("post_tag") }),
+      images: async (search: string) =>
+        (await call<{ attachment_id: string; title: string; link: string }[]>("wp.getMediaLibrary", { number: 100, mime_type: "image" }))
+          .map((m) => ({ id: Number(m.attachment_id), title: plainText(m.title) || "(no title)", link: m.link }))
+          .filter((m) => !search || m.title.toLowerCase().includes(search.toLowerCase()))
+          .slice(0, 30),
     };
   }
-  const body = (c: Change) => ({ ...(c.title !== undefined ? { title: c.title } : {}), ...(c.html !== undefined ? { content: c.html } : {}), ...(c.excerpt ? { excerpt: c.excerpt } : {}), ...(c.status ? { status: c.status } : {}), ...(c.date ? { date_gmt: c.date.toISOString().slice(0, 19) } : {}) });
+  const names = async (taxonomy: "categories" | "tags") => (await wp<{ name: string }[]>(site, "GET", `${taxonomy}?per_page=100&orderby=count&order=desc`)).map((t) => plainText(t.name));
+  const ids = async (taxonomy: "categories" | "tags", wanted: string[]) => {
+    const out: number[] = [];
+    for (const name of wanted) {
+      const found = (await wp<{ id: number; name: string }[]>(site, "GET", `${taxonomy}?per_page=100&search=${encodeURIComponent(name)}`)).find((t) => same(t.name, name));
+      if (found) out.push(found.id);
+      else if (taxonomy === "tags") out.push((await wp<{ id: number }>(site, "POST", "tags", { name })).id);
+      else throw noCategory(name, await names("categories"));
+    }
+    return out;
+  };
+  const body = async (c: Change) => ({ ...(c.categories ? { categories: await ids("categories", c.categories) } : {}), ...(c.tags ? { tags: await ids("tags", c.tags) } : {}), ...(c.image ? { featured_media: c.image } : {}), ...(c.title !== undefined ? { title: c.title } : {}), ...(c.html !== undefined ? { content: c.html } : {}), ...(c.excerpt ? { excerpt: c.excerpt } : {}), ...(c.status ? { status: c.status } : {}), ...(c.date ? { date_gmt: c.date.toISOString().slice(0, 19) } : {}) });
   return {
     list: async (kind: unknown, search: string, count: number) => (await wp<WpItem[]>(site, "GET", `${route(kind)}?context=edit&per_page=${count}&status=any&orderby=modified${search ? `&search=${encodeURIComponent(search)}` : ""}`)).map(fromRest),
     get: async (kind: unknown, id: number) => fromRest(await wp<WpItem>(site, "GET", `${route(kind)}/${id}?context=edit`)),
-    create: async (kind: unknown, c: Change) => fromRest(await wp<WpItem>(site, "POST", route(kind), { status: "draft", ...body(c) })),
-    update: async (kind: unknown, id: number, c: Change) => fromRest(await wp<WpItem>(site, "POST", `${route(kind)}/${id}`, body(c))),
+    create: async (kind: unknown, c: Change) => fromRest(await wp<WpItem>(site, "POST", route(kind), { status: "draft", ...(await body(c)) })),
+    update: async (kind: unknown, id: number, c: Change) => fromRest(await wp<WpItem>(site, "POST", `${route(kind)}/${id}`, await body(c))),
+    terms: async () => ({ categories: await names("categories"), tags: await names("tags") }),
+    images: async (search: string) => (await wp<{ id: number; title: { rendered: string }; source_url: string }[]>(site, "GET", `media?media_type=image&per_page=30${search ? `&search=${encodeURIComponent(search)}` : ""}`)).map((m) => ({ id: m.id, title: plainText(m.title.rendered) || "(no title)", link: m.source_url })),
   };
 }
 
@@ -354,21 +387,25 @@ export function wordpressTools(): Tool[] {
   const all = sites();
   if (!all.length) return [];
   const which = `Which site, when more than one is connected: ${all.map((s) => `${s.name} (${s.id})`).join(", ")}.`;
-  const content = defineTool<{ action: "sites" | "list" | "read" | "draft" | "update"; site?: string; kind?: "post" | "page"; id?: number; title?: string; markdown?: string; excerpt?: string; search?: string }>({
+  const content = defineTool<{ action: "sites" | "list" | "read" | "draft" | "update" | "terms" | "images"; site?: string; categories?: string[]; tags?: string[]; image?: number; kind?: "post" | "page"; id?: number; title?: string; markdown?: string; excerpt?: string; search?: string }>({
     name: "wordpress__content",
     description:
       "The owner's WordPress site: its posts and pages. \"sites\" lists the connected sites and what you may do on each. \"list\" shows recent posts or pages (give search words to find some). \"read\" returns one, as text. " +
       "\"draft\" saves a new post or page as a draft that is not public: give a title and the text in Markdown (headings, short paragraphs, lists). \"update\" changes the title or text of an existing post or page; read it first, and give the whole new text. " +
+      "\"terms\" lists the site's categories and its most used tags; \"images\" lists pictures already in the site's media library (give search words to narrow it). For a post, you may give categories (only ones the site already has), tags (new ones are made as needed) and image, the number of a library picture to show as the post's featured image; pick a picture only when its title clearly fits. " +
       "Drafting and updating never publish anything. Write for the site's readers, in the owner's voice, and never invent facts, prices or quotes.",
     properties: {
-      action: { type: "string", enum: ["sites", "list", "read", "draft", "update"] },
+      action: { type: "string", enum: ["sites", "list", "read", "draft", "update", "terms", "images"] },
       site: { type: "string", description: which },
       kind: { type: "string", enum: ["post", "page"], description: "A blog post (the default) or a page of the site." },
       id: { type: "number", description: "For read and update: the post's or page's number, as given by list." },
       title: { type: "string", description: "For draft and update: the title." },
       markdown: { type: "string", description: "For draft and update: the whole text, in Markdown." },
       excerpt: { type: "string", description: "For draft and update: one or two sentences shown in lists and search results." },
-      search: { type: "string", description: "For list: words to look for." },
+      search: { type: "string", description: "For list and images: words to look for." },
+      categories: { type: "array", items: { type: "string" }, description: "For draft and update of a post: the names of its categories, from terms. Replaces the post's categories." },
+      tags: { type: "array", items: { type: "string" }, description: "For draft and update of a post: its tags, a few plain words each. Replaces the post's tags." },
+      image: { type: "number", description: "For draft and update: the number of a picture from images, to use as the featured image." },
     },
     required: ["action"],
     // Reading asks nothing; anything that writes to the site asks first unless the agent is set to run without asking.
@@ -387,21 +424,35 @@ export function wordpressTools(): Tool[] {
         const p = await calls.get(input.kind, Number(input.id));
         return `${p.title}\nStatus: ${p.status} · ${p.link}\n\n${plainText(p.html).slice(0, 30_000)}`;
       }
+      if (input.action === "terms") {
+        const t = await calls.terms();
+        return `Categories: ${t.categories.join(", ") || "none"}\nTags: ${t.tags.slice(0, 60).join(", ") || "none"}`;
+      }
+      if (input.action === "images") {
+        const found = await calls.images(String(input.search ?? "").trim());
+        return found.length ? found.map((m) => `[${m.id}] ${m.title} · ${m.link}`).join("\n") : "No pictures found in the site's media library.";
+      }
+      const clean = (list: unknown) => (Array.isArray(list) ? [...new Set(list.map((x) => String(x).replace(/\s+/g, " ").trim().slice(0, 60)).filter(Boolean))].slice(0, 10) : undefined);
+      const categories = clean(input.categories);
+      const tags = clean(input.tags);
+      const image = Number(input.image) > 0 ? Math.trunc(Number(input.image)) : undefined;
+      if ((categories || tags) && what === "page") throw new Error("Pages have no categories or tags; those are for posts.");
+      const extra = { ...(categories ? { categories } : {}), ...(tags ? { tags } : {}), ...(image ? { image } : {}) };
       const title = String(input.title ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
       const text = String(input.markdown ?? "").trim();
       const excerpt = input.excerpt ? String(input.excerpt).slice(0, 500) : undefined;
       if (input.action === "draft") {
         if (!title || !text) throw new Error("Give a title and the text.");
-        const p = await calls.create(input.kind, { title, html: markdownToHtml(text), excerpt });
+        const p = await calls.create(input.kind, { title, html: markdownToHtml(text), excerpt, ...extra });
         audit({ actor: "system", actorName: "WordPress", kind: "integration", action: `An agent saved a draft on ${site.name}`, detail: `${title} (${what} ${p.id})` });
         return `Saved as a draft on ${site.name}: “${title}” (${what} ${p.id}). It is not public. ${site.publish === "drafts" ? "The owner publishes it in WordPress; say so in your report, with its title." : "Publish it with the publish tool when it is ready."}`;
       }
       if (!input.id) throw new Error("Say which one to update (its number, from list).");
-      if (!title && !text) throw new Error("Give the new title, the new text, or both.");
+      if (!title && !text && !Object.keys(extra).length) throw new Error("Give what to change: the title, the text, the categories, the tags or the image.");
       const before = await calls.get(input.kind, Number(input.id));
       // On a site where agents only draft, something already public is not changed: the change would go live at once.
       if (before.status === "publish" && site.publish === "drafts") throw new Error(`“${before.title}” is already public, and on this site you only write drafts. Save your version as a new draft and tell the owner what should replace what.`);
-      const p = await calls.update(input.kind, Number(input.id), { ...(title ? { title } : {}), ...(text ? { html: markdownToHtml(text) } : {}), excerpt });
+      const p = await calls.update(input.kind, Number(input.id), { ...(title ? { title } : {}), ...(text ? { html: markdownToHtml(text) } : {}), excerpt, ...extra });
       audit({ actor: "system", actorName: "WordPress", kind: "integration", action: `An agent changed a ${what} on ${site.name}`, detail: `${p.title} (${p.id}), ${p.status}` });
       return `Updated “${p.title}” on ${site.name} (${p.status === "publish" ? "it is public, so the change is live" : `status: ${p.status}`}). WordPress keeps the earlier version under Revisions. Say so in your report.`;
     },
@@ -444,7 +495,7 @@ export function dailyPostPrompt(site: PublicSite, about: unknown): string {
     `Write today's blog post for ${site.name} (${new URL(site.url).host}).`,
     topics ? `What the blog is about, and what to write on: ${topics}` : "Choose a topic that fits what the site already publishes.",
     `First use the wordpress__content tool: list the recent posts on site ${site.id}, so you do not repeat one, and read one or two to match their voice and length. Look in the workspace for pages about the business, its prices and its rules, and follow them. Do not invent facts, numbers, quotes or customer names; if you are unsure of a fact, leave it out.`,
-    "Write 600 to 900 words: a clear title, a short opening, a few headed sections, and a closing line that says what the reader can do next. Add a one or two sentence excerpt.",
+    "Write 600 to 900 words: a clear title, a short opening, a few headed sections, and a closing line that says what the reader can do next. Add a one or two sentence excerpt, one fitting category from the site's own (see terms) and three to five tags. If the media library has a picture that clearly fits, use it as the featured image; otherwise leave the image out.",
     site.publish === "drafts" ? "Save it as a draft with wordpress__content. Do not try to publish it: the owner does that in WordPress. In your report give the title and say it is waiting as a draft." : `Save it as a draft with wordpress__content, then publish it with wordpress__publish${site.publish === "ask" ? " (the owner is asked to approve)" : ""}. In your report give the title and the link.`,
   ].join("\n\n");
 }
