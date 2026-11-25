@@ -1018,7 +1018,13 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   if (parts[0] === "work") {
     const org = orgs.active();
     const [, id, action] = parts;
-    if (route === "GET work" && !id) return send(res, 200, { items: work.list(org), priorities: PRIORITIES });
+    if (route === "GET work" && !id) return send(res, 200, { items: work.list(org), priorities: PRIORITIES, pausedAgents: work.pausedAgents(org) });
+    // Pausing agents: one or more by id, or every agent on the chart ("Pause all work").
+    if (route === "POST work" && id === "agents" && (action === "pause" || action === "resume")) {
+      const ids = body.all === true ? org.members.map((m) => m.bot) : Array.isArray(body.agents) ? body.agents.map(String) : [];
+      if (!ids.length) throw new HttpError(400, "Choose an agent.");
+      return send(res, 200, await attempt(async () => ({ changed: action === "pause" ? work.pauseAgents(org, ids) : await work.resumeAgents(org, ids), pausedAgents: work.pausedAgents(org) })));
+    }
     if (route === "GET work" && id && !action) {
       return send(res, 200, await attempt(() => {
         const item = work.get(org, id);
@@ -1050,6 +1056,8 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (route === "POST work" && id && action === "cancel") return send(res, 200, await attempt(() => work.cancel(org, id)));
     if (route === "POST work" && id && action === "accept") return send(res, 200, await attempt(() => work.accept(org, id)));
     if (route === "POST work" && id && action === "retry") return send(res, 200, await attempt(() => work.retry(org, id)));
+    if (route === "POST work" && id && action === "pause") return send(res, 200, await attempt(() => work.pause(org, id)));
+    if (route === "POST work" && id && action === "resume") return send(res, 200, await attempt(() => work.resume(org, id)));
     if (route === "POST work" && id && action === "comment") return send(res, 200, await attempt(() => work.comment(org, id, body.text)));
     throw new HttpError(404, "Not found.");
   }
