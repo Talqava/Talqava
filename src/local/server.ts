@@ -844,7 +844,13 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
         const install = installStatus(entry, crew.find((b) => b.id === entry.bot.id));
         return { ...entry.bot, listing: entry.listing, added: install.state !== "available", install };
       });
-      return send(res, 200, { bots, teams: loadTeams(), problems: market.problems, updates: bots.filter((b) => b.install.state === "update").length });
+      let packs: ReturnType<typeof workspace.packs> = [];
+      try {
+        packs = workspace.packs(orgs.active());
+      } catch {
+        packs = [];
+      }
+      return send(res, 200, { bots, teams: loadTeams(), packs, problems: market.problems, updates: bots.filter((b) => b.install.state === "update").length });
     }
     const plainly = <T>(fn: () => T): T => {
       try {
@@ -853,6 +859,8 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
         throw new HttpError(400, (err as Error).message);
       }
     };
+    // A page pack: its pages are added to the workspace under one page, which can be deleted again to undo it.
+    if (req.method === "POST" && parts[1] === "packs" && parts[3] === "add") return send(res, 200, plainly(() => workspace.addTemplate(orgs.active(), parts[2])));
     // Before you install: what adding an agent or a team would do, in plain terms. Nothing changes.
     if (req.method === "GET" && parts[1] === "teams" && parts[3] === "preview") return send(res, 200, plainly(() => previewTeam(parts[2])));
     if (req.method === "GET" && parts[2] === "preview") return send(res, 200, plainly(() => previewMarketBot(parts[1])));

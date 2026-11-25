@@ -227,4 +227,157 @@ One sentence on what this person is here to do.
       },
     ],
   },
+  {
+    id: "sop-library",
+    name: "SOP library",
+    icon: "📚",
+    group: "Operations",
+    summary: "Standard procedures most small businesses need: opening and closing, a customer complaint, a refund, and a new customer.",
+    intro: "Our standard procedures. Agents follow the page that fits their task, step by step, and say in their report which one they used. Change each to match how you really work, and add your own.",
+    pages: [
+      {
+        title: "Opening and closing checklist",
+        icon: "✅",
+        markdown: `## Purpose
+
+Start and end each working day the same way, so nothing is missed.
+
+## Opening
+
+- [ ] Read the Inbox and yesterday's check-in
+- [ ] Check that orders and bookings for today are confirmed
+- [ ] Check stock or capacity for today, and flag anything short
+- [ ] Note anything that needs the owner today
+
+## Closing
+
+- [ ] Record what was done and what is still open
+- [ ] Reply to every customer message that came in today, or say when they will get an answer
+- [ ] Hand over anything urgent for tomorrow, in writing
+`,
+      },
+      {
+        title: "Handling a customer complaint",
+        icon: "💬",
+        markdown: `## Purpose
+
+Put things right quickly and learn from it.
+
+## Steps
+
+1. Thank the customer and say back what went wrong, in their words.
+2. Apologise once, plainly. Do not argue or explain at length.
+3. Check the facts: the order, the dates, what was promised.
+4. Offer the fix this page allows (see below). Anything beyond it goes to the owner before it is offered.
+5. Do the fix, tell the customer it is done, and record the complaint and its cause.
+
+## What may be offered without asking
+
+- A replacement or a redo of the work
+- A refund up to the limit in "Refunds"
+
+## Always ask the owner first
+
+- Anything involving a legal threat, an injury or the press
+- Compensation beyond a refund
+`,
+      },
+      {
+        title: "Refunds",
+        icon: "🧾",
+        protected: true,
+        markdown: `## Purpose
+
+Refund fairly and the same way every time.
+
+## Rules
+
+- Refunds up to **$__** may be approved by the team lead; above that, the owner approves.
+- Refund to the way the customer paid, never in cash or to another account.
+- No agent pays, sends or signs anything: an agent prepares the refund and a person makes it.
+
+## Steps
+
+1. Find the order and confirm the amount paid.
+2. Check the reason against the returns policy.
+3. Prepare the refund for approval, with the order, the reason and the amount.
+4. After it is paid, tell the customer and record it.
+`,
+      },
+      {
+        title: "Onboarding a new customer",
+        icon: "🤝",
+        markdown: `## Purpose
+
+Give every new customer the same good start.
+
+## Steps
+
+1. Record who they are, what they bought and what they expect, in the customer list.
+2. Send the welcome message, with what happens next and who to contact.
+3. Set up whatever they need to start (account, booking, first delivery).
+4. Check in after the first week: is it what they expected?
+5. Record anything they asked for that we do not offer yet.
+`,
+      },
+    ],
+  },
+  {
+    id: "price-list",
+    name: "Price list",
+    icon: "💰",
+    group: "Sales",
+    summary: "Your prices in one protected place, with the rules for discounts and how to write a quote, so agents never quote from memory.",
+    intro: "What we charge, and the rules around it. Agents quote only from these pages. The prices and discount rules are protected: agents can suggest a change, and nothing changes until you accept it.",
+    pages: [
+      {
+        title: "Prices",
+        icon: "🏷️",
+        protected: true,
+        markdown: `Prices are in US dollars and exclude tax unless a line says otherwise. Last checked: __.
+
+| Product or service | Unit | Price | Notes |
+| --- | --- | --- | --- |
+| __ | each | $__ | |
+| __ | per hour | $__ | |
+| __ | per month | $__ | |
+
+## Extras
+
+| Extra | Price |
+| --- | --- |
+| Delivery | $__ |
+| Rush (under __ days) | +__% |
+`,
+      },
+      {
+        title: "Discount rules",
+        icon: "⚖️",
+        protected: true,
+        markdown: `## Who may offer what
+
+- Up to **__%**: the sales lead, for a reason written on the quote.
+- More than that: the owner approves before it is offered.
+
+## Never
+
+- Discount to match a price we have not seen in writing.
+- Stack two discounts on one order.
+- Promise a price for longer than **__ days**.
+`,
+      },
+      {
+        title: "How to write a quote",
+        icon: "📝",
+        markdown: `## Steps
+
+1. Take every price from the **Prices** page, never from memory or an old quote.
+2. List each item with its unit, quantity and price, then the total, then tax.
+3. Apply a discount only as **Discount rules** allows, and write the reason.
+4. Say how long the quote is valid for, and what happens next if they accept.
+5. Send it to the owner or the sales lead to check before it goes to the customer.
+`,
+      },
+    ],
+  },
 ];
