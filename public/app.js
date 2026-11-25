@@ -6771,15 +6771,15 @@ async function pageHistory(page) {
 // To review and Done. Each agent works its queue one task at a time, most important first. A task opens in a panel
 // with what was asked, the latest report, sub-tasks and comments; the owner accepts work or sends it back.
 const TASK_COLUMNS = [
-  ["todo", "To do", "Waiting their turn"],
+  ["todo", "To do", "Waiting their turn, or paused"],
   ["working", "Working", "Being done now"],
   ["needs", "Needs you", "Waiting for your answer, or stuck"],
   ["review", "To review", "Finished: accept it, or send it back"],
   ["done", "Done", "The last two weeks"],
 ];
 const PRIORITY_WORDS = { urgent: "Urgent", high: "High", normal: "Normal", low: "Low" };
-const TASK_STATUS_WORDS = { todo: "To do", working: "Working", waiting: "Needs you", blocked: "Stuck", review: "To review", done: "Done", cancelled: "Cancelled" };
-const columnOf = (t) => (t.status === "waiting" || t.status === "blocked" ? "needs" : t.status);
+const TASK_STATUS_WORDS = { todo: "To do", working: "Working", waiting: "Needs you", blocked: "Stuck", review: "To review", done: "Done", cancelled: "Cancelled", paused: "Paused" };
+const columnOf = (t) => (t.status === "waiting" || t.status === "blocked" ? "needs" : t.status === "paused" ? "todo" : t.status);
 const ordinal = (n) => (n === 1 ? "Next" : `${n}${n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"} in queue`);
 
 /** The Tasks page's heading, with the Board / Goals switch. */
@@ -6824,10 +6824,11 @@ async function refreshTasks(full = false) {
     return ui.tasksCol && fill(ui.tasksCol, h("div", { class: "banner error" }, err.message));
   }
   if (state.view !== "tasks" || !ui.tasksCol) return;
-  const signature = JSON.stringify([data.items.map((t) => [t.id, t.status, t.detail, t.queue, t.priority, t.title, t.comments, t.owner, t.subtasks.open, t.goal, t.projectId]), planned]);
+  const signature = JSON.stringify([data.items.map((t) => [t.id, t.status, t.detail, t.queue, t.priority, t.title, t.comments, t.owner, t.subtasks.open, t.goal, t.projectId, t.pausedAt]), planned, data.pausedAgents]);
   if (!full && signature === ui.tasksSignature) return;
   ui.tasksSignature = signature;
   ui.tasks = data.items;
+  ui.pausedAgents = data.pausedAgents ?? [];
   ui.goals = planned.goals;
   ui.projects = planned.projects;
   if (ui.tasksMode === "goals") return drawGoals();
@@ -6861,8 +6862,8 @@ function drawBoard() {
     const bot = crew.get(t.owner);
     return h(
       "button",
-      { class: `taskcard pri-${t.priority} ${ui.taskOpen === t.id ? "on" : ""}`, style: bot ? botStyle(bot) : "", onclick: () => ((ui.taskOpen = t.id), drawBoard(), drawTaskPanel(t.id)) },
-      h("div", { class: "taskcardtop" }, h("span", { class: "tasknum" }, `#${t.number}`), t.priority !== "normal" ? h("span", { class: `taskpri ${t.priority}` }, PRIORITY_WORDS[t.priority]) : null, t.status === "todo" && t.queue ? h("span", { class: "taskqueue" }, ordinal(t.queue)) : null),
+      { class: `taskcard pri-${t.priority} ${ui.taskOpen === t.id ? "on" : ""} ${t.status === "paused" ? "paused" : ""}`, style: bot ? botStyle(bot) : "", onclick: () => ((ui.taskOpen = t.id), drawBoard(), drawTaskPanel(t.id)) },
+      h("div", { class: "taskcardtop" }, h("span", { class: "tasknum" }, `#${t.number}`), t.priority !== "normal" ? h("span", { class: `taskpri ${t.priority}` }, PRIORITY_WORDS[t.priority]) : null, t.status === "todo" && t.queue ? h("span", { class: "taskqueue" }, ordinal(t.queue)) : t.status === "paused" ? h("span", { class: "taskqueue" }, "⏸ Paused") : null),
       h("b", { class: "tasktitle" }, t.title),
       t.detail ? h("span", { class: `taskdetail ${t.status === "blocked" ? "bad" : ""}` }, t.detail) : null,
       t.projectName || t.goalTitle ? h("span", { class: "taskplan", title: t.goalTitle ? `Serves the goal: ${t.goalTitle}` : "" }, t.projectName ? `◇ ${t.projectName}` : `◎ ${t.goalTitle}`) : null,
@@ -6873,6 +6874,7 @@ function drawBoard() {
     col,
     tasksHead(),
     h("div", { class: "row tasks-tools" }, search, who, plan, h("label", { class: "power" }, h("input", { type: "checkbox", checked: f.cancelled, onchange: (e) => ((f.cancelled = e.target.checked), drawBoard()) }), "Show cancelled")),
+    pauseBar(org, f.who),
     h(
       "div",
       { class: "taskboard" },
@@ -6882,6 +6884,34 @@ function drawBoard() {
       }),
     ),
     f.cancelled ? h("div", { class: "taskcancelled" }, h("h3", {}, "Cancelled"), ui.tasks.filter((t) => t.status === "cancelled").map(card)) : null,
+  );
+}
+
+/**
+ * Staying in charge: which agents are paused (with Resume), and buttons to pause the agent being looked at or all
+ * work. Pausing stops work under way at a clean point; it leaves a hand-over note and carries on from it when resumed.
+ */
+function pauseBar(org, who) {
+  const paused = ui.pausedAgents ?? [];
+  const pausedIds = new Set(paused.map((a) => a.bot));
+  const everyone = org.members.length > 0 && org.members.every((m) => pausedIds.has(m.bot));
+  const send = (action, body) => attempt(async () => (await api("POST", `work/agents/${action}`, body), await refreshTasks(true)), ui.tasksCol);
+  const whoName = who ? org.members.find((m) => m.bot === who)?.title : "";
+  return h(
+    "div",
+    { class: "pausebar" },
+    paused.length
+      ? h("div", { class: "banner grow" }, everyone ? "All work is paused. Nothing new starts until you resume." : `Paused: ${paused.map((a) => `the ${a.name}`).join(", ")}. Their tasks wait until you resume them.`)
+      : null,
+    who && !everyone
+      ? pausedIds.has(who)
+        ? h("button", { class: "small primary", onclick: () => send("resume", { agents: [who] }) }, `Resume the ${whoName}`)
+        : h("button", { class: "small", onclick: () => confirm(`Pause the ${whoName}?\n\nWhat it is doing stops at a clean point and leaves a hand-over note. It starts nothing new until you resume it.`) && send("pause", { agents: [who] }) }, `⏸ Pause the ${whoName}`)
+      : null,
+    paused.length ? h("button", { class: "small primary", onclick: () => send("resume", { all: true }) }, everyone ? "Resume all work" : "Resume all") : null,
+    !everyone && org.members.length
+      ? h("button", { class: "small", onclick: () => confirm("Pause all work?\n\nEvery agent stops what it is doing at a clean point and leaves a hand-over note. Nothing new starts until you resume. Chats with Talqava still work.") && send("pause", { all: true }) }, "⏸ Pause all work")
+      : null,
   );
 }
 
@@ -6910,7 +6940,7 @@ async function drawTaskPanel(id) {
   const owner =
     t.status === "todo"
       ? h("select", { "aria-label": "Assigned to", onchange: (e) => patch({ owner: e.target.value }) }, org.members.map((m) => h("option", { value: m.bot, selected: m.bot === t.owner }, m.title)))
-      : t.status === "blocked"
+      : t.status === "blocked" || t.status === "paused"
         ? h(
             "div",
             {},
@@ -6942,6 +6972,11 @@ async function drawTaskPanel(id) {
       t.status === "review" ? h("button", { class: "primary small", onclick: () => act(() => api("POST", `work/${id}/accept`)) }, "Accept") : null,
       t.status === "waiting" && /plan/i.test(t.detail ?? "") && t.quest ? h("button", { class: "primary small", onclick: () => go("quest", t.quest) }, "Review its plan") : null,
       t.status === "blocked" ? h("button", { class: "primary small", onclick: () => act(() => api("POST", `work/${id}/retry`)) }, "Try again") : null,
+      t.pausedAt ? h("button", { class: "primary small", onclick: () => act(() => api("POST", `work/${id}/resume`)) }, "Resume") : null,
+      t.status === "paused" && !t.pausedAt ? h("button", { class: "primary small", onclick: () => act(() => api("POST", "work/agents/resume", { agents: [t.owner] })) }, `Resume the ${t.ownerName}`) : null,
+      !t.pausedAt && !["done", "cancelled", "review"].includes(t.status)
+        ? h("button", { class: "small", title: "Stops it at a clean point (it leaves a hand-over note) and keeps it from starting. Resume carries on.", onclick: () => act(() => api("POST", `work/${id}/pause`)) }, t.subtasks.open ? "⏸ Pause it and its sub-tasks" : "⏸ Pause")
+        : null,
       t.status === "waiting" && t.quest ? h("button", { class: "primary small", onclick: () => go("quest", t.quest) }, "Answer it") : null,
       t.quest ? h("button", { class: "small", onclick: () => go("quest", t.quest) }, "Open the work") : null,
       t.status !== "done" && t.status !== "cancelled" ? h("button", { class: "small", onclick: () => newTaskDialog({ parent: t }) }, "+ Sub-task") : null,

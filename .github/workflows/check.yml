@@ -1,0 +1,38 @@
+# Runs the type check and every test on each pull request and each change to main, so a change that breaks
+# something is caught before it is merged. The tests need no keys and cost nothing: they use stand-ins for the
+# AI services.
+name: Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Type check and tests (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest Node Talqava supports, and the current long-term release.
+        node: ["22.18", "24"]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      # Some tests make commits in scratch repositories, which needs a name and email.
+      - run: git config --global user.name "Talqava checks" && git config --global user.email "checks@users.noreply.github.com"
+      # A full install: the type checker needs its optional platform package (the shipped app leaves optional ones out).
+      - run: npm ci
+      - run: npm run check

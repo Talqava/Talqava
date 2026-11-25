@@ -1637,6 +1637,11 @@ dialog.needs.legaldialog[open] { display: flex; }
 .taskdot.st-waiting { background: var(--warn); }
 .taskdot.st-blocked { background: var(--bad); }
 .taskdot.st-done { background: var(--muted); }
+.taskstatus.st-paused { color: var(--muted); background: color-mix(in srgb, var(--text) 10%, transparent); }
+.taskdot.st-paused { background: transparent; box-shadow: inset 0 0 0 2px var(--muted); }
+.taskcard.paused { opacity: 0.72; }
+.pausebar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
+.pausebar .grow { min-width: 200px; }
 .taskcomments { display: flex; flex-direction: column; gap: 8px; }
 .taskcomment { padding: 8px 10px; border-radius: var(--r-m); background: color-mix(in srgb, var(--text) 4%, transparent); font-size: 14px; }
 .taskcomment.mine { background: color-mix(in srgb, var(--accent) 8%, transparent); }

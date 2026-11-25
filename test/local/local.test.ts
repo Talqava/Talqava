@@ -2438,3 +2438,54 @@ test("local models: which can use tools, whether they fit in this computer's mem
     server.close();
   }
 });
+
+test("the owner can pause and resume a task (with what is under it), one agent, or all work, and nothing is lost", { timeout: 40_000 }, async () => {
+  const { orgs } = await import("../../src/local/orgs.ts");
+  const { work } = await import("../../src/local/work.ts");
+  const quests = await import("../../src/local/quests.ts");
+  const crew = await import("../../src/local/crew.ts");
+  const org0 = orgs.create("Pause Co", "Answer questions well.", "custom");
+  try {
+    const org = orgs.active();
+    script.length = 0;
+    // A task stops at a step that waits for approval, so it is under way when it is paused.
+    script.push(call("str_replace_based_edit_tool", { command: "create", path: "notes.md", file_text: "Draft" }), say("Finished after the pause."));
+    const task = work.create(org, { title: "Write the notes", description: "Write the notes.", owner: "margo", createdBy: "owner" });
+    const sub = work.create(org, { title: "Check the sources", description: "Check them.", owner: "pip", parent: task.id, createdBy: "owner" });
+    work.pause(org, sub.id); // held back for now, so only the parent runs
+    await work.schedule();
+    assert.ok(await until(() => work.get(org, task.id).status === "waiting"), work.get(org, task.id).status);
+    const questId = work.get(org, task.id).quest!;
+
+    // Pausing stops the run at a clean point; the task and the one under it show as paused, and nothing starts.
+    work.pause(org, task.id);
+    assert.ok(await until(() => !quests.quests.isRunning(questId) && quests.questStore.get(questId)!.status === "stopped"));
+    assert.deepEqual([work.get(org, task.id).status, work.get(org, task.id).detail], ["paused", "Paused by you"]);
+    assert.equal(work.get(org, sub.id).status, "paused");
+    await work.schedule();
+    assert.equal(work.get(org, sub.id).quest, null);
+    await assert.rejects(work.retry(org, task.id), /paused\. Resume it/);
+
+    // Resuming carries the run on from where it stopped, and lets the sub-task start.
+    script.push(say("Sources checked."));
+    await work.resume(org, task.id);
+    assert.ok(await until(() => work.get(org, task.id).status === "review" && work.get(org, sub.id).status === "review"), `${work.get(org, task.id).status} ${work.get(org, sub.id).status}`);
+    assert.ok(conversationText(questId).includes("The owner paused this task and has now resumed it"));
+    assert.equal(work.get(org, task.id).pausedAt, null);
+
+    // Pausing an agent: its queue holds, nothing new starts for it anywhere, and resuming lets it carry on.
+    assert.deepEqual(work.pauseAgents(org, ["pip"]), ["pip"]);
+    const queued = work.create(org, { title: "Find three suppliers", description: "Find them.", owner: "pip", createdBy: "owner" });
+    await work.schedule();
+    assert.equal(work.get(org, queued.id).status, "paused");
+    assert.match(work.get(org, queued.id).detail, /Research Analyst is paused/);
+    await assert.rejects(quests.quests.start({ bot: crew.findBot("pip"), text: "An outside task" }), /is paused/);
+    assert.deepEqual(work.pausedAgents(org).map((a) => a.bot), ["pip"]);
+    script.push(say("Three suppliers found."));
+    await work.resumeAgents(org, ["pip"]);
+    assert.ok(await until(() => work.get(org, queued.id).status === "review"));
+    assert.deepEqual(work.pausedAgents(org), []);
+  } finally {
+    orgs.remove(org0.id);
+  }
+});
