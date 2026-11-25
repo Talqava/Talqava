@@ -332,6 +332,8 @@ export class QuestRunner {
   onRunEnded: (questId: string) => void = () => {};
   /** Set by the work layer: records a run started outside the queues as a task. */
   onStartedOutsideQueue: (quest: Quest) => void = () => {};
+  /** Set by the work layer: why this agent may not start work now (it is paused), or null. */
+  agentPaused: (botId: string) => string | null = () => null;
 
   isRunning(id: string): boolean {
     return this.#engine.isRunning(id);
@@ -347,6 +349,9 @@ export class QuestRunner {
     // A bot that has used its month's budget starts nothing new.
     const blocked = budgetBlock(bot);
     if (blocked) throw new Error(blocked);
+    // A paused agent starts nothing until the owner resumes it.
+    const paused = this.agentPaused(bot.id);
+    if (paused) throw new Error(paused);
     // The task is charged to its agent's group, which stops starting work at its monthly budget.
     const org = orgs.active();
     const group = groupOf(org, bot.id);
