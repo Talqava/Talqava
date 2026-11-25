@@ -30,6 +30,7 @@ import { orgMemoryPrompt, teamMemoryTool } from "./orgmemory.ts";
 import { libraryPrompt, libraryTool, GENERAL_AGENT } from "./library.ts";
 import { workspacePrompt, workspaceTool } from "./workspace.ts";
 import { tableTool } from "./tables.ts";
+import { guard } from "./guardrails.ts";
 import { sheetTool } from "./sheets.ts";
 import { goalsPrompt } from "./goals.ts";
 import { structureOf } from "./structures.ts";
@@ -693,6 +694,15 @@ export function shareLeft(questId: string): number {
 
 /** Builds what the engine needs for one run, from the settings file and, for a quest, its bot. */
 export function localRunSpec(jobs: JobBook) {
+  const build = unguardedRunSpec(jobs);
+  // The organization's guardrails are applied to every run, in this one place, after everything else is decided.
+  return async (conversation: Conversation): Promise<RunSpec> => {
+    const quest = conversation.source === "quest" ? questStore.get(conversation.id) : null;
+    return guard(await build(conversation), quest ? `the ${quest.bot.title || quest.bot.name}` : "the assistant");
+  };
+}
+
+function unguardedRunSpec(jobs: JobBook) {
   return async (conversation: Conversation): Promise<RunSpec> => {
     const cfg = getConfig();
     const quest = conversation.source === "quest" ? questStore.get(conversation.id) : null;

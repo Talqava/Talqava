@@ -44,6 +44,7 @@ import { accessGraph, accessGraphs } from "./access.ts";
 import { loadModelList } from "./modelprices.ts";
 import { COLUMN_TYPES, peopleOf, tables } from "./tables.ts";
 import { sheets } from "./sheets.ts";
+import { describeGuardrails, guardrails, guardrailsFrom } from "./guardrails.ts";
 import { ROLES, ROLE_WORDS, mayDo, people } from "./people.ts";
 import type { Person } from "./people.ts";
 import { projects } from "./projects.ts";
@@ -350,6 +351,12 @@ async function updateSettings(body: any) {
   if (["leads", "all", "never"].includes(body.planFirst)) patch.planFirst = body.planFirst;
   if (body.privacy === "off" || body.privacy === "mask") patch.privacy = body.privacy;
   if (typeof body.moveUp === "boolean") patch.moveUp = body.moveUp;
+  if (body.guardrails && typeof body.guardrails === "object") {
+    const before = guardrails();
+    const next = guardrailsFrom(body.guardrails, before);
+    patch.guardrails = next;
+    audit({ actor: "system", actorName: "Guardrails", kind: "guardrail", action: "The rules for agents were changed", detail: describeGuardrails(next).join(" ") });
+  }
   if (typeof body.checkIn === "boolean") patch.checkIn = body.checkIn;
   if (["ask", "auto"].includes(body.approvalMode)) patch.approvalMode = body.approvalMode;
   if (typeof body.apiKey === "string") patch.apiKey = body.apiKey.trim();
@@ -802,6 +809,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     throw new HttpError(404, "Not found.");
   }
 
+  if (route === "GET guardrails") return send(res, 200, { rules: guardrails(), words: describeGuardrails(), refused: readAudit({ kind: "guardrail", limit: 30 }).entries });
   if (route === "GET state") return send(res, 200, publicConfig());
   if (route === "PUT settings") return send(res, 200, await updateSettings(body));
   if (route === "POST model-check") {

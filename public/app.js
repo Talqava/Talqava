@@ -7891,6 +7891,7 @@ async function securityView() {
         h("p", { class: "note small" }, passwordHelp),
         h("div", {}, h("button", { class: "primary" }, "Turn on people and sign-in")),
       ),
+      guardrailsSection(true),
     );
   }
 
@@ -7992,7 +7993,57 @@ async function securityView() {
           ),
         )
       : null,
+    guardrailsSection(admin),
   );
+}
+
+/** Security › Agent guardrails: rules above every agent's own settings. Only owners and administrators change them. */
+function guardrailsSection(canEdit) {
+  const box = h("section", { class: "isec" }, h("h2", {}, "Agent guardrails"));
+  const draw = async () => {
+    let data;
+    try {
+      data = await api("GET", "guardrails");
+    } catch (err) {
+      return fill(box, h("h2", {}, "Agent guardrails"), h("div", { class: "banner error" }, err.message));
+    }
+    const g = data.rules;
+    const save = (patch) => attempt(async () => (await api("PUT", "settings", { guardrails: patch }), toast("Saved. It applies to every task that starts from now on."), draw()), box);
+    const choice = (key, options) => {
+      const sel = h("select", { disabled: !canEdit, onchange: (e) => save({ [key]: e.target.value }) }, options.map(([v, t]) => h("option", { value: v, selected: g[key] === v }, t)));
+      return sel;
+    };
+    const sites = h("textarea", { rows: 4, disabled: !canEdit, placeholder: "One site on each line, for example:\nexample.com\ngov.uk", "aria-label": "Approved sites" }, g.sites.join("\n"));
+    const spend = h("input", { type: "number", min: "0", step: "0.5", value: g.maxTaskSpend ?? "", placeholder: "No cap", disabled: !canEdit, "aria-label": "Most a task may spend, in dollars" });
+    const minutes = h("input", { type: "number", min: "1", step: "1", value: g.maxMinutes ?? "", placeholder: "No cap", disabled: !canEdit, "aria-label": "Longest a task may run, in minutes" });
+    spend.addEventListener("change", () => save({ maxTaskSpend: spend.value }));
+    minutes.addEventListener("change", () => save({ maxMinutes: minutes.value }));
+    const org = activeOrg();
+    fill(
+      box,
+      h("h2", {}, "Agent guardrails"),
+      h("p", { class: "note", style: "margin: 0" }, "Rules for every agent, above each agent's own settings. An agent or a task can be stricter than these, never looser. They apply to tasks that start after you change them."),
+      h(
+        "div",
+        { class: "card form" },
+        h("label", {}, "When an agent wants to change something (a file, a page, another system)", choice("changes", [["agent", "Each agent's own setting decides"], ["ask", "Always ask a person first"]])),
+        h("label", {}, "Running commands on this computer", choice("commands", [["allowed", "Allowed for agents with that power"], ["ask", "Always ask a person first"], ["never", "Never"]])),
+        h("label", {}, "Connected services (connectors)", choice("connectors", [["allowed", "Allowed; their tools ask before changing anything"], ["never", "Never"]])),
+        h("label", {}, "The web", choice("web", [["any", "Any site, for agents with that power"], ["approved", "Only the sites approved below"], ["never", "Never"]])),
+        g.web === "approved" ? [h("label", {}, "Approved sites", sites), h("p", { class: "note small" }, "A site covers its pages and its sub-sites: example.com also allows www.example.com. With none listed, the web is off."), canEdit ? h("div", {}, h("button", { onclick: () => save({ sites: sites.value }) }, "Save the list")) : null] : null,
+        h("div", { class: "row wrap" }, h("label", { class: "grow" }, "Most one task may spend ($)", spend), h("label", { class: "grow" }, "Longest one task may run (minutes)", minutes)),
+        h("p", { class: "note small" }, "These caps only ever tighten: an agent with a lower budget keeps it. Leave empty for no extra cap."),
+        canEdit ? null : h("p", { class: "note small" }, "Only owners and administrators change these rules."),
+      ),
+      h("div", { class: "card form" }, h("b", {}, "In plain words, right now"), h("ul", {}, data.words.map((w) => h("li", {}, w)))),
+      org.members?.length
+        ? h("div", { class: "card form stopall" }, h("div", { class: "row wrap" }, h("div", { class: "grow" }, h("b", {}, "Stop all agents"), h("p", { class: "note small", style: "margin: 2px 0 0" }, "Every agent on your chart pauses at once. Nothing is lost; resume them from Tasks when you are ready.")), h("button", { class: "danger", onclick: () => confirm("Pause every agent now? Work in progress stops where it is and can be resumed.") && attempt(async () => (await api("POST", "work/agents/pause", { all: true }), toast("Every agent is paused. Resume them from Tasks.")), box) }, "Stop everything")))
+        : null,
+      h("div", { class: "card form" }, h("b", {}, "Refused by these rules, and changes to them"), data.refused.length ? h("ul", { class: "refused" }, data.refused.map((e) => h("li", {}, h("span", { class: "note small" }, `${when(e.at)} · `), e.action, e.detail ? h("span", { class: "note small" }, ` · ${e.detail}`) : null))) : h("p", { class: "note small" }, "Nothing yet.")),
+    );
+  };
+  draw();
+  return box;
 }
 
 /** A table's columns: names, types and choices. Saving keeps the values that still fit. */
