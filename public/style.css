@@ -1785,3 +1785,4 @@ dialog.guidedialog::backdrop { background: var(--scrim); }
 .plancard summary { cursor: pointer; display: block; }
 .plansteps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
 .plancard p { margin: 0; }
+.stopbanner { display: flex; gap: 12px; align-items: center; }

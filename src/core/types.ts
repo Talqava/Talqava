@@ -30,6 +30,8 @@ export interface Conversation {
   allowed: string[];
   /** Tokens used, and the estimated cost in US dollars when the model's prices are known. */
   usage: { input: number; output: number; cost?: number };
+  /** Why its last run stopped before finishing (a budget, its time, being stuck), kept so the chat can say so later. Cleared when it runs again. */
+  lastStop?: { reason: RunStop; text: string; at: string } | null;
 }
 
 /** A space keeps one client's or project's memory and chats apart from the rest. */

@@ -634,11 +634,29 @@ function onEvent(event) {
     case "notice":
       ui.log.append(h("div", { class: "banner" }, event.text));
       break;
+    case "stopped": {
+      // The plain notice just shown becomes the banner with a Continue button.
+      const last = ui.log.lastElementChild;
+      if (last?.classList.contains("banner") && last.textContent === event.text) last.remove();
+      ui.log.append(stopBanner(event.text));
+      break;
+    }
     case "error":
       ui.log.append(h("div", { class: "banner error" }, event.text));
       break;
   }
   if (stick || event.type === "sync" || event.type === "user") ui.scroll.scrollTop = ui.scroll.scrollHeight;
+}
+
+/** Why a run stopped before finishing, kept on the chat, with a button that carries on. */
+function stopBanner(text) {
+  const words = String(text).replace(/\s*Say “?"?continue"?”?[^.]*\.\s*$/i, "").trim();
+  return h(
+    "div",
+    { class: "banner stopbanner" },
+    h("div", { class: "grow" }, h("b", {}, "It stopped before finishing. "), words, h("div", { class: "note small" }, "Nothing is lost. Continue to let it carry on from here, or raise the limit under Settings → Budget per run.")),
+    h("button", { class: "primary small", onclick: (e) => (e.currentTarget.closest(".stopbanner")?.remove(), (ui.input.value = "continue"), submit()) }, "Continue"),
+  );
 }
 
 function renderConversation(conv, live) {
@@ -669,6 +687,7 @@ function renderConversation(conv, live) {
       ),
     );
   }
+  if (conv.lastStop && !live.running) ui.log.append(stopBanner(conv.lastStop.text));
   setRunning(live.running);
   for (const delta of live.partial) streamDelta(delta);
   for (const approval of live.approvals) addApproval(approval);

@@ -22,6 +22,9 @@ import type {
 } from "./types.ts";
 
 type Listener = (event: RunEvent) => void;
+/** Told to an agent near the end of its budget, so it finishes with an answer instead of stopping mid-way. */
+export const WRAP_UP =
+  "[This run is close to its budget. Stop looking things up now. Give your answer with what you have: what you found or made, anything you saved and where, and what is left to do, so the owner can say \"continue\" if they want more.]";
 const ordinal = (n: number) => (["first", "second", "third", "fourth", "fifth", "sixth"][n - 1] ?? `${n}th`);
 type ToolCall = { id: string; name: string; input: unknown };
 
@@ -250,13 +253,19 @@ export class Engine {
     const stop = (reason: RunStop, text: string) => {
       emit({ type: "notice", text });
       emit({ type: "stopped", reason, text });
+      // Kept on the conversation, so the chat still says why it stopped after the page is opened again.
+      conversation.lastStop = { reason, text, at: new Date().toISOString() };
+      void this.#conversations.save(conversation);
     };
+    // A new run starts clean.
+    if (conversation.lastStop) conversation.lastStop = null;
     const limits = spec.limits ?? {};
     const startedAt = Date.now();
     const repeats = limits.repeats ?? 2;
     const failingSteps = limits.failingSteps ?? 4;
     const tried = new Map<string, number>();
     let failingInARow = 0;
+    let wrapUpSent = false;
 
     for (let step = 0; ; step++) {
       if (run.abort.signal.aborted) return;
@@ -276,6 +285,16 @@ export class Engine {
       if (limits.minutes !== undefined && Date.now() - startedAt > limits.minutes * 60_000) {
         stop("time", `Stopped at its time limit: it has worked for over ${limits.minutes} minutes. Say "continue" to keep going.`);
         return;
+      }
+
+      // Near the end of its budget, the agent is told to stop exploring and answer with what it has, so a run never
+      // ends in silence: the owner always gets a reply and knows what is left to do.
+      const lastMessage = conversation.messages.at(-1);
+      const nearEnd = steps - step <= 2 || (spendLimit !== undefined && spent >= spendLimit * 0.8) || (left !== undefined && nextCall() * 3 > left);
+      if (nearEnd && !wrapUpSent && step > 0 && lastMessage?.role === "user" && Array.isArray(lastMessage.content)) {
+        wrapUpSent = true;
+        (lastMessage.content as unknown[]).push({ type: "text", text: WRAP_UP });
+        await this.#conversations.save(conversation);
       }
 
       let reply: ModelReply;

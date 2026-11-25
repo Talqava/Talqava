@@ -372,3 +372,25 @@ test("every loop has an exit: a repeated step, steps that keep failing, and a ti
   await (await engine.startRun(id, "go")).done;
   assert.deepEqual(events.filter((e) => e.type === "stopped").map((e) => (e as { reason: string }).reason), ["steps"]);
 });
+
+test("near the end of its budget an agent is told to wrap up and answer, and a chat keeps why its run stopped", async () => {
+  const { WRAP_UP } = await import("../../src/core/engine.ts");
+  run = { model: local({ input: 0, output: 0 }), budget: { steps: 3 } } as typeof run;
+  mock.requests.length = 0;
+  script.length = 0;
+  script.push({ calls: [{ name: "echo", args: { word: "a" } }] }, { calls: [{ name: "echo", args: { word: "b" } }] }, { calls: [{ name: "echo", args: { word: "c" } }] }, { text: "unreached" });
+  const { id } = await conversations.create();
+  await (await engine.startRun(id, "look into it")).done;
+  // The second call (two steps left) carries the wrap-up note after the tool result; the first does not.
+  const said = mock.requests.map((r) => JSON.stringify(r.body.messages));
+  assert.ok(!said[0].includes("close to its budget"));
+  assert.ok(said[1].includes("close to its budget"));
+  assert.equal(said.filter((x) => x.includes("Stop looking things up now")).length >= 1, true);
+  assert.match(WRAP_UP, /what is left to do/);
+  // It stopped at its steps: the conversation says so, and a new run clears it.
+  const saved = (await conversations.get(id))!;
+  assert.equal(saved.lastStop?.reason, "steps");
+  script.push({ text: "All done." });
+  await (await engine.startRun(id, "continue")).done;
+  assert.equal((await conversations.get(id))!.lastStop, null);
+});
