@@ -7203,6 +7203,7 @@ async function renderWsPage(col, id) {
     edit,
     h("label", { class: "power" }, protect, "Protected: agents never change it directly"),
     h("p", { class: "note small" }, "Use Protected for prices, legal and people policies."),
+    levelPicker(page, id),
     org.members.length ? [h("div", { class: "label" }, `Give this ${kindWord} to an agent`), giveTo, giveWhat, h("button", { class: "small", onclick: give }, "Give the task")] : null,
     office ? officePanel(page, id, surface, patch, col) : null,
     h("div", { class: "label" }, "Linked from"),
@@ -7770,6 +7771,7 @@ async function renderSheet(col, id) {
     edit,
     h("label", { class: "power" }, protect, "Protected: agents never change it directly"),
     h("p", { class: "note small" }, "Agents can never change a locked cell, whatever is set here."),
+    levelPicker(page, id),
     h("div", { class: "label" }, "Folder"),
     folder,
     org.members.length ? [h("div", { class: "label" }, "Ask an agent about this sheet"), giveTo, giveWhat, h("button", { class: "small", onclick: give }, "Give the task")] : null,
@@ -7891,6 +7893,7 @@ async function securityView() {
         h("p", { class: "note small" }, passwordHelp),
         h("div", {}, h("button", { class: "primary" }, "Turn on people and sign-in")),
       ),
+      sensitivitySection(true),
       guardrailsSection(true),
     );
   }
@@ -7993,8 +7996,66 @@ async function securityView() {
           ),
         )
       : null,
+    sensitivitySection(admin),
     guardrailsSection(admin),
   );
+}
+
+const LEVEL_NAMES = { public: "Public", internal: "Internal", confidential: "Confidential", restricted: "Restricted" };
+/** In a page's, document's, note's or sheet's panel: how sensitive it is. */
+function levelPicker(page, id) {
+  const note = h("p", { class: "note small" });
+  const words = { public: "Fine for anyone to see.", internal: "Everyday business. The starting level.", confidential: "Customer records, contracts, finances.", restricted: "Payroll, health, legal. Hidden from every agent not named on it under “Who can see it”." };
+  const sel = h("select", { "aria-label": "Sensitivity" }, Object.entries(LEVEL_NAMES).map(([v, t]) => h("option", { value: v, selected: page.level === v }, t)));
+  const say = () => (note.textContent = `${words[sel.value]} Which AI services may receive each level is set under Security.`);
+  sel.addEventListener("change", () => attempt(async () => (await api("PATCH", `workspace/pages/${id}`, { level: sel.value }), (page.level = sel.value), say(), toast(`Marked ${LEVEL_NAMES[sel.value]}.`))));
+  say();
+  return [h("div", { class: "label" }, "Sensitivity"), sel, note];
+}
+
+/** Security › Sensitive information: which AI services may receive each level. Only owners and administrators change it. */
+function sensitivitySection(canEdit) {
+  const box = h("section", { class: "isec" }, h("h2", {}, "Sensitive information"));
+  const draw = async () => {
+    let d;
+    try {
+      d = await api("GET", "sensitivity");
+    } catch (err) {
+      return fill(box, h("h2", {}, "Sensitive information"), h("div", { class: "banner error" }, err.message));
+    }
+    const save = (patch) => attempt(async () => (await api("PUT", "settings", { sensitivity: patch }), toast("Saved. It applies to every task that starts from now on."), draw()), box);
+    const outside = d.services.filter((x) => !x.local);
+    fill(
+      box,
+      h("h2", {}, "Sensitive information"),
+      h("p", { class: "note", style: "margin: 0" }, "Every page, document, note and sheet has a sensitivity level, set in its side panel. Here you decide which AI services may receive each level. An agent whose AI service may not receive a level is not given those items, is told why, and it is logged."),
+      h(
+        "div",
+        { class: "card officetable" },
+        h(
+          "table",
+          {},
+          h("thead", {}, h("tr", {}, ["Level", "For example", "May be sent to"].map((t) => h("th", { scope: "col" }, t)))),
+          h(
+            "tbody",
+            {},
+            d.levels.map((l) => h("tr", {}, h("td", {}, h("b", {}, l.name)), h("td", {}, l.about), h("td", {}, h("select", { "aria-label": `${l.name} may be sent to`, disabled: !canEdit, onchange: (e) => save({ services: { [l.id]: e.target.value } }) }, d.where.map((w) => h("option", { value: w.id, selected: d.policy.services[l.id] === w.id }, w.words)))))),
+          ),
+        ),
+      ),
+      h(
+        "div",
+        { class: "card form" },
+        h("b", {}, "Approved AI services"),
+        h("p", { class: "note small" }, "Tick the services you trust with levels set to “Only approved AI services”. Before you tick one, check its terms: that it does not train on your data, and where it processes it. Models on this computer always count."),
+        outside.length ? outside.map((x) => h("label", { class: "power" }, h("input", { type: "checkbox", disabled: !canEdit, checked: d.policy.approved.includes(x.id), onchange: (e) => save({ approved: e.target.checked ? [...d.policy.approved, x.id] : d.policy.approved.filter((a) => a !== x.id) }) }), x.name)) : h("p", { class: "note small" }, "No AI service outside this computer is connected."),
+        canEdit ? h("div", { class: "row wrap" }, h("button", { onclick: () => confirm("Use the recommended settings?\n\nPublic and Internal: any connected AI service.\nConfidential: only approved services and models on this computer.\nRestricted: only models on this computer.\n\nAgents on a service that is not approved will stop being given Confidential items.") && save({ services: d.recommended }) }, "Use the recommended settings")) : h("p", { class: "note small" }, "Only owners and administrators change these rules."),
+      ),
+      h("div", { class: "card form" }, h("b", {}, "In plain words, right now"), h("ul", {}, d.words.map((w) => h("li", {}, w))), h("p", { class: "note small" }, "A task can fall back to a backup model, so it is only given what every model it might use may receive. Library files and Memory do not have levels yet.")),
+    );
+  };
+  draw();
+  return box;
 }
 
 /** Security › Agent guardrails: rules above every agent's own settings. Only owners and administrators change them. */

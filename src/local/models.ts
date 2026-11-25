@@ -1,5 +1,6 @@
 // Turns the model named in the settings ("provider/model") into something the engine can call,
 // with the backup models behind it.
+import { noteModel } from "./sensitivity.ts";
 import { AnthropicModel, FallbackModel, OpenAICompatibleModel, PrivacyModel } from "../core/index.ts";
 import type { Model } from "../core/index.ts";
 import { apiKey, getConfig, summaries } from "./store.ts";
@@ -55,6 +56,8 @@ export function resolveOne(cfg: Config = getConfig(), ref = cfg.model): Model {
  * busy or out of credit before it starts answering, the next one answers instead.
  */
 export function resolveModel(cfg: Config = getConfig(), ref = cfg.model): Model {
+  // While a run is being prepared, the model chosen decides which sensitivity levels the run may receive.
+  noteModel(cfg, ref);
   const model = withBackups(cfg, ref);
   // The privacy guardrail hides personal details from AI services; a model on this computer sends nothing out.
   return cfg.privacy === "mask" && !(isLocalRef(ref) && !(cfg.backups ?? []).some((b) => b !== ref && !isLocalRef(b))) ? new PrivacyModel(model) : model;

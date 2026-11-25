@@ -45,6 +45,7 @@ import { loadModelList } from "./modelprices.ts";
 import { COLUMN_TYPES, peopleOf, tables } from "./tables.ts";
 import { sheets } from "./sheets.ts";
 import { describeGuardrails, guardrails, guardrailsFrom } from "./guardrails.ts";
+import { LEVELS, LEVEL_WORDS, RECOMMENDED, WHERE, WHERE_WORDS, describePolicy, policy, policyFrom } from "./sensitivity.ts";
 import { ROLES, ROLE_WORDS, mayDo, people } from "./people.ts";
 import type { Person } from "./people.ts";
 import { projects } from "./projects.ts";
@@ -351,6 +352,11 @@ async function updateSettings(body: any) {
   if (["leads", "all", "never"].includes(body.planFirst)) patch.planFirst = body.planFirst;
   if (body.privacy === "off" || body.privacy === "mask") patch.privacy = body.privacy;
   if (typeof body.moveUp === "boolean") patch.moveUp = body.moveUp;
+  if (body.sensitivity && typeof body.sensitivity === "object") {
+    const next = policyFrom(body.sensitivity, policy());
+    patch.sensitivity = next;
+    audit({ actor: "system", actorName: "Guardrails", kind: "guardrail", action: "The rules for sensitive information were changed", detail: describePolicy(next).join(" ") });
+  }
   if (body.guardrails && typeof body.guardrails === "object") {
     const before = guardrails();
     const next = guardrailsFrom(body.guardrails, before);
@@ -809,6 +815,10 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     throw new HttpError(404, "Not found.");
   }
 
+  if (route === "GET sensitivity") {
+    const cfg = getConfig();
+    return send(res, 200, { policy: policy(cfg), levels: LEVELS.map((id) => ({ id, ...LEVEL_WORDS[id] })), where: WHERE.map((id) => ({ id, words: WHERE_WORDS[id] })), recommended: RECOMMENDED, services: cfg.providers.filter((p) => p.kind === "anthropic" ? Boolean(cfg.apiKey) : true).map((p) => ({ id: p.id, name: p.name, local: isLocalRef(`${p.id}/x`) })), words: describePolicy(policy(cfg)) });
+  }
   if (route === "GET guardrails") return send(res, 200, { rules: guardrails(), words: describeGuardrails(), refused: readAudit({ kind: "guardrail", limit: 30 }).entries });
   if (route === "GET state") return send(res, 200, publicConfig());
   if (route === "PUT settings") return send(res, 200, await updateSettings(body));
@@ -1285,7 +1295,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
       if (route === "POST workspace" && id && sub === "changes" && extra) return send(res, 200, await attempt(() => tables.decide(org, id, extra, body.decision)));
     }
     if (area === "pages") {
-      if (route === "POST workspace" && !id) return send(res, 200, await attempt(() => workspace.create(org, null, { parent: body.parent, title: body.title, markdown: body.markdown, icon: body.icon, kind: body.kind, folder: body.folder, tags: body.tags })));
+      if (route === "POST workspace" && !id) return send(res, 200, await attempt(() => workspace.create(org, null, { parent: body.parent, title: body.title, markdown: body.markdown, icon: body.icon, kind: body.kind, folder: body.folder, tags: body.tags, level: body.level })));
       if (route === "GET workspace" && id && !sub) return send(res, 200, await attempt(() => workspace.get(org, id)));
       if (route === "PUT workspace" && id && !sub) return send(res, 200, await attempt(() => workspace.save(org, id, body.markdown, body.baseRev)));
       if (route === "PATCH workspace" && id && !sub) return send(res, 200, await attempt(() => workspace.update(org, id, body)));
