@@ -66,6 +66,16 @@ export interface WorkItem {
   updatedAt: string;
 }
 
+/** One task in a daily check-in. */
+export interface CheckInLine {
+  id: string;
+  number: number;
+  title: string;
+  owner: string;
+  status: Status;
+  why: string;
+}
+
 export interface Comment {
   id: string;
   author: string;
@@ -543,6 +553,26 @@ export const work = {
     audit({ actor: "owner", actorName: "You", kind: "task", action: `Resumed task #${root.number}`, detail: root.title });
     this.kick();
     return this.get(org, root.id);
+  },
+
+  /**
+   * The leads' daily check-in: for each group, what moved since yesterday morning, what is stuck or waiting on the
+   * owner, and what is next. Built from the tasks themselves, so it costs nothing and is always up to date.
+   */
+  checkIn(org: Org, now = new Date()): { since: string; groups: { group: string; lead: string | null; leadName: string | null; moved: CheckInLine[]; stuck: CheckInLine[]; next: CheckInLine[] }[] } {
+    const items = this.list(org);
+    const since = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toISOString();
+    const line = (t: WorkItem): CheckInLine => ({ id: t.id, number: t.number, title: t.title, owner: t.ownerName, status: t.status, why: t.attention?.words || t.detail || "" });
+    const groupOfOwner = new Map(org.members.map((m) => [m.bot, m.department]));
+    const groups = (org.groups ?? []).flatMap((g) => {
+      const mine = items.filter((t) => groupOfOwner.get(t.owner) === g.name);
+      const moved = mine.filter((t) => (t.status === "done" || t.status === "review") && t.updatedAt >= since).map(line);
+      const stuck = mine.filter((t) => t.status === "blocked" || t.status === "waiting" || t.attention).map(line);
+      const next = mine.filter((t) => t.status === "todo").sort((a, b) => (a.queue ?? 99) - (b.queue ?? 99)).slice(0, 3).map(line);
+      if (!moved.length && !stuck.length && !next.length) return [];
+      return [{ group: g.name, lead: g.lead, leadName: g.lead ? nameOf(org, g.lead) : null, moved, stuck, next }];
+    });
+    return { since, groups };
   },
 
   /** The agents that are paused, by id, with when. */

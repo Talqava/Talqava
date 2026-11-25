@@ -21,7 +21,7 @@ The Inbox is where your agents write to you. It works like email. Every task you
 
 ## Key ideas
 
-**Agents have people's names here.** In the Inbox, each agent gets a person's name, such as "Maya Brooks", with its job title underneath. You can rename any of them.
+**Agents go by their job titles.** In the Inbox an agent is shown by its job title, such as "Bookkeeper", the same as everywhere else. You can give any of them a person's name instead with **Rename**; its job title then shows underneath.
 
 **What arrives as a message.**
 - A report from each task you gave, written by the agent.
@@ -33,6 +33,8 @@ The Inbox is where your agents write to you. It works like email. Every task you
 - **Suggested change**: an agent wants to edit a page in your Workspace.
 - **Proposal**: a lead suggests adding a new position to your organization.
 - A note when a chat is waiting for your approval.
+- **Daily check-in from your leads**: once a day, for every group, what moved since yesterday morning, what is stuck or waiting on you, and what is next, each with a link to its task. It is built from your tasks, so it costs nothing. Switch it off under **Settings → Leads' daily check-in**.
+- **… is not working**: an AI service you connected stopped working, with what is wrong.
 
 Work handed between agents doesn't send you separate messages. Its progress shows inside the message for the task you gave, for example "2 of 3 parts done". A part only writes to you on its own when it needs your approval or a review.
 
@@ -89,7 +91,7 @@ Work handed between agents doesn't send you separate messages. Its progress show
 
 **Rename an agent**
 1. Open one of its messages and click **Rename** next to its name.
-2. Type the new name and click **Save**. **Use default** goes back to the original.
+2. Type a name and click **Save**. **Use job title** goes back to its job title.
 
 ### Approve a plan, answer a question, or accept work, from the Inbox
 

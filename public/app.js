@@ -309,7 +309,7 @@ function renderRail() {
       { class: "railgroup" },
       item("tasks", "Tasks", v === "tasks", "Every task and goal: queued, working, needing you, to review and done"),
       item("home", "Work in progress", ["home", "quest", "bot"].includes(v), "Your agents and what each is doing right now"),
-      item("jobs", "Schedules", v === "jobs", "Work that runs by itself on a schedule"),
+      item("jobs", "Routines", v === "jobs", "Repeating work that runs by itself, for a position or the assistant"),
     ),
     h("div", { class: "raillabel" }, "Team"),
     h("div", { class: "railgroup" }, item("team", "Organization", v === "team", "The org chart, departments and budgets"), item("market", "Marketplace", v === "market" || v === "marketbot", "Ready-made agents and teams for every department")),
@@ -430,7 +430,7 @@ const COMMANDS = [
   ["Create an agent", () => go("bot", "new")],
   ["Memory", () => go("memory")],
   ["Skills", () => go("skills")],
-  ["Schedules", () => go("jobs")],
+  ["Routines", () => go("jobs")],
   ["Settings", () => go("settings")],
 ];
 
@@ -1676,7 +1676,7 @@ async function loadPageSuggestions() {
 async function loadMail() {
   loadPageSuggestions();
   try {
-    [state.mail, state.workItems, state.serviceProblems] = await Promise.all([api("GET", "inbox"), api("GET", "work").then((w) => w.items).catch(() => state.workItems ?? []), api("GET", "gateway/problems").catch(() => state.serviceProblems ?? [])]);
+    [state.mail, state.workItems, state.serviceProblems, state.checkIn] = await Promise.all([api("GET", "inbox"), api("GET", "work").then((w) => w.items).catch(() => state.workItems ?? []), api("GET", "gateway/problems").catch(() => state.serviceProblems ?? []), api("GET", "work/checkin").catch(() => state.checkIn ?? null)]);
   } catch {
     state.mail ??= { messages: {}, names: {} };
   }
@@ -1717,6 +1717,14 @@ function mailMessages() {
     else if (n.kind === "monthly") out.push({ id: `need:monthly:${n.bot.id}:${MONTH_START().slice(0, 7)}`, kind: "need", need: n, bot: n.bot, subject: "I have reached my monthly budget", snippet: `${money(n.bot.month.spent)} of ${money(n.bot.month.limit)}. I start no new work until you raise it.`, at: MONTH_START(), activityAt: MONTH_START(), label: "needs" });
     else if (n.kind === "service") out.push({ id: `need:service:${n.p.id}:${n.p.problem.slice(0, 40)}`, kind: "need", need: n, bot: null, subject: `${n.p.name} is not working`, snippet: n.p.problem, at: new Date().toISOString(), activityAt: new Date().toISOString(), label: "needs" });
     else if (n.kind === "total") out.push({ id: `need:total:${MONTH_START().slice(0, 7)}`, kind: "need", need: n, bot: null, subject: "Your agents have reached this month's budget", snippet: "No agent starts new work until you raise it or the month turns.", at: MONTH_START(), activityAt: MONTH_START(), label: "needs" });
+  }
+  // The leads' daily check-in: one message a day, built from the tasks.
+  if (state.checkIn?.groups?.length) {
+    const day = new Date();
+    const at = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 8).toISOString();
+    const g = state.checkIn.groups;
+    const n = (k) => g.reduce((sum, x) => sum + x[k].length, 0);
+    out.push({ id: `checkin:${at.slice(0, 10)}`, kind: "checkin", bot: null, subject: "Daily check-in from your leads", snippet: `${n("moved")} moved, ${n("stuck")} stuck or waiting, ${n("next")} up next, across ${g.length} group${g.length === 1 ? "" : "s"}.`, at, activityAt: at, label: n("stuck") ? "needs" : "done" });
   }
   // A change an agent suggested to a workspace page waits in the inbox too.
   for (const sg of state.pageSuggestions ?? []) {
@@ -2011,6 +2019,17 @@ function readMail(m) {
       h("blockquote", { class: "proposalwhy" }, p.why),
       h("p", { class: "note small" }, "Nothing changes until you approve. You can move or remove the position afterwards, like any other."),
       h("div", { class: "row" }, h("button", { class: "primary", onclick: () => answerProposal(m.org, p, "approve", body).then(after) }, "Approve"), h("button", { onclick: () => answerProposal(m.org, p, "decline", body).then(after) }, "Decline"), h("button", { class: "plain", onclick: () => go("team") }, "See the chart")),
+    );
+    return [tools, h("h2", { class: "readsubject" }, m.subject, h("span", { class: `mlabel ${m.label}` }, LABEL_WORDS[m.label])), from, body];
+  }
+  if (m.kind === "checkin") {
+    const row = (t) => h("li", {}, h("button", { class: "plain link", onclick: () => openTask(t.id) }, `#${t.number} ${t.title}`), h("span", { class: "note small" }, ` · ${t.owner}${t.why ? ` · ${t.why}` : ""}`));
+    const part = (label, list, empty) => [h("div", { class: "label" }, label), list.length ? h("ul", { class: "checkinlist" }, list.map(row)) : h("p", { class: "note small" }, empty)];
+    fill(
+      body,
+      h("p", {}, "What each group moved since yesterday morning, what is stuck or waiting on you, and what is next. It is built from your tasks, so it costs nothing."),
+      (state.checkIn?.groups ?? []).map((g) => h("section", { class: "checkin" }, h("h3", {}, g.leadName ? `${g.leadName} · ${g.group}` : g.group), part("Moved", g.moved, "Nothing finished since yesterday."), part("Stuck or waiting on you", g.stuck, "Nothing is stuck."), part("Next", g.next, "Nothing is queued."))),
+      h("p", { class: "note small" }, "Switch the daily check-in off under Settings."),
     );
     return [tools, h("h2", { class: "readsubject" }, m.subject, h("span", { class: `mlabel ${m.label}` }, LABEL_WORDS[m.label])), from, body];
   }
@@ -2499,6 +2518,18 @@ function renderOrg() {
     const canHand = [...below(m.bot), ...members.filter((x) => x.also === m.bot)];
     const mine = new Set(canHand.map((x) => x.bot));
     const canRequest = members.filter((x) => x.bot !== m.bot && !mine.has(x.bot) && x.department !== m.department && groups.find((gg) => gg.name === x.department)?.lead === x.bot);
+    // Repeating work this position does. It stays with the position when a different agent fills it.
+    const routinesBox = h("div", { class: "panelrules" }, h("div", { class: "label" }, "Routines"));
+    api("GET", "jobs")
+      .then((all) => {
+        const mine = all.filter((j) => j.owner === m.bot);
+        if (!routinesBox.isConnected) return;
+        routinesBox.append(
+          ...(mine.length ? mine.map((j) => h("p", {}, h("b", {}, j.name), ` · ${j.plain}${j.enabled ? "" : " · paused"}`)) : [h("p", { class: "note small" }, "No repeating work yet.")]),
+          h("div", { class: "row" }, h("button", { class: "plain small", onclick: () => ((ui.routineFor = m.bot), go("jobs")) }, "+ Routine"), mine.length ? h("button", { class: "plain small", onclick: () => go("jobs") }, "See all routines") : null),
+        );
+      })
+      .catch(() => {});
     const title = h("input", { value: m.title, maxlength: 50, "aria-label": "Title" });
     const resp = h("textarea", { rows: 3, maxlength: 400, placeholder: "What this position is responsible for, in a sentence or two. The agent is told.", "aria-label": "Responsibilities" }, m.responsibilities ?? "");
     const saveText = () => {
@@ -2544,6 +2575,7 @@ function renderOrg() {
       h("div", { class: "panelline" }, h("span", { class: "grow" }, "Monthly budget"), h("b", {}, bot.month?.limit != null ? `${money(bot.month.spent ?? 0)} of ${money(bot.month.limit)}` : "No limit"), h("button", { class: "plain small", onclick: () => go("bot", bot.id) }, "Change")),
       h("div", { class: "panelline" }, h("span", { class: "grow" }, "Model"), h("b", {}, bot.model ? bot.model.split("/").pop() : "Your main model"), h("button", { class: "plain small", onclick: () => go("bot", bot.id) }, "Change")),
       swap,
+      routinesBox,
       h("div", { class: "row wrap" }, h("button", { class: "primary small", onclick: () => ((state.selectedTeam = members.some((x) => x.manager === m.bot) ? m.bot : null), (state.selectedBot = m.bot), go("home")) }, "Give a task"), h("button", { class: "small", onclick: () => chatWith(bot) }, "Chat"), h("button", { class: "plain small danger", onclick: () => confirm(`Take ${m.title} off the chart?\n\nAnyone reporting to it moves up to ${nameOf(m.manager)}. ${bot.name} stays on your team and can be added back. You can undo this.`) && orgChange(`Took ${m.title} off the chart`, async () => (await api("DELETE", `orgs/${org.id}/members/${m.bot}`), (o.sel = null))) }, "Take off the chart")),
     ];
   };
@@ -5946,7 +5978,9 @@ function whoPicker(current = "") {
 function scheduleForm(col, job = null, done) {
   const name = h("input", { placeholder: "e.g. Morning news digest", value: job?.name ?? "", maxlength: 80 });
   const when = whenPicker(job?.schedule ?? "0 9 * * 1-5");
-  const who = whoPicker(job?.owner ?? "");
+  // Opened from a position's panel, a new routine starts out belonging to that position.
+  const who = whoPicker(job?.owner ?? ui.routineFor ?? "");
+  ui.routineFor = null;
   const prompt = h("textarea", { rows: 4, placeholder: "What should be done each time? Write it as you would to a new colleague, e.g. “Read the news about our industry and send me the five things that matter, with links.”" }, job?.prompt ?? "");
   return h(
     "form",
@@ -5962,23 +5996,23 @@ function scheduleForm(col, job = null, done) {
     h("label", {}, "When", when.node),
     h("label", {}, "Who does it", who),
     h("label", {}, "Instructions", prompt),
-    h("div", { class: "row" }, job ? h("button", { type: "button", class: "plain", onclick: done }, "Cancel") : null, h("button", { class: "primary" }, job ? "Save changes" : "Add schedule")),
+    h("div", { class: "row" }, job ? h("button", { type: "button", class: "plain", onclick: done }, "Cancel") : null, h("button", { class: "primary" }, job ? "Save changes" : "Add routine")),
   );
 }
 
 async function jobsView() {
   const list = h("div", { class: "joblist" });
   const col = page(
-    "Schedules",
-    "Work that runs by itself: a daily summary, a weekly report, a monthly check. Choose when, and who does it. You can also just ask in a chat: “every weekday at 8am, …”.",
-    h("p", { class: "banner" }, "Schedules run while Talqava is open. In the Mac app, closing the window keeps Talqava running; choosing Quit stops it. A run missed while it was stopped happens once when you open Talqava again."),
+    "Routines",
+    "Repeating work that runs by itself: a daily summary, a weekly report, a month-end close. Choose when, and which position does it. A routine belongs to the position, so it carries on when you put a different agent in it. You can also just ask in a chat: “every weekday at 8am, …”.",
+    h("p", { class: "banner" }, "Routines run while Talqava is open. In the Mac app, closing the window keeps Talqava running; choosing Quit stops it. A run missed while it was stopped happens once when you open Talqava again."),
     list,
-    h("h3", {}, "New schedule"),
+    h("h3", {}, "New routine"),
   );
   col.append(scheduleForm(col, null, () => jobsView()));
   const jobs = await attempt(() => api("GET", "jobs"), col);
   if (!jobs) return;
-  if (!jobs.length) list.append(h("p", { class: "note" }, "No schedules yet. Add one below."));
+  if (!jobs.length) list.append(h("p", { class: "note" }, "No routines yet. Add one below."));
   for (const j of jobs) {
     const act = (fn) => attempt(async () => (await fn(), jobsView()), col);
     const card = h("div", { class: "card jobcard" });
@@ -5993,7 +6027,7 @@ async function jobsView() {
             { class: "grow" },
             h("strong", {}, j.name),
             h("div", { class: "note" }, `${j.plain} · ${j.enabled ? `next ${when(j.nextRunAt)}` : "paused"}${j.lastRunAt ? ` · last ran ${when(j.lastRunAt)}` : ""}`),
-            h("div", { class: "note" }, j.owner ? (j.ownerName ? `Done by the ${j.ownerName}, as a task in their queue` : "Its agent is no longer on the chart, so the assistant does it. Edit it to choose another agent.") : `Done by ${state.config.agentName}, the assistant, in a chat`),
+            h("div", { class: "note" }, j.owner ? (j.ownerName ? `Done by the ${j.ownerName}, as a task in their queue` : "Its position is no longer on the chart, so the assistant does it. Edit it to choose another position.") : `Done by ${state.config.agentName}, the assistant, in a chat`),
             h("div", { class: "jobprompt" }, j.prompt),
           ),
           h(
@@ -6015,7 +6049,7 @@ async function jobsView() {
             ),
             h("button", { class: "small", onclick: () => fill(card, h("h4", {}, `Change “${j.name}”`), scheduleForm(col, j, () => jobsView())) }, "Edit"),
             h("button", { class: "small", onclick: () => act(() => api("PATCH", `jobs/${j.id}`, { enabled: !j.enabled })) }, j.enabled ? "Pause" : "Resume"),
-            h("button", { class: "small danger", onclick: () => confirm(`Delete the schedule “${j.name}”?\n\nPast runs are kept.`) && act(() => api("DELETE", `jobs/${j.id}`)) }, "Delete"),
+            h("button", { class: "small danger", onclick: () => confirm(`Delete the routine “${j.name}”?\n\nPast runs are kept.`) && act(() => api("DELETE", `jobs/${j.id}`)) }, "Delete"),
           ),
         ),
       );
@@ -6339,6 +6373,7 @@ function settingsView() {
   const savings = select([["off", "Off: every agent uses my model"], ["balanced", "Balanced: match the model to the work"], ["cheapest", "Cheapest: cheaper models wherever they can do it"]], c.savings ?? "off");
   const checkFirst = select([["on", "On: check first, and ask me if something is missing"], ["off", "Off: start without checking"]], c.checkFirst === false ? "off" : "on");
   const privacy = select([["off", "Off: send conversations as they are"], ["mask", "On: hide email addresses, phone and card numbers"]], c.privacy ?? "off");
+  const checkIn = select([["on", "On: one message a day in my Inbox"], ["off", "Off"]], c.checkIn === false ? "off" : "on");
   const moveUp = select([["on", "On: try once with a stronger model I set up"], ["off", "Off: stop and leave a hand-over note"]], c.moveUp === false ? "off" : "on");
   const planFirst = select([["leads", "Tasks I give to a lead: plan first, for my approval"], ["all", "Every task I give: plan first, for my approval"], ["never", "Never: start straight away"]], c.planFirst ?? "leads");
   const mode = select(
@@ -6391,7 +6426,7 @@ function settingsView() {
         class: "form",
         onsubmit: (e) => (
           e.preventDefault(),
-          save({ agentName: name.value, effort: effort.value, savings: savings.value, checkFirst: checkFirst.value === "on", planFirst: planFirst.value, privacy: privacy.value, moveUp: moveUp.value === "on", approvalMode: mode.value, budget: { steps: Number(steps.value), spend: spend.value === "" ? null : Number(spend.value) }, monthlyBudget: monthlyAll.value === "" ? null : Number(monthlyAll.value) })
+          save({ agentName: name.value, effort: effort.value, savings: savings.value, checkFirst: checkFirst.value === "on", planFirst: planFirst.value, privacy: privacy.value, moveUp: moveUp.value === "on", checkIn: checkIn.value === "on", approvalMode: mode.value, budget: { steps: Number(steps.value), spend: spend.value === "" ? null : Number(spend.value) }, monthlyBudget: monthlyAll.value === "" ? null : Number(monthlyAll.value) })
         ),
       },
       h("label", {}, "Name", name),
@@ -6414,12 +6449,14 @@ function settingsView() {
       h("h4", {}, "Models and cost"),
       h("label", {}, "Cost saving for your team of agents", savings),
       h("p", { class: "note small" }, "Balanced, with Claude Opus or Fable as your model: managers who plan and check keep your model, team members doing their own part use Claude Sonnet 5.5 (about half the price), and quick questions between agents use Claude Haiku 5.5 (about a fortieth). Cheapest also gives managers Sonnet. With another service, the cheaper models come from your backup models, so Talqava never uses a model you didn't choose. An agent you gave a model of its own keeps it, a stuck task can still move up, and the receipt shows which model did each step. Off uses your model for everything."),
+      h("label", {}, "Leads' daily check-in", checkIn),
+      h("p", { class: "note small" }, "Each day your Inbox gets one message: for every group, what moved since yesterday, what is stuck or waiting on you, and what is next. It is built from your tasks, so it costs nothing."),
       h("label", {}, "When a task gets stuck", moveUp),
       h("p", { class: "note small" }, "Stuck means trying the same step again and again, or every step failing. With this on, the task first carries on once with the strongest model you set up (your team's model or a backup) that costs clearly more than the one in use, within the same budget. A model on this computer never moves up to one online. The receipt shows which model did each step."),
       h("label", {}, "Privacy: hide personal details from AI services", privacy),
       h("p", { class: "note small" }, "With this on, email addresses, phone numbers, card numbers and US Social Security numbers are replaced with placeholders such as [EMAIL 1] before anything is sent to an AI service, and put back in the answer, so an agent can still email the right person. Your chats keep the real details. It doesn't catch names, street addresses or details inside pictures, and models on this computer send nothing out, so they see everything."),
       h("label", {}, "Approvals", mode),
-      h("p", { class: "note" }, "With “ask”, a scheduled job that needs approval waits until you open its chat and answer. “Run everything” is only sensible when the agent runs in Docker or on a machine with nothing you'd mind losing."),
+      h("p", { class: "note" }, "With “ask”, a routine that needs approval waits until you open its chat and answer. “Run everything” is only sensible when the agent runs in Docker or on a machine with nothing you'd mind losing."),
       h("h4", {}, "Budgets"),
       h("label", {}, "Steps per run (model calls)", steps),
       h("label", {}, "Budget per task, in US dollars", spend),

@@ -2879,3 +2879,79 @@ test("trouble is spotted early: a quiet run, work waiting a long time, and an ag
     orgs.remove(org0.id);
   }
 });
+
+test("a routine belongs to its position: it carries on when a different agent fills the position", { timeout: 30_000 }, async () => {
+  const { orgs } = await import("../../src/local/orgs.ts");
+  const market = await import("../../src/local/marketplace.ts");
+  const crewMod = await import("../../src/local/crew.ts");
+  const org0 = orgs.create("Routine Co", "Keep the books.", "custom");
+  const server = (await import("node:http")).createServer(app.handle).listen(0, "127.0.0.1");
+  await new Promise((r) => server.once("listening", r));
+  const base = `http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}/api`;
+  const call = async (method: string, route: string, body?: unknown) => {
+    const r = await fetch(`${base}/${route}`, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+    return { status: r.status, data: await r.json() };
+  };
+  let jobId = "";
+  try {
+    market.addTeam("finance-team");
+    const org = orgs.active();
+    const job = (await call("POST", "jobs", { name: "Month-end close", prompt: "Close the month.", schedule: "0 9 1 * *", owner: "bookkeeper" })).data;
+    jobId = job.id;
+    // Another agent, not on the chart yet, takes over the Bookkeeper's position.
+    const other = crewMod.loadCrew().bots.find((b) => !org.members.some((m) => m.bot === b.id))!;
+    const swapped = await call("POST", `orgs/${org.id}/members/bookkeeper/agent`, { to: other.id });
+    assert.equal(swapped.status, 200);
+    const now = (await call("GET", "jobs")).data.find((j: { id: string }) => j.id === job.id);
+    assert.equal(now.owner, other.id);
+    assert.ok(now.ownerName, "the routine still has someone to do it");
+  } finally {
+    if (jobId) await call("DELETE", `jobs/${jobId}`);
+    server.close();
+    orgs.remove(org0.id);
+  }
+});
+
+test("the leads' daily check-in says, for each group, what moved, what is stuck and what is next, from the tasks alone", { timeout: 30_000 }, async () => {
+  const { orgs } = await import("../../src/local/orgs.ts");
+  const market = await import("../../src/local/marketplace.ts");
+  const { work } = await import("../../src/local/work.ts");
+  const quests = await import("../../src/local/quests.ts");
+  const crewMod = await import("../../src/local/crew.ts");
+  const { openOrgDb } = await import("../../src/local/library.ts");
+  const org0 = orgs.create("Check-in Co", "Keep the books.", "custom");
+  const made: string[] = [];
+  try {
+    market.addTeam("finance-team");
+    const org = orgs.active();
+    const d = openOrgDb(org.id);
+    const stamp = new Date().toISOString();
+    const keeper = crewMod.loadCrew().bots.find((b) => b.id === "bookkeeper")!;
+    const start = (title: string, status: "done" | "failed", n: string) => {
+      const item = work.create(org, { title, owner: "bookkeeper", createdBy: "owner" });
+      const q = { id: n.repeat(15) + "e", title, bot: keeper, status, steps: 1, ...(status === "failed" ? { note: "The bank feed was down." } : {}), createdAt: stamp, updatedAt: stamp };
+      quests.questStore.save(q);
+      made.push(q.id);
+      d.prepare("update work_items set quest = ?, state = 'started' where id = ?").run(q.id, item.id);
+      return item;
+    };
+    start("Reconcile the cards", "done", "1");
+    start("Match the bank feed", "failed", "2");
+    // The Bookkeeper is paused, so this one stays queued.
+    work.pauseAgents(org, ["invoice-chaser"]);
+    work.create(org, { title: "Chase late invoices", owner: "invoice-chaser", createdBy: "owner" });
+    const { groups } = work.checkIn(org);
+    assert.equal(groups.length, 1);
+    const finance = groups[0];
+    assert.equal(finance.group, "Finance");
+    assert.equal(finance.leadName, "Head of Finance");
+    assert.deepEqual(finance.moved.map((t) => t.title), ["Reconcile the cards"]);
+    assert.deepEqual(finance.stuck.map((t) => [t.title, t.why]), [["Match the bank feed", "The bank feed was down."]]);
+    // Nothing from before yesterday morning counts as moved.
+    const later = new Date(Date.now() + 3 * 86_400_000);
+    assert.deepEqual(work.checkIn(org, later).groups[0].moved, []);
+  } finally {
+    for (const id of made) quests.questStore.remove(id);
+    orgs.remove(org0.id);
+  }
+});
