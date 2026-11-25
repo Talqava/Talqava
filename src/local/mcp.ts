@@ -25,7 +25,7 @@ async function app<T>(method: string, route: string, body?: unknown): Promise<T>
   const res = await fetch(`${appUrl()}/api/${route}`, { method, headers: body ? { "content-type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(20_000) }).catch(() => null);
   if (!res) throw new Error("Talqava is not running. Open the Talqava app on this computer, then try again.");
   const data = (await res.json().catch(() => ({}))) as { error?: string };
-  if (res.status === 401) throw new Error("Talqava is protected by a password, so it cannot be used from another app yet.");
+  if (res.status === 401) throw new Error("Talqava asks people to sign in (a password, or people and roles under Security), so it cannot be used from another app yet.");
   if (!res.ok) throw new Error(data.error || `Talqava answered with an error (${res.status}).`);
   return data as T;
 }
