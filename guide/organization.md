@@ -85,7 +85,7 @@ The side panel for each position spells this out under **How work moves for this
 3. Click **Create**. The lead moves into the group. Then drag other positions in.
 
 ### Change who reports to whom
-- Drag a position onto another position. To add a dotted line instead, hold **Option** while you drop.
+- Drag a position onto another position. To add a dotted line instead, click the position and choose under **Dotted line: also works with** (or hold **Option** while you drop).
 - Or open the position and change **Reports to** or **Also works with (dotted line)**. The List view has the same choices in each row.
 
 ### Edit a position

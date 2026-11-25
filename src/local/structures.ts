@@ -85,7 +85,7 @@ export const STRUCTURES: Structure[] = [
   {
     id: "matrix",
     name: "Matrix",
-    summary: "Two lines: a functional lead for how the work is done, and a project lead for what is needed now.",
+    summary: "Two lines: each specialist reports to a functional lead and has a dotted line to a project lead, so both can hand it work.",
     philosophy:
       "Complex work needs both deep expertise and delivery focus, so people answer to two leads: a functional lead who owns standards and skills, and a project or product manager who owns priorities and deadlines. Authority is shared on purpose. It only works with a named tie-breaker, so a general manager sits above both lines.",
     bestFor: "Project-driven organizations where specialists are shared across several projects or clients at once.",
@@ -117,7 +117,7 @@ export const STRUCTURES: Structure[] = [
   {
     id: "flat",
     name: "Flat",
-    summary: "No managers. Everyone reports to you and works with everyone else as peers.",
+    summary: "No managers: everyone reports to you, and you hand out the work. Agents can still ask each other questions.",
     philosophy:
       "Remove the layers and trust capable people to manage themselves. With no middle management, information reaches everyone, decisions are made by whoever is closest to the work, and people pick up what needs doing. Common in start-ups and in self-managed companies such as Valve.",
     bestFor: "Very small organizations and early stages, where speed and initiative matter most.",

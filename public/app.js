@@ -2396,7 +2396,7 @@ function renderOrg() {
     const outsideBoss = m.manager && memberOf_(m.manager)?.department !== m.department;
     return h(
       "div",
-      { class: `poscard ${o.sel?.kind === "position" && o.sel.id === m.bot ? "on" : ""} ${leads ? "lead" : ""}`, style: `${botStyle(bot)}; margin-left: ${depth * 22}px`, role: "button", tabindex: "0", title: "Click to edit. Drag onto someone to report to them; hold Option for a dotted line.", onclick: () => select({ kind: "position", id: m.bot }), onkeydown: (e) => e.key === "Enter" && select({ kind: "position", id: m.bot }), ...drag({ kind: "position", id: m.bot }), ...drop({ kind: "position", id: m.bot }) },
+      { class: `poscard ${o.sel?.kind === "position" && o.sel.id === m.bot ? "on" : ""} ${leads ? "lead" : ""}`, style: `${botStyle(bot)}; margin-left: ${depth * 22}px`, role: "button", tabindex: "0", title: "Click to edit: who it reports to, a dotted line, its group. Or drag onto someone to report to them (hold Option while dropping for a dotted line).", onclick: () => select({ kind: "position", id: m.bot }), onkeydown: (e) => e.key === "Enter" && select({ kind: "position", id: m.bot }), ...drag({ kind: "position", id: m.bot }), ...drop({ kind: "position", id: m.bot }) },
       keycap(bot, 30, mood(q), bot.type),
       h(
         "span",
@@ -2526,7 +2526,8 @@ function renderOrg() {
       h("label", {}, "Responsible for", resp),
       h("label", {}, "Group", h("select", { onchange: (e) => set(m.bot, { department: e.target.value }, `${m.title} joins ${e.target.value}`) }, groups.map((gg) => h("option", { value: gg.name, selected: gg.name === m.department }, gg.name)))),
       h("label", {}, "Reports to", h("select", { onchange: (e) => set(m.bot, { manager: e.target.value || null }, `${m.title} reports to ${nameOf(e.target.value || null)}`) }, h("option", { value: "", selected: !m.manager }, "You"), members.filter((x) => !above.has(x.bot)).map((x) => h("option", { value: x.bot, selected: x.bot === m.manager }, x.title)))),
-      h("label", {}, "Also works with (dotted line)", h("select", { onchange: (e) => set(m.bot, { also: e.target.value || null }, e.target.value ? `${m.title} also works with ${nameOf(e.target.value)}` : `${m.title} has no dotted line`) }, h("option", { value: "", selected: !m.also }, "Nobody"), members.filter((x) => x.bot !== m.bot && x.bot !== m.manager).map((x) => h("option", { value: x.bot, selected: x.bot === m.also }, x.title)))),
+      h("label", {}, "Dotted line: also works with", h("select", { onchange: (e) => set(m.bot, { also: e.target.value || null }, e.target.value ? `${m.title} also works with ${nameOf(e.target.value)}` : `${m.title} has no dotted line`) }, h("option", { value: "", selected: !m.also }, "Nobody"), members.filter((x) => x.bot !== m.bot && x.bot !== m.manager).map((x) => h("option", { value: x.bot, selected: x.bot === m.also }, x.title)))),
+      h("p", { class: "note small" }, "A dotted line is a second working relationship, for example a marketer who also works with Sales. It changes neither who this position reports to nor its group."),
       h("div", { class: "panelrules" }, h("div", { class: "label" }, "How work moves for this position"), h("p", {}, canHand.length ? `Can hand work to: ${canHand.map((x) => x.title).join(", ")}.` : "Hands no work out: nobody is below it."), canRequest.length ? h("p", {}, `Can request work from: ${canRequest.map((x) => x.title).join(", ")}.`) : null, h("p", {}, m.manager ? `Takes decisions up to: ${nameOf(m.manager)}.` : "Takes decisions up to: you."), g?.lead === m.bot ? h("p", {}, `Leads ${g.name}: work for the group comes here first.`) : null),
       h("div", { class: "panelline" }, h("span", { class: "grow" }, "Monthly budget"), h("b", {}, bot.month?.limit != null ? `${money(bot.month.spent ?? 0)} of ${money(bot.month.limit)}` : "No limit"), h("button", { class: "plain small", onclick: () => go("bot", bot.id) }, "Change")),
       h("div", { class: "panelline" }, h("span", { class: "grow" }, "Model"), h("b", {}, bot.model ? bot.model.split("/").pop() : "Your main model"), h("button", { class: "plain small", onclick: () => go("bot", bot.id) }, "Change")),
@@ -2745,7 +2746,7 @@ function renderOrg() {
       : h(
           "div",
           { class: `orgwork ${side ? "withpanel" : ""}` },
-          h("aside", { class: "addbar" }, h("div", { class: "row" }, h("b", { class: "grow" }, "Add"), h("button", { class: "small", onclick: () => newGroup() }, "+ Group")), addFind, h("p", { class: "note small" }, "Drag onto a position to report to it, onto a group to join it, or onto You."), addList),
+          h("aside", { class: "addbar" }, h("div", { class: "row" }, h("b", { class: "grow" }, "Add"), h("button", { class: "small", onclick: () => newGroup() }, "+ Group")), addFind, h("p", { class: "note small" }, "Drag onto a position to report to it, onto a group to join it, or onto You. Click a position on the chart to change its reporting line or add a dotted line."), addList),
           h("div", { class: "orgcanvas" }, proposals(), suggestions(), members.length ? (o.view === "chart" ? chartView() : o.view === "list" ? listView() : groupsView()) : startPanel()),
           side,
         ),
@@ -2779,7 +2780,7 @@ function renderOrg() {
       philosophy,
       h("label", {}, "Commitments above this many dollars need your approval", limit),
       h("div", { class: "label", style: "margin-top: 10px" }, "Copy an example"),
-      h("p", { class: "note small" }, "Adds the example's positions you don't have yet, with its lines. Nothing you have is removed or moved."),
+      h("p", { class: "note small" }, "Adds the example's positions you don't have yet, with its lines. Nothing you have is removed or moved. Afterwards, work follows the lines on your chart, whichever example you used: an agent hands work to the positions below it or on a dotted line to it, requests work from other groups' leads, and can ask anyone a question."),
       h("div", { class: "row wrap" }, exIndustry, exStructure, h("button", { class: "small", onclick: () => (dialogDone("example"), null) }, "Copy")),
       h("div", { class: "label", style: "margin-top: 10px" }, "Save or share it"),
       h("p", { class: "note small" }, "One readable file with the chart and the agents you made or edited. No keys, tasks, memory or library files."),
@@ -5701,11 +5702,51 @@ async function memoryView() {
 }
 
 // ---------- skills ----------
+/** Writes a new skill, or changes one: its name, when it is for, and its steps. */
+function skillDialog(existing = null) {
+  const name = h("input", { value: existing?.name ?? "", placeholder: "e.g. monthly-invoice-check", maxlength: 60, "aria-label": "Name" });
+  const description = h("input", { value: existing?.description ?? "", placeholder: "When to use it, in one line", maxlength: 300, "aria-label": "When it is for" });
+  const content = h("textarea", { rows: 12, placeholder: "The steps, in order, as you would explain them to a new colleague.", "aria-label": "Steps" }, existing?.content ?? "");
+  const status = h("p", { class: "note", role: "status" });
+  const dialog = h("dialog", { class: "aidialog" });
+  const close = () => (dialog.close(), dialog.remove());
+  fill(
+    dialog,
+    h(
+      "form",
+      {
+        class: "form",
+        onsubmit: async (e) => {
+          e.preventDefault();
+          try {
+            await api("PUT", `skills/${encodeURIComponent(existing?.name ?? "")}`, { name: name.value, description: description.value, content: content.value });
+            close();
+            toast(existing ? "Skill saved." : "Skill added. Agents can follow it from now on.");
+            skillsView();
+          } catch (err) {
+            status.textContent = err.message;
+            status.className = "note bad";
+          }
+        },
+      },
+      h("h3", {}, existing ? `Change “${existing.name}”` : "New skill"),
+      h("label", {}, "Name", name),
+      h("label", {}, "When it is for", description),
+      h("label", {}, "Steps", content),
+      status,
+      h("div", { class: "row" }, h("button", { class: "primary" }, "Save"), h("button", { type: "button", class: "plain", onclick: close }, "Cancel")),
+    ),
+  );
+  document.body.append(dialog);
+  dialog.showModal();
+}
+
 async function skillsView() {
-  const col = page("Skills", `Procedures ${state.config.agentName} has written down for itself after working out how to do something, so it can repeat it.`);
+  const col = page("Skills", `Procedures ${state.config.agentName} follows: written down by an agent after working out how to do something, or by you.`);
   const skills = await attempt(() => api("GET", "skills"), col);
   if (!skills) return;
-  if (!skills.length) col.append(h("p", { class: "note" }, "No skills yet. Ask the agent to “save that as a skill” after a task you'll want again."));
+  col.append(h("div", { class: "row" }, h("button", { class: "primary", onclick: () => skillDialog() }, "+ New skill")));
+  if (!skills.length) col.append(h("p", { class: "note" }, "No skills yet. Write one with + New skill, or ask an agent to “save that as a skill” after a task you'll want again."));
   for (const s of skills) {
     col.append(
       h(
@@ -5716,6 +5757,8 @@ async function skillsView() {
           "div",
           { class: "body" },
           h("pre", {}, s.content),
+          h("button", { onclick: () => skillDialog(s) }, "Change"),
+          " ",
           h("button", { class: "danger", onclick: () => confirm(`Delete the skill “${s.name}”?`) && attempt(async () => (await api("DELETE", `skills/${encodeURIComponent(s.name)}`), skillsView()), col) }, "Delete"),
         ),
       ),
@@ -6207,23 +6250,7 @@ function settingsView() {
 
 
   const name = h("input", { value: c.agentName });
-  const slash = c.model.indexOf("/");
-  const provider = select(c.providers.map((p) => [p.id, p.name]), c.model.slice(0, slash));
-  const modelName = h("input", { value: c.model.slice(slash + 1), placeholder: "Model name, e.g. llama3.1 or claude-opus-5-5", autocomplete: "off" });
-  const claudeModels = h("datalist", { id: "claude-models" }, c.models.map((m) => h("option", { value: m.id }, m.label)));
-  // Claude's names are suggested only when Anthropic is the provider.
-  const providerModels = h("datalist", { id: "provider-models" });
-  const modelNote = h("p", { class: "note small" });
-  // Suggest the models the chosen provider actually has.
-  const syncList = async () => {
-    modelName.setAttribute("list", "provider-models");
-    const listed = await api("GET", `providers/${encodeURIComponent(provider.value)}/models`).catch(() => ({ models: [] }));
-    fill(providerModels, listed.models.map((m) => h("option", { value: m })));
-    modelNote.textContent = listed.note || (listed.models.length ? `${listed.models.length} model${listed.models.length === 1 ? "" : "s"} available. Start typing to choose.` : "");
-  };
-  provider.addEventListener("change", syncList);
-  syncList();
-  const ref = () => `${provider.value}/${modelName.value.trim()}`;
+  const ref = () => c.model;
   const effort = select(c.efforts.map((e) => [e, e]), c.effort);
   const savings = select([["off", "Off: every agent uses my model"], ["balanced", "Balanced: match the model to the work"], ["cheapest", "Cheapest: cheaper models wherever they can do it"]], c.savings ?? "off");
   const checkFirst = select([["on", "On: check first, and ask me if something is missing"], ["off", "Off: start without checking"]], c.checkFirst === false ? "off" : "on");
@@ -6280,14 +6307,17 @@ function settingsView() {
         class: "form",
         onsubmit: (e) => (
           e.preventDefault(),
-          save({ agentName: name.value, model: ref(), effort: effort.value, savings: savings.value, checkFirst: checkFirst.value === "on", planFirst: planFirst.value, privacy: privacy.value, moveUp: moveUp.value === "on", approvalMode: mode.value, budget: { steps: Number(steps.value), spend: spend.value === "" ? null : Number(spend.value) }, monthlyBudget: monthlyAll.value === "" ? null : Number(monthlyAll.value) })
+          save({ agentName: name.value, effort: effort.value, savings: savings.value, checkFirst: checkFirst.value === "on", planFirst: planFirst.value, privacy: privacy.value, moveUp: moveUp.value === "on", approvalMode: mode.value, budget: { steps: Number(steps.value), spend: spend.value === "" ? null : Number(spend.value) }, monthlyBudget: monthlyAll.value === "" ? null : Number(monthlyAll.value) })
         ),
       },
       h("label", {}, "Name", name),
-      h("label", {}, "Model comes from", provider),
-      h("label", {}, "Model", modelName, claudeModels, providerModels),
-      modelNote,
-      h("p", { class: "note" }, "For a free local model, start a local model runner (Ollama, LM Studio, llama.cpp and others) and type the name of a model you have downloaded. Web search and connectors are Claude-only for now; other models read pages with the built-in page reader."),
+      // The team's model is chosen in one place, under Integrations → AI models; here it is shown, and checked.
+      h(
+        "div",
+        { class: "row wrap" },
+        h("span", { class: "grow" }, "Your team's model: ", h("b", {}, c.model.slice(c.model.indexOf("/") + 1)), ` · ${c.providers.find((p) => p.id === c.model.slice(0, c.model.indexOf("/")))?.name ?? ""}`),
+        h("button", { type: "button", class: "small", onclick: () => ((ui.integration = "ai-models"), go("integrations")) }, "Change it under Integrations → AI models"),
+      ),
       h("div", { class: "row" }, checkButton),
       checkBox,
       h("label", {}, "Effort, for Claude (higher thinks longer and costs more)", effort),

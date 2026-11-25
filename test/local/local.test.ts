@@ -2653,3 +2653,25 @@ test("a stuck task moves up only to a clearly stronger model the owner set up, n
   assert.equal(strongerThan(cfg, resolveModel(cfg, "local/qwen3:4b")), undefined);
   assert.equal(strongerThan({ ...cfg, moveUp: false }, haiku), undefined);
 });
+
+test("the owner writes, changes and renames a skill on the Skills page", async () => {
+  const server = (await import("node:http")).createServer(app.handle).listen(0, "127.0.0.1");
+  await new Promise((r) => server.once("listening", r));
+  const base = `http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}/api`;
+  const call = async (method: string, route: string, body?: unknown) => {
+    const r = await fetch(`${base}/${route}`, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+    return { status: r.status, data: await r.json() };
+  };
+  try {
+    assert.match((await call("PUT", "skills/", { name: "Invoice check", description: "", content: "Steps here." })).data.error, /when the skill is for/);
+    const made = (await call("PUT", "skills/", { name: "Invoice check", description: "Checking invoices at month end", content: "1. Open the ledger.\n2. Compare totals." })).data;
+    assert.equal(made.name, "invoice-check");
+    await call("PUT", "skills/invoice-check", { name: "Month-end invoice check", description: "Checking invoices at month end", content: "1. Open the ledger.\n2. Compare totals.\n3. Report." });
+    const names = (await call("GET", "skills")).data.map((s: { name: string }) => s.name);
+    assert.ok(names.includes("month-end-invoice-check"));
+    assert.ok(!names.includes("invoice-check"));
+    await call("DELETE", "skills/month-end-invoice-check");
+  } finally {
+    server.close();
+  }
+});
