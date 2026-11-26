@@ -219,12 +219,10 @@ async function boot() {
   state.me = await api("GET", "me").catch(() => null);
   if (state.me?.mustSetUpSecondStep) state.view = "security";
   if (!state.config.projects.includes(state.project)) state.project = "";
-  if (needsKey(state.config)) (state.view = "integrations"), (ui.integration = "ai-models");
   await Promise.all([loadCrew(), loadQuests(), refreshList(), loadTemplates(), loadSpaces(), loadOrgs()]);
+  // A first run (no AI model, or nobody on the team yet) opens as a short set-up chat, until it is finished or skipped.
+  if (!state.me?.mustSetUpSecondStep && state.view === "start" && setupWanted()) state.view = "setup";
   render();
-  try {
-    if (!localStorage.getItem("talqava.welcomed") && !state.me?.mustSetUpSecondStep && !document.querySelector("dialog[open]")) showWelcome();
-  } catch {}
   clearInterval(boot.timer);
   // One heartbeat keeps every part of the window current.
   boot.timer = setInterval(tick, 2000);
@@ -422,7 +420,7 @@ function renderRail() {
     h(
       "div",
       { class: "railgroup" },
-      item("start", "New", v === "start" || v === "chat", "Ask for anything, or start a task", "new"),
+      item("start", "New", v === "start" || v === "chat" || v === "setup", "Ask for anything, or start a task", "new"),
       inbox,
       place("tasks", "Tasks", "Every task, your projects, and work that repeats by itself", "tasks"),
       place("team", "Team", "Your agents, how they are organized, and ready-made additions", "team"),
@@ -489,7 +487,7 @@ function renderBody() {
   state.source = null;
   ui.log = null;
   ui.body.className = "body";
-  const views = { home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView, security: securityView, start: startView, office: officeView, slides: slidesView, docs: docsView, notes: notesView, sheets: sheetsView };
+  const views = { setup: setupView, home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView, security: securityView, start: startView, office: officeView, slides: slidesView, docs: docsView, notes: notesView, sheets: sheetsView };
   (views[state.view] || homeView)();
 }
 
@@ -8327,7 +8325,7 @@ async function startView() {
   const use = (x) => ((box.value = x.bot ? `@${x.bot.id} ${x.idea}` : x.idea), box.focus(), box.setSelectionRange(box.value.length, box.value.length));
   const steps = [
     ["1", "Connect an AI model", "Your agents think with it. Pick a service and paste its key, or use a free model on this computer.", !noModel, () => ((ui.integration = "ai-models"), go("integrations"))],
-    ["2", "Set up your team", "Say what kind of business you run; Talqava suggests who you need.", !noTeam, () => go("team")],
+    ["2", "Set up your team", "Say what your business does; Talqava suggests who you need.", !noTeam, () => ((ui.setup = { step: "mission" }), go("setup"))],
   ];
   fill(
     col,
@@ -8366,6 +8364,190 @@ async function startView() {
     h("p", { class: "note small askfoot" }, h("button", { class: "plain link", onclick: () => go("chat") }, "Your earlier chats"), " · ", h("button", { class: "plain link", onclick: () => showWelcome() }, "Show the welcome again")),
   );
   if (!noModel) box.focus();
+}
+
+/** Whether to open on the set-up chat: something is still missing, and the owner has not finished or skipped it. */
+function setupWanted() {
+  try {
+    if (localStorage.getItem("talqava.setup") === "done") return false;
+  } catch {}
+  return needsKey(state.config) || !activeOrg()?.members?.length;
+}
+
+/**
+ * First run as a short conversation: the assistant asks one thing at a time, with a small list to tick, Back and
+ * Continue. It is scripted here (no AI model is needed for it), and uses the same steps as the Team page: the
+ * mission, suggested positions, and adding the ones the owner keeps.
+ */
+async function setupView() {
+  ui.body.className = "body";
+  ui.log = null;
+  const col = h("div", { class: "setupchat" });
+  const side = h("aside", { class: "setupover", "aria-label": "Overview" });
+  fill(ui.body, h("main", { class: "setupmain" }, col, side));
+  if (!state.orgs) await loadOrgs();
+  if (!state.crew) await loadCrew();
+  if (state.view !== "setup") return;
+  const su = (ui.setup = { step: "start", mission: "", found: null, picked: new Set(), busy: false, error: "", said: [], ...(ui.setup ?? {}) });
+  su.said ??= [];
+  su.picked ??= new Set();
+  const first = state.me?.person ? state.me.person.name.split(" ")[0] : "";
+  const finish = (to = "start") => {
+    try {
+      localStorage.setItem("talqava.setup", "done");
+      localStorage.setItem("talqava.welcomed", "1");
+    } catch {}
+    ui.setup = null;
+    go(to);
+  };
+  const to = (step, said) => ((su.step = step), (su.error = ""), said ? su.said.push(said) : null, draw());
+  const back = (step) => (su.said.pop(), (su.step = step), (su.error = ""), draw());
+  const mark = () => h("span", { class: "setupmark", "aria-hidden": "true" });
+  const say = (...text) => h("div", { class: "setupsay" }, mark(), h("div", {}, h("b", {}, "Your assistant"), text.map((t) => h("p", {}, t))));
+  const mine = (text) => h("div", { class: "setupmine" }, text);
+  const card = (title, about, body, foot) => h("section", { class: "setupcard" }, h("div", { class: "setuphead" }, h("b", {}, title), about ? h("span", { class: "note small" }, about) : null), body, foot ? h("div", { class: "setupfoot" }, foot) : null);
+  const choice = (title, about, run, primary) => h("button", { class: `plain setupopt ${primary ? "first" : ""}`, onclick: run }, h("span", { class: "grow" }, h("b", {}, title), h("span", { class: "note small" }, about)), h("span", { "aria-hidden": "true" }, "→"));
+
+  const suggest = async () => {
+    const org = activeOrg();
+    su.busy = true;
+    draw();
+    try {
+      if (su.mission.trim() !== (org.mission ?? "")) {
+        await api("PATCH", `orgs/${org.id}`, { mission: su.mission.trim() });
+        await loadOrgs();
+      }
+      su.found = await api("POST", `orgs/${org.id}/suggest`, { mission: su.mission.trim() });
+      su.picked = new Set((su.found.positions ?? []).map((p) => p.bot));
+      su.busy = false;
+      to("pick", su.mission.trim());
+    } catch (err) {
+      su.busy = false;
+      su.error = err.message;
+      draw();
+    }
+  };
+  const add = async () => {
+    const org = activeOrg();
+    const keep = (su.found?.positions ?? []).filter((p) => su.picked.has(p.bot));
+    if (!keep.length) return;
+    su.busy = true;
+    draw();
+    try {
+      // A position whose manager was not kept reports to the owner.
+      for (const p of keep) await api("POST", `orgs/${org.id}/accept`, { bot: p.bot, group: p.group, reportsTo: keep.some((x) => x.bot === p.reportsTo) ? p.reportsTo : undefined });
+      await Promise.all([loadOrgs(), loadCrew()]);
+      su.busy = false;
+      to("done", `Add ${keep.length === 1 ? "this one" : `these ${keep.length}`}`);
+    } catch (err) {
+      su.busy = false;
+      su.error = err.message;
+      await Promise.all([loadOrgs(), loadCrew()]).catch(() => {});
+      draw();
+    }
+  };
+
+  function draw() {
+    const org = activeOrg();
+    const noModel = needsKey(state.config);
+    const team = org?.members ?? [];
+    const steps = [];
+    steps.push(say(`Hi${first ? ` ${first}` : ""}. I'm your assistant. This is where you and a team of AI agents get work done: you ask, they do it, and anything that sends, changes or deletes waits for your yes.`, "Two things get you going. Where do you want to start?"));
+    if (su.step === "start") {
+      steps.push(
+        card(
+          "Where do you want to start?",
+          "",
+          h(
+            "div",
+            { class: "setupopts" },
+            choice("Build my team", team.length ? `You have ${team.length} agent${team.length === 1 ? "" : "s"}. Add more.` : "Tell me what your business does and I'll suggest who you need.", () => to("mission", "Build my team"), !team.length),
+            choice("Connect an AI model", noModel ? "Your agents think with it. Needed before they can work." : "Connected. Change it or add another.", () => to("model", "Connect an AI model"), team.length && noModel),
+            choice("Just let me ask something", "Skip set-up and go to the ask box. You can come back from there.", () => finish("start")),
+          ),
+        ),
+      );
+    }
+    for (const text of su.said.slice(0, 1)) steps.push(mine(text));
+
+    if (su.step === "mission") {
+      const mission = h("input", { id: "setup-mission", value: su.mission || org?.mission || "", maxlength: 300, placeholder: "e.g. We bake bread and deliver it to cafés in town.", "aria-label": "What your business does" });
+      mission.addEventListener("input", () => (su.mission = mission.value));
+      mission.addEventListener("keydown", (e) => e.key === "Enter" && mission.value.trim() && ((su.mission = mission.value), suggest()));
+      su.mission = mission.value;
+      const quick = [["A shop or café", "We run a shop and serve customers in person."], ["Professional services", "We sell our time and advice to clients and bill them for it."], ["An online shop", "We sell products online and ship them to customers."], ["A nonprofit", "We raise funds and run programmes for our community."]];
+      steps.push(
+        say("What does your business do? One sentence is enough. Every agent is told it, and it shapes who I suggest."),
+        card(
+          "What your business does",
+          "",
+          h("div", { class: "setupbody" }, mission, h("div", { class: "ideachips" }, quick.map(([label, sentence]) => h("button", { type: "button", class: "ideachip", onclick: () => ((mission.value = sentence), (su.mission = sentence), mission.focus()) }, label))), su.error ? h("div", { class: "banner error" }, su.error) : null),
+          [h("span", { class: "note small grow" }, su.busy ? "Finding the right positions…" : "Nothing is added until you say so."), h("button", { class: "plain", onclick: () => back("start") }, "Back"), h("button", { class: "primary", disabled: su.busy, onclick: () => (mission.value.trim() ? suggest() : mission.focus()) }, "Continue")],
+        ),
+      );
+      setTimeout(() => mission.focus(), 0);
+    }
+    if (su.step === "pick" || su.step === "done") steps.push(mine(su.said[1] ?? su.mission));
+    if (su.step === "pick") {
+      const found = su.found?.positions ?? [];
+      const market = new Map((state.market ?? []).map((b) => [b.id, b]));
+      const crew = new Map((state.crew?.bots ?? []).map((b) => [b.id, b]));
+      steps.push(
+        say(found.length ? `For that, I'd start with ${found.length === 1 ? "this position" : `these ${found.length} positions`}. Untick any you don't want. You can add, remove and rearrange them later under Team.` : "I could not match positions to that. Try saying a little more about what you sell or do, or add agents yourself under Team."),
+        card(
+          "Who you need",
+          su.found?.intro ?? "",
+          h(
+            "div",
+            { class: "setuplist" },
+            found.map((p) => {
+              const bot = market.get(p.bot) ?? crew.get(p.bot);
+              const box = h("input", { type: "checkbox", id: `setup-pick-${p.bot}`, checked: su.picked.has(p.bot), onchange: () => (box.checked ? su.picked.add(p.bot) : su.picked.delete(p.bot), draw()) });
+              return h("label", { class: `setuprow ${su.picked.has(p.bot) ? "on" : ""}` }, box, bot ? keycap(bot, 26, "", bot.type) : null, h("span", { class: "grow" }, h("b", {}, p.title), h("span", { class: "note small" }, `${p.group} · ${p.why}`)));
+            }),
+            su.error ? h("div", { class: "banner error" }, su.error) : null,
+          ),
+          [h("span", { class: "note small grow" }, su.busy ? "Adding them…" : `${su.picked.size} chosen`), h("button", { class: "plain", onclick: () => back("mission") }, "Back"), h("button", { class: "primary", disabled: su.busy || !su.picked.size, onclick: add }, su.picked.size === 1 ? "Add this one" : `Add these ${su.picked.size}`)],
+        ),
+      );
+    }
+    if (su.step === "done") {
+      steps.push(mine(su.said[2] ?? "Add them"));
+      steps.push(
+        say(`Done. Your team has ${team.length} agent${team.length === 1 ? "" : "s"}: ${team.slice(0, 8).map((m) => m.title).join(", ")}${team.length > 8 ? " and more" : ""}.`, noModel ? "One thing is left before they can work: an AI model for them to think with." : "They are ready. Ask for what you need in your own words."),
+        card("What next?", "", h("div", { class: "setupopts" }, noModel ? choice("Connect an AI model", "Paste a key from a service such as Claude, or use a free model on this computer.", () => to("model", "Connect an AI model"), true) : choice("Give the first task", "Go to the ask box. I'll suggest three things to try.", () => finish("start"), true), noModel ? choice("Later", "Go to the ask box. It will remind you.", () => finish("start")) : choice("See my team", "Open the chart to rearrange it or set budgets.", () => finish("team")))),
+      );
+    }
+    if (su.step === "model") {
+      steps.push(
+        say(noModel ? "Your agents think with an AI model. Talqava does not come with one: you connect your own, so your work goes only where you choose." : "An AI model is connected. You can add another as a backup.", "There are two ways."),
+        card(
+          "Connect an AI model",
+          "",
+          h(
+            "div",
+            { class: "setupopts" },
+            choice("Use a service with a key", "Claude is the standard. You paste a key from your account with the service; it stays on this computer.", () => ((ui.integration = "ai-models"), go("integrations")), true),
+            choice("Use a free model on this computer", "Nothing leaves your computer. It is slower, and needs a recent computer with enough memory.", () => ((ui.integration = "ai-models"), go("integrations"))),
+          ),
+          [h("span", { class: "note small grow" }, "Both open the AI models page. Come back to New when it is connected."), h("button", { class: "plain", onclick: () => back(team.length && su.said.length > 1 ? "done" : "start") }, "Back")],
+        ),
+      );
+    }
+    fill(col, steps);
+    col.lastElementChild?.scrollIntoView?.({ block: "nearest" });
+    const line = (done, title, about) => h("div", { class: `setupline ${done ? "done" : ""}` }, h("span", { class: "setuptick", "aria-hidden": "true" }, done ? "✓" : ""), h("div", {}, h("b", {}, title), h("span", { class: "note small" }, about)));
+    fill(
+      side,
+      h("div", { class: "label" }, "Overview"),
+      line(team.length > 0, "Your team", team.length ? `${team.length} agent${team.length === 1 ? "" : "s"}` : "Nobody yet"),
+      line(!noModel, "An AI model", noModel ? "Not connected yet" : "Connected"),
+      line(false, "Your first task", "Ask for it in the box on New"),
+      h("p", { class: "note small" }, "When you start working, this is where you will see what is waiting on you, what is being worked on, and what is done."),
+      h("button", { class: "plain link small", onclick: () => finish("start") }, "Skip set-up"),
+    );
+  }
+  draw();
 }
 
 /** A card for a ready-made Office file: preview its summary, make a file from it. */

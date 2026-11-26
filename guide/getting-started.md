@@ -22,11 +22,22 @@ It installs Talqava and opens it in your web browser. Run the same line again la
 
 If you have been given the Talqava Mac app, copy it to your Applications folder. The first time, right-click it and choose **Open**.
 
+### The set-up chat
+
+The first time, Talqava opens on a short chat with your assistant. It asks one thing at a time:
+
+1. **Where do you want to start?** Choose **Build my team**, **Connect an AI model**, or **Just let me ask something** to skip.
+2. For your team, say what your business does in one sentence (or press one of the examples), and press **Continue**.
+3. Talqava lists the positions it suggests, all ticked. Untick any you do not want and press **Add these**. Nothing is added before that.
+4. It then points you to the one thing left, usually connecting an AI model.
+
+**Back** takes you one question back. The panel on the right shows what is done. **Skip set-up** closes the chat for good; you can still do each step yourself, as described below, and **Set up** on the home screen opens the team questions again while you have no team.
+
 ### 2. Connect an AI service
 
-The first time, Talqava asks for an AI model.
+Your agents need an AI model to think with.
 
-1. Open **Integrations** and choose **AI models**. (Talqava opens it for you the first time.) Pick a service: **Anthropic (Claude)** is the standard and works best for agent work.
+1. Open **More**, then **Integrations**, and choose **AI models**. (The set-up chat takes you there.) Pick a service: **Anthropic (Claude)** is the standard and works best for agent work.
 2. Press **Connect**, follow the link to get a key from that company's website, paste it in, and press **Connect**.
 3. Choose a model and press **Use for my team**.
 
@@ -34,7 +45,7 @@ Prefer something free and private? Install Ollama or LM Studio, download a model
 
 ### 3. Build your organization
 
-1. Open **Organization**. At first it is just you.
+1. The set-up chat does this with you. To do it yourself, open **Team**, then **Organization**. At first it is just you.
 2. Under **What is your organization for?**, write your mission in one sentence, for example "We sell handmade furniture online and deliver across the UK." Every agent is told it.
 3. Press **Suggest positions**, then accept the ones you want. Nothing is added until you choose it.
 4. Or drag a role or a ready-made team onto the chart, or add agents from the **Marketplace**.
@@ -43,7 +54,7 @@ Start with two or three positions. You can always add more. See [Organization](o
 
 ### 4. Give your first task
 
-1. Open **Tasks** and press **+ New task**. (You can also give a task from **Agents**, or to one agent with **Give a task**.)
+1. On **New**, type **@**, the agent's name and what you want, and press Enter. Or open **Tasks** and press **+ New task**, which has more options. (You can also give a task from **Agents**, or to one agent with **Give a task**.)
 2. Under **Task**, write what you want in one line, for example "Find ten wholesale bakeries near us".
 3. Under **Details**, say what a good result looks like.
 4. Choose who to **Assign to** and the **Priority**, then press **Create task**.
