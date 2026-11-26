@@ -1990,6 +1990,10 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .briefgallery { display: grid; gap: 10px; margin-bottom: 8px; }
 .briefgallery h2 { margin: 0; }
 .briefgallery .briefown { margin-top: 18px; }
+.briefgroup { border-top: 1px solid var(--line); padding: 8px 0 4px; }
+.briefgroup > summary { cursor: pointer; padding: 4px 0 8px; }
+.briefneeds { color: var(--warn, #ffb020); }
+:root[data-theme="light"] .briefneeds { color: #8a5a00; }
 .briefgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
 .briefcard { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 14px; display: grid; gap: 6px; align-content: start; }
 .briefcard.on { border-color: var(--accent-ink, var(--accent)); background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }

@@ -6852,8 +6852,10 @@ function briefingGallery(host, data, col) {
       { class: `briefcard ${on?.enabled ? "on" : ""}` },
       h("div", { class: "brieftop" }, h("b", { class: "grow" }, b.name), on ? h("span", { class: `briefstate ${on.enabled ? "on" : ""}` }, on.enabled ? "On" : "Paused") : null),
       h("p", { class: "briefabout" }, b.about),
-      h("p", { class: "note small" }, `${b.when} · ${b.kind === "free" ? "Free: built from your own tasks" : "Researched with your AI model, usually a few cents each time"}${on && b.sender ? ` · sent by the ${b.sender.title}` : ""}`),
-      on && b.ask?.value ? h("p", { class: "note small" }, `Watching: ${b.ask.value}`) : null,
+      h("p", { class: "note small" }, `${b.when} · ${b.kind === "free" ? "Free: uses no AI model" : "Uses your AI model, usually a few cents each time"}${on && b.sender ? ` · sent by the ${b.sender.title}` : ""}`),
+      b.needs?.length ? h("p", { class: `note small ${b.ready ? "" : "briefneeds"}` }, b.ready ? `Reads ${b.needs.filter((n) => n.connected).map((n) => n.name).join(" and ")}` : `Needs ${b.needs.map((n) => n.name).join(" or ")}`) : null,
+      b.review ? h("p", { class: "note small" }, "Drafts for you; nothing is sent. It waits for your yes.") : null,
+      on && b.ask?.value && !b.ask.list ? h("p", { class: "note small" }, `Watching: ${b.ask.value}`) : null,
       h(
         "div",
         { class: "row wrap brieffoot" },
@@ -6863,16 +6865,25 @@ function briefingGallery(host, data, col) {
               h("button", { class: "small", title: "Send one now", onclick: () => act(() => api("POST", `jobs/${on.job}/run`, {}), "One is on its way to your Inbox.") }, "Send one now"),
               h("button", { class: "plain link small", onclick: () => confirm(`Switch ${b.name} off for good? You can switch it on again later.`) && act(() => api("DELETE", `jobs/briefings/${b.id}`), `${b.name} is switched off.`) }, "Switch off"),
             ]
-          : h("button", { class: "small primary", onclick: () => briefingOn(b).then((ok) => ok && again()) }, "Switch on"),
+          : b.ready
+            ? h("button", { class: "small primary", onclick: () => briefingOn(b).then((ok) => ok && again()) }, "Switch on")
+            : h("button", { class: "small", onclick: () => ((ui.integration = `service:${b.needs[0].id}`), go("integrations")) }, `Connect ${b.needs.length === 1 ? b.needs[0].name : "a service"} first`),
       ),
     );
   };
-  const groups = [...new Set(data.briefings.map((b) => b.group))];
+  // The free ones first: they work for everyone on day one. A group opens by itself when something in it is on.
+  const order = ["Your own work", "The outside world", "Money", "Customers", "Marketing", "Running the business", "People and renewals"];
+  const groups = [...new Set(data.briefings.map((b) => b.group))].sort((x, y) => order.indexOf(x) - order.indexOf(y));
+  const onCount = data.briefings.filter((b) => b.on?.enabled).length;
   fill(
     host,
     h("h2", {}, "Start a briefing"),
-    h("p", { class: "note" }, "Ready-made reports your team sends to your Inbox. Switch one on with one press; pause it any time."),
-    groups.map((g) => [h("div", { class: "label" }, g), h("div", { class: "briefgrid" }, data.briefings.filter((b) => b.group === g).map(card))]),
+    h("p", { class: "note" }, `Ready-made reports your team sends to your Inbox. Switch one on with one press; pause it any time.${onCount ? ` ${onCount} ${onCount === 1 ? "is" : "are"} on.` : ""}`),
+    groups.map((g, i) => {
+      const mine = data.briefings.filter((b) => b.group === g);
+      const live = mine.filter((b) => b.on).length;
+      return h("details", { class: "briefgroup", open: i < 2 || live > 0 }, h("summary", {}, h("b", {}, g), h("span", { class: "note small" }, ` · ${mine.length}${live ? ` · ${live} on` : ""}`)), h("div", { class: "briefgrid" }, mine.map(card)));
+    }),
     data.planned?.length ? h("p", { class: "note small" }, `Planned, once their service is connected: ${data.planned.join("; ")}.`) : null,
     h("h2", { class: "briefown" }, "Your own routines"),
   );
@@ -6882,27 +6893,29 @@ function briefingGallery(host, data, col) {
 async function briefingOn(b) {
   if (!b.sender) return (toast("A briefing is sent by someone on your team. Set up your team first, under Team."), false);
   const org = activeOrg();
-  const topic = b.ask ? h("input", { id: "briefing-topic", value: b.ask.value || "", placeholder: b.ask.placeholder, maxlength: 300, "aria-label": b.ask.label }) : null;
+  const topic = !b.ask ? null : b.ask.list ? h("textarea", { id: "briefing-topic", rows: 5, placeholder: b.ask.placeholder, maxlength: 4000, "aria-label": b.ask.label }, b.ask.value || "") : h("input", { id: "briefing-topic", value: b.ask.value || "", placeholder: b.ask.placeholder, maxlength: 300, "aria-label": b.ask.label });
   const fact = (label, value) => h("div", { class: "brieffact" }, h("span", {}, label), h("b", {}, value));
   const body = h(
     "div",
     { class: "composeform briefdialog" },
     h("p", { class: "note" }, b.about),
-    topic ? h("label", {}, b.ask.label, topic, h("span", { class: "note small" }, org.mission ? "Leave it empty to follow your mission: it watches your own industry and market." : "Say it in a few words.")) : null,
+    topic ? h("label", {}, b.ask.label, topic, h("span", { class: "note small" }, b.ask.list ? "A name, a comma, then the date. You can change the list later by switching it off and on again." : b.ask.required ? "Say it in a few words." : org.mission ? "Leave it empty to follow your mission." : "Say it in a few words.")) : null,
     h(
       "div",
       { class: "brieffacts" },
       fact("Arrives", b.when),
-      fact("Where", "Your Inbox, under Updates"),
+      fact("Where", b.review ? "Your Inbox, under Waiting on you" : "Your Inbox, under Updates"),
+      b.needs?.length ? fact("Reads", b.needs.filter((n) => n.connected).map((n) => n.name).join(" and ")) : null,
       fact("Sent by", `Your ${b.sender.title}`),
-      fact("Costs", b.kind === "free" ? "Nothing: it is built from your own tasks" : "A few cents each time, from your AI model"),
-      fact("Can it change anything?", b.kind === "free" ? "No. It only reads your tasks." : "No. It searches the web and writes to you."),
-      b.grants?.length ? fact("Also", `Switches on web search for your ${b.sender.title}`) : null,
+      fact("Costs", b.kind === "free" ? "Nothing: it uses no AI model" : "A few cents each time, from your AI model"),
+      fact("Can it change anything?", b.kind === "free" ? "No. It only reads what Talqava holds." : b.review ? "No. It drafts; you decide what is sent." : "No. It reads and writes to you."),
+      b.grants?.length ? fact("Also", `Lets your ${b.sender.title} ${b.grants.map((g) => (g === "web" ? "search the web" : g === "connectors" ? "use your connected services" : g)).join(" and ")}`) : null,
     ),
-    h("p", { class: "note small" }, "The first one arrives now, so you can see it."),
+    h("p", { class: "note small" }, b.kind === "free" && b.ask?.list ? "It writes to you only when something is near; otherwise it stays quiet." : "The first one arrives now, so you can see it."),
   );
   const got = await libDialog(b.name, body, [["Switch on", () => ({ topic: topic?.value.trim() ?? "" }), true]]);
   if (!got) return false;
+  if (b.ask?.required && !got.topic) return (toast(`${b.name} needs an answer first.`), false);
   try {
     const r = await api("POST", `jobs/briefings/${b.id}/on`, { topic: got.topic });
     toast(r.problem ? `${b.name} is on, but the first one could not start: ${r.problem}` : `${b.name} is on. The first one is on its way to your Inbox.`);
