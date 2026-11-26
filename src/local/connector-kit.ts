@@ -139,6 +139,12 @@ export interface BrowserSignIn {
   tokenStyle?: "form" | "basic" | "json";
   /** Fields of the token answer the service's own code needs, kept with the connection (Pipedrive's api_domain). */
   keep?: string[];
+  /**
+   * For a service that sends the browser back only to an https address (Slack, Calendly): an app on this computer
+   * cannot receive that, so the sign-in works only through Talqava's sign-in service, with the app Talqava's maker
+   * registered. Until that app exists the service is offered with a key only.
+   */
+  relayOnly?: boolean;
 }
 /** An address with each {key} replaced by the value asked for it. */
 const filled = (address: string, values: Record<string, string>) => address.replace(/\{(\w+)\}/g, (_m, k) => encodeURIComponent(values[k] ?? ""));
@@ -226,7 +232,7 @@ export function listServices() {
     steps: d.steps,
     docs: d.docs,
     fields: d.fields,
-    browser: d.browser ? { secret: d.browser.kind === "fragment" ? "never" : d.browser.secret, appSteps: d.browser.appSteps, scopes: d.browser.scopes, idLabel: d.browser.idLabel ?? "Client ID", oneClick: Boolean(builtInApp(d) || relayApp(d)), viaTalqava: !builtInApp(d) && Boolean(relayApp(d)), ask: d.browser.ask ?? [] } : null,
+    browser: d.browser && !(d.browser.relayOnly && !relayApp(d)) ? { secret: d.browser.kind === "fragment" ? "never" : d.browser.secret, appSteps: d.browser.appSteps, scopes: d.browser.scopes, idLabel: d.browser.idLabel ?? "Client ID", oneClick: Boolean(builtInApp(d) || relayApp(d)), viaTalqava: !builtInApp(d) && Boolean(relayApp(d)), ask: d.browser.ask ?? [] } : null,
     triggers: (d.triggers ?? []).map((t) => ({ name: t.name, summary: t.summary, param: t.param ?? null })),
     watches: watches().filter((w) => all.some((c) => c.id === w.connection && c.service === d.id)).map(({ seen: _s, ...w }) => w),
     actions: d.actions.map((a) => ({ name: a.name, kind: a.kind, summary: a.alwaysAsk ? `${a.summary} (always asks you first)` : a.summary })),
@@ -521,10 +527,10 @@ const b64url = (b: Buffer) => b.toString("base64").replace(/\+/g, "-").replace(/
 /** Starts a browser sign-in: returns the address to open. `redirect` is this app's own address for the answer. */
 export function startBrowserSignIn(id: string, input: { clientId?: unknown; clientSecret?: unknown; rule?: unknown; values?: unknown }, redirect: string): { url: string } {
   const def = serviceOf(id);
-  if (!def.browser) throw new Error(`${def.name} connects with a key, not a browser sign-in.`);
+  if (!def.browser || (def.browser.relayOnly && !relayApp(def))) throw new Error(`${def.name} connects with a key, not a browser sign-in.`);
   if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(redirect) && !/^https:\/\//.test(redirect)) throw new Error("Open Talqava on this computer to sign in to a service.");
   // The owner's own app first; else an app of Talqava's that needs no secret; else one whose secret Talqava's sign-in service keeps.
-  const own = String(input.clientId ?? "").trim();
+  const own = def.browser.relayOnly ? "" : String(input.clientId ?? "").trim();
   const viaRelay = !own && !builtInApp(def) && Boolean(relayApp(def));
   const clientId = own || builtInApp(def) || relayApp(def);
   const clientSecret = viaRelay ? "" : String(input.clientSecret ?? "").trim();

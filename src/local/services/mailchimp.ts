@@ -3,6 +3,13 @@
 // lists, list members, search-members and campaigns. A key ends in its data centre (such as -us21); the address for
 // that data centre is tried first and Mailchimp's general address second, and whichever answers is kept. Talqava does
 // not create or send campaigns.
+//
+// Browser sign-in, from mailchimp.com/developer/marketing/guides/access-user-data-oauth-2 (read November 2026): a
+// code is exchanged at login.mailchimp.com/oauth2/token with the app's ID and secret in the form; there are no
+// scopes and no PKCE; the token does not run out and there is nothing to renew. An https return address is
+// recommended, not required (the guide's own example is an http address on 127.0.0.1). Which data centre the account
+// is on is asked of login.mailchimp.com/oauth2/metadata ("Authorization: OAuth <token>", answer field dc); an older
+// page describes that call and the current ones do not, so the general address is tried when it does not answer.
 import crypto from "node:crypto";
 import { call, count, plain, query, type Connection, type ServiceDef } from "../connector-kit.ts";
 
@@ -10,6 +17,11 @@ const hosts = (key: string): string[] => {
   if (process.env.TALQAVA_MAILCHIMP_API) return [process.env.TALQAVA_MAILCHIMP_API.replace(/\/+$/, "")];
   const dc = /-([a-z]{2,4}\d{1,3})$/.exec(key)?.[1];
   return [...(dc ? [`https://${dc}.api.mailchimp.com/3.0`] : []), "https://api.mailchimp.com/3.0"];
+};
+/** After a browser sign-in: the data centre Mailchimp names for the account, as the end of a key would. Nothing when it does not say. */
+const centreOf = async (token: string): Promise<string> => {
+  const meta = await call<{ dc?: string }>(process.env.TALQAVA_MAILCHIMP_METADATA_API || "https://login.mailchimp.com/oauth2/metadata", { name: "Mailchimp", headers: { authorization: `OAuth ${token}` } }).catch(() => null);
+  return /^[a-z]{2,4}\d{1,3}$/.test(String(meta?.dc)) ? `-${meta!.dc}` : "";
 };
 const api = <T = any>(c: Pick<Connection, "values">, path: string, method = "GET", body?: unknown) => call<T>(`${c.values.base}${path}`, { name: "Mailchimp", method, headers: { authorization: `Bearer ${c.values.key}` }, body });
 const listId = (v: unknown) => {
@@ -32,9 +44,22 @@ export const mailchimp: ServiceDef = {
   ],
   docs: "https://mailchimp.com/developer/marketing/api-concepts/authentication/",
   fields: [{ key: "key", label: "API key", secret: true }],
+  browser: {
+    authUrl: "https://login.mailchimp.com/oauth2/authorize",
+    tokenUrl: "https://login.mailchimp.com/oauth2/token",
+    scopes: [],
+    secret: "required",
+    pkce: false,
+    tokenKey: "key",
+    appSteps: [
+      "In Mailchimp, click your profile icon, choose Profile, then open Extras › Registered apps and press Register An App.",
+      "Name it Talqava, fill in your company's details, and enter this Redirect URI exactly: {redirect}",
+      "Press Create. Copy the Client ID and Client Secret, paste them below and press the button. Mailchimp shows the secret only once.",
+    ],
+  },
   async check(values) {
     let last: unknown;
-    for (const base of hosts(values.key)) {
+    for (const base of hosts(values.access_token ? await centreOf(values.access_token) : values.key)) {
       try {
         const root = await api<{ account_name: string }>({ values: { ...values, base } }, "/");
         return { label: root.account_name || "Mailchimp account", values: { base } };

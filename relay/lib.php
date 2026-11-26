@@ -93,15 +93,16 @@ function tokenAddress(array $s, mixed $asked): string
 
 /**
  * Asks the service for tokens and passes its answer back. Services differ in how they want the app's secret:
- * "form" (in the form, the usual), "basic" (as a Basic sign-in header) or "json" (in a JSON body).
+ * "form" (in the form, the usual), "basic" (as a Basic sign-in header), "basic_with_id" (the header, and the app's
+ * ID in the form as well, as Calendly asks) or "json" (in a JSON body).
  */
 function exchange(array $s, string $url, array $fields): never
 {
     $style = $s['style'] ?? 'form';
     $headers = ['Accept: application/json', 'User-Agent: Talqava sign-in service'];
-    if ($style === 'basic') {
+    if ($style === 'basic' || $style === 'basic_with_id') {
         $headers[] = 'Authorization: Basic ' . base64_encode($s['client_id'] . ':' . $s['client_secret']);
-        $body = http_build_query($fields);
+        $body = http_build_query($style === 'basic_with_id' ? $fields + ['client_id' => $s['client_id']] : $fields);
         $headers[] = 'Content-Type: application/x-www-form-urlencoded';
     } elseif ($style === 'json') {
         $body = json_encode($fields + ['client_id' => $s['client_id'], 'client_secret' => $s['client_secret']]);
