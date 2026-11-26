@@ -130,6 +130,8 @@ export interface BrowserSignIn {
    * pattern, because {key} in authUrl and tokenUrl is replaced by it. They are kept with the connection.
    */
   ask?: SignInField[];
+  /** For a service whose renewal call also wants the address the sign-in came back to (GitLab's examples send it). */
+  renewWithRedirect?: boolean;
 }
 /** An address with each {key} replaced by the value asked for it. */
 const filled = (address: string, values: Record<string, string>) => address.replace(/\{(\w+)\}/g, (_m, k) => encodeURIComponent(values[k] ?? ""));
@@ -432,7 +434,11 @@ export async function call<T = any>(url: string, opts: CallOptions): Promise<T> 
     data = text ? JSON.parse(text) : null;
   } catch {}
   if (res.ok) return (opts.text ? text.slice(0, opts.text) : data) as T;
-  const said = String(data?.message ?? data?.error?.message ?? data?.detail ?? data?.error_description ?? (typeof data?.error === "string" ? data.error : "") ?? "")
+  // Some services answer with the fields at fault as an object ({"title": ["is too long"]}): say them in words.
+  const fields = data?.message && typeof data.message === "object" ? Object.entries(data.message).map(([k, v]) => `${k} ${Array.isArray(v) ? v.join(", ") : String(v)}`).join("; ") : "";
+  // Xero lists what is wrong with each record under Elements.
+  const faults = Array.isArray(data?.Elements) ? data.Elements.flatMap((e: any) => (Array.isArray(e?.ValidationErrors) ? e.ValidationErrors.map((v: any) => String(v?.Message ?? "")) : [])).filter(Boolean).slice(0, 4).join("; ") : "";
+  const said = String(fields || faults || (data?.message ?? data?.Message ?? data?.error?.message ?? data?.detail ?? data?.error_description ?? (typeof data?.error === "string" ? data.error : "") ?? ""))
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim()
@@ -528,7 +534,7 @@ export async function finishBrowserSignIn(state: unknown, code: unknown, problem
   const t = await tokenCall(def, { grant_type: "authorization_code", code: String(code), redirect_uri: p.redirect, client_id: p.clientId, ...(def.browser!.pkce === false ? {} : { code_verifier: p.verifier }), ...(p.clientSecret ? { client_secret: p.clientSecret } : {}) }, p.asked);
   // A token with no stated lifetime and nothing to renew it with does not run out (the service says so by leaving both out).
   const lasting = !t.expires_in && !t.refresh_token;
-  const values: Record<string, string> = { ...p.asked, client_id: p.clientId, ...(p.clientSecret ? { client_secret: p.clientSecret } : {}), access_token: t.access_token, ...(def.browser!.tokenKey ? { [def.browser!.tokenKey]: t.access_token } : {}), ...(t.refresh_token ? { refresh_token: t.refresh_token } : {}), ...(lasting ? {} : { expires_at: String(Date.now() + (Number(t.expires_in) || 3600) * 1000) }) };
+  const values: Record<string, string> = { ...p.asked, client_id: p.clientId, ...(p.clientSecret ? { client_secret: p.clientSecret } : {}), access_token: t.access_token, ...(def.browser!.renewWithRedirect ? { redirect_uri: p.redirect } : {}), ...(def.browser!.tokenKey ? { [def.browser!.tokenKey]: t.access_token } : {}), ...(t.refresh_token ? { refresh_token: t.refresh_token } : {}), ...(lasting ? {} : { expires_at: String(Date.now() + (Number(t.expires_in) || 3600) * 1000) }) };
   return signedIn(def, p, values);
 }
 
@@ -578,7 +584,7 @@ async function fresh(c: Connection): Promise<Connection> {
   const work = (async () => {
     let t;
     try {
-      t = await tokenCall(def, { grant_type: "refresh_token", refresh_token: c.values.refresh_token, client_id: c.values.client_id, ...(c.values.client_secret ? { client_secret: c.values.client_secret } : {}) }, c.values);
+      t = await tokenCall(def, { grant_type: "refresh_token", refresh_token: c.values.refresh_token, client_id: c.values.client_id, ...(def.browser!.renewWithRedirect && c.values.redirect_uri ? { redirect_uri: c.values.redirect_uri } : {}), ...(c.values.client_secret ? { client_secret: c.values.client_secret } : {}) }, c.values);
     } catch (err) {
       // The service no longer honours the sign-in (revoked, or too old): the owner has to sign in again.
       if ((err as Error).message.includes(" answered 400") || (err as { refused?: boolean }).refused) {
