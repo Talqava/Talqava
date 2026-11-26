@@ -165,6 +165,15 @@ A page made inside a sensitive page starts at the same level. Tables follow thei
 2. Type one site on each line, such as `example.com`, and press **Save the list**. A site covers its pages and sub-sites.
 3. An agent that tries another site is refused, told not to look for a way round, and the attempt appears under **Refused by these rules**.
 
+### Require two administrators for security changes
+
+1. Open **Security › People and sign-in**. You need at least two people who are owner or administrator.
+2. Tick **Two administrators must agree on security changes**.
+
+From then on, when one administrator changes people, roles, sign-in rules, agent guardrails, sensitive-information rules, retention, backups or where the audit record is sent, the change does not happen yet. It appears for the other administrators under **Security changes waiting for a second administrator**, where a different administrator presses **Approve** (the change is then made) or **Decline**. The person who asked can **Withdraw** it.
+
+A waiting change lapses after a day or when Talqava restarts, and what it holds (such as a new password) is never written to disk while it waits. Switching this rule off also needs a second administrator. Asking, approving and declining are all in the audit log.
+
 ### Have your company directory add and remove people (directory sync)
 
 Use this when Talqava runs where your identity provider can reach it over the network. A copy on one computer cannot be reached by a directory.

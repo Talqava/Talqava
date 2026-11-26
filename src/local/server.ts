@@ -53,6 +53,7 @@ import { securityOverview, securityReport } from "./securitycenter.ts";
 import { backupStatus, makeBackup, nightlyBackup, restoreTo, setBackup, testRestore } from "./backup.ts";
 import { finishSso, setSso, sso, ssoPublic, startSso } from "./sso.ts";
 import { disableScim, enableScim, handleScim, scimAuthorized, scimSettings } from "./scim.ts";
+import { changes, type WaitingChange } from "./twoadmins.ts";
 import { RETENTION_CHOICES, findPerson, retention, retentionFrom, sweep } from "./retention.ts";
 import { REVIEW_EVERY_DAYS, alerts, feedStatus, reviews, setFeed, startAuditFeed } from "./auditfeed.ts";
 import { LEVELS, LEVEL_WORDS, RECOMMENDED, WHERE, WHERE_WORDS, describePolicy, higherLevel, policy, policyFrom } from "./sensitivity.ts";
@@ -758,12 +759,13 @@ function chartSize(seats: ReturnType<typeof seatsFor>) {
 }
 
 // ---------- routes ----------
-async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
+async function api(req: IncomingMessage, res: ServerResponse, url: URL, approved?: WaitingChange): Promise<unknown> {
   const parts = url.pathname.split("/").filter(Boolean).slice(1); // after "api"
   const route = `${req.method} ${parts[0] || ""}`;
   // A file dropped into the library arrives as it is, not as JSON; it is read after the sign-in check below.
   const upload = (route === "POST library" && parts[1] === "upload") || (route === "POST workspace" && parts[1] === "import-file");
-  const body = upload ? {} : ["POST", "PUT", "PATCH"].includes(req.method ?? "") ? await readBody(req) : {};
+  // A change a second administrator just approved is carried out with what the first one asked for.
+  const body = approved ? (approved.body as any) : upload ? {} : ["POST", "PUT", "PATCH"].includes(req.method ?? "") ? await readBody(req) : {};
   (req as { auditBody?: unknown }).auditBody = route === "POST login" || parts[0] === "me" || parts[0] === "people" || parts[0] === "security-ops" ? { name: body.name, role: body.role } : body;
 
   const secureCookie = req.headers["x-forwarded-proto"] === "https" ? "; Secure" : "";
@@ -886,6 +888,16 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (sensitive && !people.confirmedRecently(cookieOf(req))) throw Object.assign(new HttpError(403, "Type your password again to make this change."), { confirm: true });
     if (people.mustSetUpSecondStep(me) && !["me", "state", "people"].includes(area)) throw new HttpError(403, "Set up your second step first: your organization requires it. Open Security.");
     if (!mayDo(me.role, req.method ?? "GET", area, parts[1] ?? "")) throw new HttpError(403, `Your role (${ROLE_WORDS[me.role].name}) does not allow that. Ask an administrator.`);
+    // Where two administrators must agree, a security change waits here until a different one approves it.
+    if (sensitive && !approved && people.twoAdmins()) {
+      const said = describeRequest(req.method ?? "", parts, { name: body.name, role: body.role }, url);
+      const change = await tryIt(() => changes.ask({ id: me.id, name: me.name }, req.method ?? "", `${url.pathname.replace(/^\/api\//, "")}${url.search}`, body, said ? `${said.action}${said.detail ? ` (${said.detail})` : ""}` : `${req.method} ${parts.slice(0, 2).join(" ")}`));
+      audit({ actor: `person:${me.id}`, actorName: me.name, kind: "security", action: "Asked for a security change that needs a second administrator", detail: change.summary });
+      (req as { auditBody?: unknown }).auditBody = undefined;
+      (req as { skipAudit?: boolean }).skipAudit = true;
+      return send(res, 202, { waiting: true, id: change.id, message: "This change needs a second administrator. It is waiting under Security › People and sign-in, and takes effect when another administrator approves it." });
+    }
+    if (approved) audit({ actor: `person:${me.id}`, actorName: me.name, kind: "security", action: "Approved a security change asked for by another administrator", detail: `${approved.summary} · asked for by ${approved.by.name}` });
   }
   // A legal hold: nothing is deleted while it is on, by anyone.
   if (req.method === "DELETE" && retention().legalHold && parts[0] !== "people") throw new HttpError(403, "A legal hold is on, so nothing can be deleted. An owner or administrator can turn it off under Security.");
@@ -931,6 +943,22 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   if (parts[0] === "security-ops") {
     const by = me ? `${me.name} (${ROLE_WORDS[me.role].name})` : "You";
     if (me && req.method !== "GET" && me.role !== "owner" && me.role !== "admin") throw new HttpError(403, `Your role (${ROLE_WORDS[me.role].name}) does not allow that. Ask an administrator.`);
+    // Security changes waiting for a second administrator: see them, approve one (which carries it out), or decline it.
+    if (parts[1] === "changes") {
+      if (route === "GET security-ops") return send(res, 200, { changes: me && (me.role === "owner" || me.role === "admin") ? changes.list() : [] });
+      if (!me) throw new HttpError(400, "People are not set up.");
+      if (req.method === "POST" && parts[2] && parts[3] === "decline") {
+        const c = await tryIt(() => changes.decline(parts[2]));
+        audit({ actor: `person:${me.id}`, actorName: me.name, kind: "security", action: "Declined a security change", detail: `${c.summary} · asked for by ${c.by.name}` });
+        return send(res, 200, { ok: true });
+      }
+      if (req.method === "POST" && parts[2] && parts[3] === "approve") {
+        if (!people.confirmedRecently(cookieOf(req))) throw Object.assign(new HttpError(403, "Type your password again to make this change."), { confirm: true });
+        const change = await tryIt(() => changes.approve(parts[2], me));
+        req.method = change.method;
+        return api(req, res, new URL(`/api/${change.path}`, "http://talqava.local"), change);
+      }
+    }
     if (route === "GET security-ops" && parts[1] === "backup") return send(res, 200, backupStatus());
     if (req.method === "PUT" && parts[1] === "backup") return send(res, 200, await tryIt(() => setBackup(body)));
     if (req.method === "POST" && parts[1] === "backup" && parts[2] === "now") return send(res, 200, await tryIt(() => ((r) => ({ name: path.basename(r.file), files: r.files, bytes: r.bytes, skipped: r.skipped }))(makeBackup())));
@@ -1891,7 +1919,8 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
       const record = req.method !== "GET" && req.method !== "OPTIONS" && parts[0] !== "audit";
       try {
         await api(req, res, url);
-        if (record) {
+        // A change set aside for a second administrator has not happened yet, so it is not logged as done.
+        if (record && !(req as { skipAudit?: boolean }).skipAudit) {
           const d = describeRequest(req.method ?? "", parts, (req as { auditBody?: unknown }).auditBody ?? {}, url);
           if (d) audit({ ...requestActor(req), ...d, ok: res.statusCode < 400 });
         }
