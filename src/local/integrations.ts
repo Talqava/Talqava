@@ -1,4 +1,4 @@
-// Integrations: the outside tools an organization's agents work with. Each
+// Connections: the outside tools an organization's agents work with. Each
 // one has a category, a status the person can read at a glance, and its own
 // set-up. Git is the first: repositories on this computer that agents may
 // work on, each task in its own branch and working copy, with GitHub
@@ -110,7 +110,7 @@ export async function gitIntegration() {
   };
 }
 
-/** The list for the Integrations page: one line per integration. */
+/** The list for the Connections page: one line per integration. */
 export async function listIntegrations(): Promise<{ categories: string[]; integrations: IntegrationInfo[] }> {
   const git = await gitIntegration();
   const { mcpIntegration } = await import("./mcpintegration.ts");

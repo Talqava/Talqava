@@ -37,7 +37,7 @@ The first time, Talqava opens on a short chat with your assistant. It asks one t
 
 Your agents need an AI model to think with.
 
-1. Open **More**, then **Integrations**, and choose **AI models**. (The set-up chat takes you there.) Pick a service: **Anthropic (Claude)** is the standard and works best for agent work.
+1. Open **More**, then **Connections**, and choose **AI models**. (The set-up chat takes you there.) Pick a service: **Anthropic (Claude)** is the standard and works best for agent work.
 2. Press **Connect**, follow the link to get a key from that company's website, paste it in, and press **Connect**.
 3. Choose a model and press **Use for my team**.
 
@@ -73,7 +73,7 @@ That's it: you have run your first task. From here, add more agents, set budgets
 
 The menu on the left has five places and **More**. It follows one idea: **you ask, agents do the work, you stay in control.** The first time you open Talqava, a short welcome says the same; **Show the welcome again** at the bottom of the home screen brings it back.
 
-Each place holds a few pages, shown as tabs across the top. Talqava remembers the tab you last used in each place. When a guide says "open **Integrations**" or any other page, find its place in the list below, or type the page's name in the box at the top.
+Each place holds a few pages, shown as tabs across the top. Talqava remembers the tab you last used in each place. When a guide says "open **Connections**" or any other page, find its place in the list below, or type the page's name in the box at the top.
 
 In a narrow window or on a phone, the menu is behind the **☰** button at the top left, and pages with two columns stack into one.
 
@@ -100,9 +100,9 @@ The box at the top finds anything: files by name or by the words inside, tasks, 
 **Right now**: Under the five places, the menu lists up to five things in motion: an amber mark for what is waiting on you, green for what is being worked on. Click one to open it.
 
 **More**, at the bottom. Its tabs:
-- **Integrations**: connect AI models, Git and GitHub, other services, and keys.
+- **Connections**: connect AI models, Git and GitHub, other services, and keys.
 - **Security**: who can open Talqava and what each person may do, which AI services may receive sensitive information, rules every agent must follow, alerts, and backups. See [Security](security.md).
-- **Audit log**: a full record of every operation, by you and by each agent, sealed so that changes to it show.
+- **Activity log**: a full record of every operation, by you and by each agent, sealed so that changes to it show.
 - **Settings**: approvals, budgets, cost saving, privacy and how Talqava looks.
 
 **Help**: Opens these guides, at the page that explains the screen you are on.
@@ -113,7 +113,7 @@ The box at the top finds anything: files by name or by the words inside, tasks, 
 - **Set budgets.** Every task has a budget ($1 and 40 steps unless you change it). Give each agent and group a monthly budget too: at 80% you get a warning, at 100% no new work starts.
 - **Add a backup model** from a second AI service, so work carries on if one is down.
 - **Share only what agents need.** Keep sensitive files private in the Library.
-- **Glance at the Audit log** now and then to see what your agents did.
+- **Glance at the Activity log** now and then to see what your agents did.
 - **Back up your data.** Everything Talqava knows is in its data folder on your computer. Copy that folder and you have backed up everything.
 
 ## Words

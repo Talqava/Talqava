@@ -27,7 +27,7 @@ Routines let work happen by itself at set times: a morning news digest every wee
 
 **A routine belongs to the position.** When you put a different agent into a position (Organization → the position → change who fills it), its routines carry on with the new agent. A position's panel on the Organization page lists its routines, with **+ Routine** to add one.
 
-If the position you chose leaves the chart, the assistant does the job instead, and the **Audit log** says so. The card tells you, and you can **Edit** it to choose someone else.
+If the position you chose leaves the chart, the assistant does the job instead, and the **Activity log** says so. The card tells you, and you can **Edit** it to choose someone else.
 
 **Routines run while Talqava is open.** Talqava checks for due routines every few seconds. In the Mac app, closing the window keeps Talqava running in the background; choosing **Quit** stops it. If Talqava was stopped or your computer was off when a routine was due, it runs once as soon as you open Talqava again, then carries on as normal.
 

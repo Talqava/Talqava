@@ -101,11 +101,11 @@ export function securityOverview(): { protections: Protection[]; attention: { le
       name: "The record of who did what is intact",
       state: seal.intact ? "on" : "off",
       words: seal.intact ? `${seal.checked.toLocaleString("en-US")} sealed entries checked just now: none changed, removed or added by hand.` : `The audit record does not match its seals. ${seal.problem?.why ?? ""}`,
-      next: seal.intact ? undefined : "Open the Audit log to see where.",
+      next: seal.intact ? undefined : "Open the Activity log to see where.",
     },
   ];
   const attention: { level: "high" | "soon"; words: string; next: string }[] = [];
-  if (!seal.intact) attention.push({ level: "high", words: "The audit record was changed outside Talqava.", next: "Open the Audit log." });
+  if (!seal.intact) attention.push({ level: "high", words: "The audit record was changed outside Talqava.", next: "Open the Activity log." });
   const admins = list.filter((x) => (x.role === "owner" || x.role === "admin") && !x.secondStep);
   if (admins.length) attention.push({ level: "high", words: `${admins.length} owner or administrator account${admins.length === 1 ? " signs" : "s sign"} in without a second step. A stolen password alone would give full control.`, next: "Set up a second step, then require it for everyone." });
   if (p.services.confidential === "approved" && !p.approved.length && cloud) attention.push({ level: "soon", words: "Confidential items may go only to approved AI services, and none is approved, so agents on outside services cannot read them.", next: "Tick the services you trust under “Sensitive information”." });

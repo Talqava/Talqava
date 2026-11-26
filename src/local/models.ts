@@ -18,12 +18,12 @@ export function splitRef(ref: string): { providerId: string; model: string } {
 export function resolveOne(cfg: Config = getConfig(), ref = cfg.model): Model {
   const { providerId, model } = splitRef(ref);
   const provider = cfg.providers.find((p) => p.id === providerId);
-  if (!provider) throw new Error(`No AI service called "${providerId}" is connected. Connect it under Integrations → AI models.`);
-  if (!model) throw new Error("No model is chosen. Choose one under Integrations → AI models.");
+  if (!provider) throw new Error(`No AI service called "${providerId}" is connected. Connect it under Connections → AI models.`);
+  if (!model) throw new Error("No model is chosen. Choose one under Connections → AI models.");
   if (provider.kind === "anthropic") {
     return new AnthropicModel({ apiKey: apiKey(cfg) || undefined, model, effort: cfg.effort, providerId: provider.id });
   }
-  if (!provider.baseUrl) throw new Error(`${provider.name} has no address. Set it up again under Integrations → AI models.`);
+  if (!provider.baseUrl) throw new Error(`${provider.name} has no address. Set it up again under Connections → AI models.`);
   const service = provider.service ? serviceOf(provider.service) : undefined;
   // On OpenRouter every model has its own prices and size; they come from its list of models.
   // Other services' prices come from the same list when the service is the model's maker.
@@ -52,7 +52,7 @@ export function resolveOne(cfg: Config = getConfig(), ref = cfg.model): Model {
 }
 
 /**
- * The model to use, with the backups chosen under Integrations → AI models behind it: if its service is down,
+ * The model to use, with the backups chosen under Connections → AI models behind it: if its service is down,
  * busy or out of credit before it starts answering, the next one answers instead.
  */
 export function resolveModel(cfg: Config = getConfig(), ref = cfg.model): Model {

@@ -71,7 +71,7 @@ function stopReason(reason: string | null): StopReason {
 
 /** Plain words for Anthropic's errors. */
 export function describeAnthropicError(err: unknown): string | null {
-  if (err instanceof Anthropic.AuthenticationError) return "The Anthropic API key was rejected. Connect Anthropic again under Integrations → AI models.";
+  if (err instanceof Anthropic.AuthenticationError) return "The Anthropic API key was rejected. Connect Anthropic again under Connections → AI models.";
   if (err instanceof Anthropic.PermissionDeniedError) return `The API key is not allowed to do this: ${err.message}`;
   if (err instanceof Anthropic.RateLimitError) return "Anthropic's rate limit was reached. Wait a minute and try again.";
   if (err instanceof Anthropic.BadRequestError) return `Anthropic rejected the request: ${err.message}`;

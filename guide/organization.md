@@ -12,7 +12,7 @@ The Organization page is your org chart. It is where you decide which AI agents 
   - **List** puts each position on one row. You can change its group, who it reports to, and its dotted line right there in the row.
   - **Access** shows, for each agent and the Talqava assistant, everything it can reach: what it can do, whether it asks before changes, who it can hand work to, request work from and ask, which library documents and workspace pages it can read or change, and its limits.
   - **Memory** holds what the organization remembers: notes for everyone, for one group, and each agent's own notes and past work.
-- **Buttons on the strip:** **Suggest positions**, **Undo** and **History**. **History** opens the audit log, where every change is recorded.
+- **Buttons on the strip:** **Suggest positions**, **Undo** and **History**. **History** opens the activity log, where every change is recorded.
 - **The Add bar** on the left. It has a search box (**Find a role or a team**) and the **+ Group** button. It lists **Your agents, not on the chart**, **Ready-made teams**, and roles **From the marketplace**.
 - **The side panel.** Click a position or a group's heading and its details open on the right. Every field there can be edited.
 - **Warnings** above the chart when something needs fixing, each with a button to fix it.

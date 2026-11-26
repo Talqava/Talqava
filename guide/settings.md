@@ -1,6 +1,6 @@
 # Settings
 
-Settings is where you choose how careful, how thrifty and how independent your agents are, change the look of the app, and read Talqava's licence and policies. Connecting AI services, repositories, connectors and keys for other services is under **Integrations**; see [AI models](ai-models.md) and [Integrations](integrations.md).
+Settings is where you choose how careful, how thrifty and how independent your agents are, change the look of the app, and read Talqava's licence and policies. Connecting AI services, repositories, connectors and keys for other services is under **Connections**; see [AI models](ai-models.md) and [Connections](integrations.md).
 
 ## What you'll see
 
@@ -8,14 +8,14 @@ The page is one long column, in this order:
 
 - **Look**: light or dark appearance, and an accent colour.
 - **Agent**: your agent's name, which model your team uses (with **Check this model**), effort, cost saving, the two steps before a task starts, approvals and budgets. Press **Save** after changing anything here.
-- **Connections**: a link to **Integrations**, where AI models, repositories, connectors and API keys now live.
+- **Connections**: a link to **Connections**, where AI models, repositories, connectors and API keys now live.
 - **About and legal**, with where your files and data are kept on this computer.
 
-If no AI service is connected yet, a banner at the top links to **Integrations → AI models**.
+If no AI service is connected yet, a banner at the top links to **Connections → AI models**.
 
 ## Key ideas
 
-- **The team's model** is chosen in one place: **Integrations → AI models**. Settings shows it, with a button that takes you there, and **Check this model** to test it.
+- **The team's model** is chosen in one place: **Connections → AI models**. Settings shows it, with a button that takes you there, and **Check this model** to test it.
 - **Approvals protect you.** With **ask**, an agent stops before it runs a command, changes a file or writes to another service, and waits for your yes.
 - **Budgets stop spending.** Every task stops before it goes over its step limit or its dollar limit. Monthly budgets for each agent and group are set on the Organization page and on each agent's page.
 
@@ -23,7 +23,7 @@ If no AI service is connected yet, a banner at the top links to **Integrations �
 
 ### Test a model before relying on it
 
-1. Choose the model under **Integrations → AI models** (Settings has a button that takes you there).
+1. Choose the model under **Connections → AI models** (Settings has a button that takes you there).
 2. Press **Check this model**. It runs three short tests in under a minute and costs a few cents at most.
 3. Read the result: **follows instructions**, **uses tools**, **chains steps**, and **Good for**.
 
@@ -31,7 +31,7 @@ If no AI service is connected yet, a banner at the top links to **Integrations �
 
 1. **Name**: what your main agent is called.
 2. **Effort, for Claude**: higher thinks longer and costs more.
-3. **Cost saving for your team of agents**: **Off: every agent uses my model**, **Balanced: match the model to the work**, or **Cheapest: cheaper models wherever they can do it**. Balanced, with Claude Opus or Fable as your model: managers who plan keep your model, team members doing their own part use Claude Sonnet 5.5 (about half the price), and quick questions between agents use Claude Haiku 5.5. Cheapest also gives managers Sonnet. With another AI service, the cheaper models come from your **backup models**, so Talqava never uses a model you didn't choose: add cheaper backups under Integrations → AI models to make it work. An agent you gave a model of its own keeps it, and the receipt shows which model did each step.
+3. **Cost saving for your team of agents**: **Off: every agent uses my model**, **Balanced: match the model to the work**, or **Cheapest: cheaper models wherever they can do it**. Balanced, with Claude Opus or Fable as your model: managers who plan keep your model, team members doing their own part use Claude Sonnet 5.5 (about half the price), and quick questions between agents use Claude Haiku 5.5. Cheapest also gives managers Sonnet. With another AI service, the cheaper models come from your **backup models**, so Talqava never uses a model you didn't choose: add cheaper backups under Connections → AI models to make it work. An agent you gave a model of its own keeps it, and the receipt shows which model did each step.
 4. **Before a task starts, 1. Missing information check**: **On** (the default) or **Off**. The agent first makes sure it has the information, documents or access it needs. If something is missing, it asks you in your Inbox instead of spending money guessing. The check costs a few cents and shows on the task's receipt.
 5. **Before a task starts, 2. Plan for your approval**: **Tasks I give to a lead: plan first, for my approval** (the default), **Every task I give: plan first, for my approval**, or **Never: start straight away**. This comes after the check in step 1: the agent sends you a plan (the steps, who does each, and its cost estimate) and changes nothing until you approve it or ask for changes. Step 1 asks whether the agent has what it needs; step 2 asks whether you agree with how it will do the work.
 6. **Leads' daily check-in**: **On** (the default) or **Off**. With it on, your Inbox gets one message a day: for every group, what moved since yesterday, what is stuck or waiting on you, and what is next. It is built from your tasks, so it costs nothing.
@@ -79,8 +79,8 @@ Under **About and legal**, press **Terms of Use**, **Privacy Policy**, **Accepta
 ## Related guides
 
 - [AI models](ai-models.md) (connecting AI services and backups)
-- [Integrations](integrations.md) (OpenRouter, GitHub, connectors, API keys)
-- [Audit log](audit-log.md)
+- [Connections](integrations.md) (OpenRouter, GitHub, connectors, API keys)
+- [Activity log](audit-log.md)
 - [Organization](organization.md) (monthly budgets for groups)
 - [Inbox](inbox.md) (approvals and questions)
 - [Getting started](getting-started.md)

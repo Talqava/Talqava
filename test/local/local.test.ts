@@ -1315,7 +1315,7 @@ test("the library works like a file manager: folders, moves that keep settings, 
   orgs.remove(org0.id);
 });
 
-test("before starting, an agent checks it has what the task needs, asks the owner if not, and everything is in the audit log", { timeout: 30_000 }, async () => {
+test("before starting, an agent checks it has what the task needs, asks the owner if not, and everything is in the activity log", { timeout: 30_000 }, async () => {
   const quests = await import("../../src/local/quests.ts");
   const crew = await import("../../src/local/crew.ts");
   const { readAudit } = await import("../../src/local/audit.ts");
@@ -1351,7 +1351,7 @@ test("before starting, an agent checks it has what the task needs, asks the owne
     assert.notEqual(muddled.status, "asking");
     for (let i = 0; i < 50 && quests.questStore.get(muddled.id)?.status === "running"; i++) await new Promise((r) => setTimeout(r, 20));
 
-    // The audit log has the task, the check, the question, the run and its cost; secrets never appear in it.
+    // The activity log has the task, the check, the question, the run and its cost; secrets never appear in it.
     const log = readAudit({ limit: 200 }).entries;
     assert.ok(log.some((e) => e.task === asked.id && /Asked the owner/.test(e.action) && /Which country/.test(e.detail ?? "")));
     assert.ok(log.some((e) => e.task === started.id && /has what it needs/.test(e.action)));

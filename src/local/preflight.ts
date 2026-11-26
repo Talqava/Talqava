@@ -33,9 +33,9 @@ export function needsFor({ bot, text, project }: { bot: Bot; text: string; proje
   const { providerId } = splitRef(ref);
   const provider = cfg.providers.find((p) => p.id === providerId);
   if (!provider) {
-    needs.push({ id: "model-key", title: "Choose a model", detail: `${bot.name} is set to use "${ref}", which is not available. Connect its service under Integrations → AI models, or choose another model.`, fix: "integrations-ai-models", canSkip: false });
+    needs.push({ id: "model-key", title: "Choose a model", detail: `${bot.name} is set to use "${ref}", which is not available. Connect its service under Connections → AI models, or choose another model.`, fix: "integrations-ai-models", canSkip: false });
   } else if (provider.kind === "anthropic" && !apiKey(cfg)) {
-    needs.push({ id: "model-key", title: "Add your Anthropic key", detail: `${bot.name} runs on Claude, and no Anthropic key is saved, so the task would fail straight away. Connect Anthropic under Integrations → AI models, or connect another AI service and choose one of its models.`, fix: "integrations-ai-models", canSkip: false });
+    needs.push({ id: "model-key", title: "Add your Anthropic key", detail: `${bot.name} runs on Claude, and no Anthropic key is saved, so the task would fail straight away. Connect Anthropic under Connections → AI models, or connect another AI service and choose one of its models.`, fix: "integrations-ai-models", canSkip: false });
   } else if (provider.id === "openrouter" && !provider.apiKey) {
     needs.push({ id: "model-key", title: "Connect OpenRouter", detail: `${bot.name} runs on an OpenRouter model, and OpenRouter is not connected.`, fix: "integrations-openrouter", canSkip: false });
   }
@@ -46,7 +46,7 @@ export function needsFor({ bot, text, project }: { bot: Bot; text: string; proje
       needs.push({
         id: "repository",
         title: "Connect a repository",
-        detail: "This task is about code, and no repository is connected, so the agents would have no code to look at. Connect one under Integrations → Git first. Or start anyway, if the task does not need the code itself.",
+        detail: "This task is about code, and no repository is connected, so the agents would have no code to look at. Connect one under Connections → Git first. Or start anyway, if the task does not need the code itself.",
         fix: "integrations-git",
         canSkip: true,
       });

@@ -63,7 +63,7 @@ let queue: unknown[] = [];
 let timer: NodeJS.Timeout | null = null;
 let warned = false;
 
-/** Sends what is waiting. Failures are noted once in the audit log; Talqava's own work never waits on Langfuse. */
+/** Sends what is waiting. Failures are noted once in the activity log; Talqava's own work never waits on Langfuse. */
 export async function flushLangfuse(): Promise<void> {
   const c = getConfig().langfuse;
   if (timer) clearTimeout(timer), (timer = null);

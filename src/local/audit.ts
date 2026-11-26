@@ -1,4 +1,4 @@
-// The audit log: a record of every operation, kept on this computer. What the
+// The activity log: a record of every operation, kept on this computer. What the
 // owner does in the app (each change they make), and what each agent does
 // (each tool it uses, each approval it asks for, each failure, what a run cost).
 // Lines are only ever added; a file over 10 MB is kept as audit-1.log and a new
@@ -108,7 +108,7 @@ export function audit(entry: Omit<AuditEntry, "at"> & { at?: string }) {
       } catch {}
     }
   } catch (err) {
-    console.error("The audit log could not be written:", (err as Error).message);
+    console.error("The activity log could not be written:", (err as Error).message);
   }
 }
 

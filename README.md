@@ -25,10 +25,10 @@ Talqava gives you a team of AI agents, each in a role on an org chart that **you
 - **Work that follows your chart.** Give a task to anyone. Leads hand parts to the people below them, request work from other groups' leads, ask colleagues quick questions and escalate what is not theirs to decide. Every task knows why it exists: your mission, its group's goal, and the tasks above it.
 - **Checks before spending.** Before a task starts, the agent checks it has what it needs (a repository, a file, an answer from you) and asks first instead of spending your budget guessing. Every task has a budget it shares with everything handed on from it; every agent and every group has a monthly budget that stops new work when it is used up.
 - **An inbox like email.** Agents report to you as messages you can read, save, archive, search and sort. Give agents names of your own. Approve or decline steps, and positions agents propose, right from the message.
-- **A full record.** An audit log of every operation, by you and by each agent, and a receipt for every task: what was done, what was not, what it cost, and which agent spent it.
+- **A full record.** An activity log of every operation, by you and by each agent, and a receipt for every task: what was done, what was not, what it cost, and which agent spent it.
 - **A library for your documents.** A file manager for your organization's files, with folders. Each file or folder is either open to agents (all of them, some groups, or named agents) or private, never seen by any AI.
 - **Memory that lasts.** Shared memory for the whole organization, each group and each agent, plus skills agents write for themselves and work on a schedule.
-- **Any AI model, set up in a minute.** Integrations → AI models lists more than 20 services: Claude, OpenAI, Google Gemini, xAI, Mistral, DeepSeek, Groq, Together, OpenRouter, Azure OpenAI, a LiteLLM gateway, and free local models (Ollama, LM Studio, llama.cpp) that keep everything on your computer. Pick one, paste its key, done. Backup models take over if a service is down.
+- **Any AI model, set up in a minute.** Connections → AI models lists more than 20 services: Claude, OpenAI, Google Gemini, xAI, Mistral, DeepSeek, Groq, Together, OpenRouter, Azure OpenAI, a LiteLLM gateway, and free local models (Ollama, LM Studio, llama.cpp) that keep everything on your computer. Pick one, paste its key, done. Backup models take over if a service is down.
 - **Works with the tools you have.** Git and GitHub, connectors (MCP servers) for other services, and Talqava itself as an MCP server, so Claude and other AI apps can use your team.
 - **Light and dark.** A light theme by default and a dark one, in the Talqava greens.
 - **Share an organization.** Export it as one readable file and import it on another computer. No keys, tasks, memory or documents go in the file.
@@ -69,7 +69,7 @@ Everything Talqava knows is in the `data/` folder: organizations, chats, tasks, 
 
 ## User guide
 
-Every page in the app has a **Guide** button (top right) that opens its full guide, and **User guide** at the bottom of the menu opens them all. You can also read them here: start with [Getting started](guide/getting-started.md), then [Organization](guide/organization.md), [Tasks and goals](guide/tasks.md), [Work in progress](guide/work-in-progress.md), [Inbox](guide/inbox.md), [Chat](guide/chat.md), [Schedules](guide/schedules.md), [Marketplace](guide/marketplace.md), [Workspace](guide/workspace.md), [Library](guide/library.md), [Memory](guide/memory.md), [Skills](guide/skills.md), [Audit log](guide/audit-log.md), [Integrations](guide/integrations.md) and [Settings and AI models](guide/settings.md).
+Every page in the app has a **Guide** button (top right) that opens its full guide, and **User guide** at the bottom of the menu opens them all. You can also read them here: start with [Getting started](guide/getting-started.md), then [Organization](guide/organization.md), [Tasks and goals](guide/tasks.md), [Work in progress](guide/work-in-progress.md), [Inbox](guide/inbox.md), [Chat](guide/chat.md), [Schedules](guide/schedules.md), [Marketplace](guide/marketplace.md), [Workspace](guide/workspace.md), [Library](guide/library.md), [Memory](guide/memory.md), [Skills](guide/skills.md), [Activity log](guide/audit-log.md), [Connections](guide/integrations.md) and [Settings and AI models](guide/settings.md).
 
 ## How it works
 
@@ -91,7 +91,7 @@ Every page in the app has a **Guide** button (top right) that opens its full gui
 
 ### Tasks on code
 
-Connect a repository under **Integrations** (GitHub through your browser, or a folder on your computer), then choose it when you give a task. An agent that can change files gets its own branch and working copy, starting from your last commit, so your own files and branches are not touched. When it stops, the task shows the changes: **Keep the changes** makes one commit on the task's branch (merge it when you like), and **Undo** removes the branch and copy as if it never happened. Agents never push, merge or deploy.
+Connect a repository under **Connections** (GitHub through your browser, or a folder on your computer), then choose it when you give a task. An agent that can change files gets its own branch and working copy, starting from your last commit, so your own files and branches are not touched. When it stops, the task shows the changes: **Keep the changes** makes one commit on the task's branch (merge it when you like), and **Undo** removes the branch and copy as if it never happened. Agents never push, merge or deploy.
 
 Five ready-made tasks (write the changelog, add tests for a file, triage open issues, a morning report, research with sources) are each checked by the app before they count as done: if the check fails, the agent is told exactly what failed and sent back to fix it.
 
@@ -101,14 +101,14 @@ Drop files on the **Library** page or straight into the library folder (`data/or
 
 ### Models
 
-Everything is under **Integrations → AI models**. Pick a service, paste its key, and Talqava checks the key with the service, finds its models and fills in the rest. Connect as many as you like: the team uses one model, and any agent can use another.
+Everything is under **Connections → AI models**. Pick a service, paste its key, and Talqava checks the key with the service, finds its models and fills in the rest. Connect as many as you like: the team uses one model, and any agent can use another.
 
 - **Model makers:** Anthropic (Claude), OpenAI, Google Gemini, xAI (Grok), Mistral, DeepSeek, Moonshot (Kimi), Alibaba (Qwen) and Cohere. Claude gets Anthropic's web search and connectors.
 - **Hosts of open models:** Groq, Together AI, Fireworks, Cerebras, NVIDIA and Hugging Face.
 - **One account or your company's own:** OpenRouter (sign in through the web), Microsoft Azure OpenAI, a LiteLLM gateway (which can reach Amazon Bedrock, Google Vertex and others), or any other service with the common "chat completions" format.
 - **On this computer, free and private:** Ollama, LM Studio, llama.cpp, Jan and vLLM. **Find models on this computer** connects every one that is running.
 
-Each model's list shows which models can use tools (agents need them), how much text they hold and, where known, their prices. Prices and sizes come from OpenRouter's public list of models, which needs no account. **Backup models** take over, in the order you choose, when a service is down, busy or out of credit; each switch is noted in the audit log. Press **Check this model** for three short tests of which kinds of work a model can do.
+Each model's list shows which models can use tools (agents need them), how much text they hold and, where known, their prices. Prices and sizes come from OpenRouter's public list of models, which needs no account. **Backup models** take over, in the order you choose, when a service is down, busy or out of credit; each switch is noted in the activity log. Press **Check this model** for three short tests of which kinds of work a model can do.
 
 Talqava talks to these services itself, in their own formats. No gateway software is bundled or needs installing.
 
@@ -116,7 +116,7 @@ With **cost saving** on (Settings), a lead that plans keeps your main model, an 
 
 ### Connectors and other AI apps
 
-Connectors (MCP servers) are reached from your computer, so they work with every model. A connector's tools ask before changing anything unless the connector marks them read-only. Talqava is also an MCP server: **Add Talqava to Claude** under Integrations lets the Claude desktop app see your team, give an agent a task, read the result and use the organization's memory, with the same approvals.
+Connectors (MCP servers) are reached from your computer, so they work with every model. A connector's tools ask before changing anything unless the connector marks them read-only. Talqava is also an MCP server: **Add Talqava to Claude** under Connections lets the Claude desktop app see your team, give an agent a task, read the result and use the organization's memory, with the same approvals.
 
 ### Safety
 
@@ -176,7 +176,7 @@ and open <http://localhost:8787>. Tailscale, or an HTTPS reverse proxy such as C
 
 | Setting | Where | Notes |
 | --- | --- | --- |
-| AI model | Integrations → AI models | Claude, OpenAI, Gemini, Mistral, OpenRouter, Azure, LiteLLM, local models and more |
+| AI model | Connections → AI models | Claude, OpenAI, Gemini, Mistral, OpenRouter, Azure, LiteLLM, local models and more |
 | API key | Settings or `ANTHROPIC_API_KEY` | For Claude |
 | Budget per task | Settings | 40 steps and $1 by default, shared with everything handed on |
 | Check before starting | Settings | On by default |
@@ -197,7 +197,7 @@ For pages that need clicking or typing, install the optional browser (`npm insta
 | --- | --- |
 | `src/core` | The shared core: the agent loop, budgets, the system prompt, and the tools every edition has. It reaches storage only through interfaces. |
 | `src/core/models` | The model layer: one interface, with an adapter for Claude and one for chat-completions services, prices, and the model check. |
-| `src/local` | This edition: file storage, organizations (`orgs.ts`), tasks and their journal (`quests.ts`), the library (`library.ts`), budgets (`spend.ts`), the audit log, integrations, the MCP server, and the web server (`server.ts`). |
+| `src/local` | This edition: file storage, organizations (`orgs.ts`), tasks and their journal (`quests.ts`), the library (`library.ts`), budgets (`spend.ts`), the activity log, integrations, the MCP server, and the web server (`server.ts`). |
 | `public` | The page: plain JavaScript (`app.js`), the stylesheets, the brand video and fonts. |
 | `crew` | The six starter agents, one YAML file each. |
 | `marketplace` | The 81 ready-made roles and the ready-made teams (`teams.yaml`). |

@@ -209,7 +209,7 @@ export function describePolicy(p: Policy = policy()): string[] {
   return [...LEVELS.map((l) => `${LEVEL_WORDS[l].name}: ${((w) => w[0].toLowerCase() + w.slice(1))(WHERE_WORDS[p.services[l]])}.`), ...(kept.length ? [`A task that has read ${kept.join(" or ")} information sends nothing out through a connected service, a website or a web address.`] : []), ...where, ...out];
 }
 
-/** The same check, with a line in the audit log when it stops something. */
+/** The same check, with a line in the activity log when it stops something. */
 export function leaving(where: string, task?: string) {
   try {
     checkMayLeave(where);
