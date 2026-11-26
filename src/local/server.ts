@@ -53,7 +53,7 @@ import { describeGuardrails, guardrails, guardrailsFrom, noteStuck } from "./gua
 import { securityOverview, securityReport } from "./securitycenter.ts";
 import { backupStatus, makeBackup, nightlyBackup, restoreTo, setBackup, testRestore } from "./backup.ts";
 import { finishSso, setSso, sso, ssoPublic, startSso } from "./sso.ts";
-import { disableScim, enableScim, handleScim, scimAuthorized, scimSettings } from "./scim.ts";
+import { directoryGroups, disableScim, enableScim, handleScim, scimAuthorized, scimSettings, setGroupRoles } from "./scim.ts";
 import { changes, type WaitingChange } from "./twoadmins.ts";
 import { RETENTION_CHOICES, findPerson, retention, retentionFrom, sweep } from "./retention.ts";
 import { REVIEW_EVERY_DAYS, alerts, feedStatus, reviews, setFeed, startAuditFeed } from "./auditfeed.ts";
@@ -961,7 +961,8 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
     if (route === "GET people" && parts[1] === "sso") return send(res, 200, { sso: ssoPublic(), redirect: `${req.headers["x-forwarded-proto"] === "https" ? "https" : "http"}://${req.headers.host}/api/sso/callback` });
     if (route === "PUT people" && parts[1] === "sso") return send(res, 200, await tryIt(() => setSso(body.issuer ? body : null)));
     // Directory sync: its state, switching it on (which shows the token once), and switching it off.
-    if (route === "GET people" && parts[1] === "directory") return send(res, 200, { ...scimSettings(), address: `${req.headers["x-forwarded-proto"] === "https" ? "https" : "http"}://${req.headers.host}/api/scim/v2` });
+    if (route === "PUT people" && parts[1] === "directory" && parts[2] === "groups") return send(res, 200, await tryIt(async () => setGroupRoles(body.roles)));
+    if (route === "GET people" && parts[1] === "directory") return send(res, 200, { ...scimSettings(), groups: directoryGroups(), address: `${req.headers["x-forwarded-proto"] === "https" ? "https" : "http"}://${req.headers.host}/api/scim/v2` });
     if (route === "POST people" && parts[1] === "directory") return send(res, 200, await tryIt(async () => enableScim(body)));
     if (route === "DELETE people" && parts[1] === "directory") return send(res, 200, await tryIt(async () => disableScim()));
     if (route === "POST people" && !parts[1]) return send(res, 200, await tryIt(() => people.add(body, me)));

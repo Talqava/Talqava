@@ -9166,7 +9166,14 @@ function directorySection() {
           : null,
         h("label", {}, "Address to give your provider (tenant URL)", h("input", { readonly: true, value: d.address, "aria-label": "Directory address" })),
         h("label", {}, "Role for people the directory adds", role),
-        h("p", { class: "note small" }, "People the directory adds sign in with the company account (single sign-on). A person it switches off is signed out at once and cannot sign in. The owner's account is never changed by the directory. Groups are not mapped yet."),
+        h("p", { class: "note small" }, "People the directory adds sign in with the company account (single sign-on). A person it switches off is signed out at once and cannot sign in. The owner's account is never changed by the directory."),
+        d.on && d.groups.length
+          ? [
+              h("div", { class: "label" }, "Roles from the directory's groups"),
+              h("div", { class: "officetable" }, h("table", {}, h("thead", {}, h("tr", {}, ["Group", "People", "Role it gives"].map((t) => h("th", { scope: "col" }, t)))), h("tbody", {}, d.groups.map((g) => h("tr", {}, h("td", {}, g.name), h("td", {}, String(g.people)), h("td", {}, h("select", { "aria-label": `Role the group ${g.name} gives`, onchange: (e) => attempt(async () => (await api("PUT", "people/directory/groups", { roles: { [g.name]: e.target.value } }), toast("Saved. Roles were updated."), draw()), box) }, [["", "No role of its own"], ["member", "Member"], ["auditor", "Auditor"], ["manager", "Manager"], ["admin", "Administrator"]].map(([v, t]) => h("option", { value: v, selected: (g.role ?? "") === v }, t))))))))),
+              h("p", { class: "note small" }, "A person in several groups gets the highest role among them. Someone in no group that gives a role gets the role for new people above. Until you choose a role for at least one group, groups change nobody's role. A changed role signs the person out so it takes effect."),
+            ]
+          : d.on ? h("p", { class: "note small" }, "When your provider sends groups, they appear here and you can choose the role each one gives.") : null,
         h("div", { class: "row wrap" }, h("button", { class: "primary", onclick: () => (!d.on || confirm("Make a new token? The old one stops working, so your provider needs the new one.")) && turnOn() }, d.on ? "Make a new token" : "Switch on and show the token"), d.on ? h("button", { class: "danger", onclick: () => confirm("Switch off directory sync? Your provider can no longer add or switch off people. Nobody is removed.") && attempt(async () => (await api("DELETE", "people/directory"), draw()), box) }, "Switch off") : null),
       ),
     );

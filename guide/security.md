@@ -210,7 +210,9 @@ Use this when Talqava runs where your identity provider can reach it over the ne
 
 From then on, people your provider assigns are added here and sign in with the company account. A person removed or disabled there is switched off here: they are signed out at once and cannot sign in. The owner's account is never changed by the directory. Every change is in the audit log as "The company directory".
 
-Groups are not mapped yet, and this has not yet been tried against a real provider.
+**Roles from groups.** When your provider also sends groups, they appear under **Roles from the directory's groups**, and you choose the role each one gives: Member, Auditor, Manager or Administrator. A person in several groups gets the highest role among them; someone in no group that gives a role gets the role for new people. Until you choose a role for at least one group, groups change nobody's role. A changed role signs the person out so that it takes effect, and is in the audit log. A group never gives the owner's role.
+
+This has not yet been tried against a real provider.
 
 ### Let agents use only the connected services you approve
 
@@ -245,7 +247,7 @@ Agents get the tools of ticked services only. A service you connect later stays 
 
 ## What is not built yet
 
-- Single sign-on and directory sync have been tested against stand-in providers only, not yet against a real one. SAML is not built, and directory groups are not mapped to roles.
+- Single sign-on and directory sync have been tested against stand-in providers only, not yet against a real one. SAML is not built.
 - Limiting sign-in to computers your company manages, and needing two administrators for a security change.
 - Approved networks are checked against the address the connection comes from. Behind a proxy or tunnel that hides it, every connection looks the same.
 - Approved sites hold page reading, including redirects, and the AI service's own web search. Calls to web services with saved keys and the built-in browser are checked at the address the agent gives; a redirect or a link clicked inside the browser is not checked yet.

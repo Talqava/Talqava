@@ -120,7 +120,7 @@ export interface Config {
   backup?: { salt?: string; key?: string; folder?: string; nightly?: boolean; lastAt?: string; lastFiles?: number; lastTestedAt?: string };
   /** Single sign-on through the company's identity provider (see sso.ts). */
   /** Directory sync (see scim.ts): the hash of the token the company's identity provider signs in with. */
-  scim?: { tokenHash: string; role: string; createdAt: string; lastUsedAt?: string };
+  scim?: { tokenHash: string; role: string; createdAt: string; lastUsedAt?: string; groups?: { id: string; name: string; externalId?: string; members: string[] }[]; groupRoles?: Record<string, string> };
   sso?: { issuer: string; clientId: string; clientSecret?: string; domains?: string[]; addPeople?: boolean; role?: string; only?: boolean };
   /** How long chats and finished task records are kept, and whether a legal hold stops every deletion (see retention.ts). */
   retention?: { days?: number; legalHold?: boolean };
