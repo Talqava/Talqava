@@ -97,6 +97,8 @@ async function api(method, path, body) {
     return api(method, path, body);
   }
   if (!res.ok) throw Object.assign(new Error(data.error || `Request failed (${res.status}).`), { status: res.status });
+  // A step that needs two people: the first yes is noted, and the screen says it waits for a second person.
+  if (data.waiting && data.message && /\/approvals\//.test(path)) toast(data.message);
   // Where two administrators must agree, a security change is set aside instead of made: say so, plainly.
   if (res.status === 202 && data.waiting) throw Object.assign(new Error(data.message), { waiting: true });
   return data;
@@ -9590,6 +9592,21 @@ function guardrailsSection(canEdit) {
               h("p", { class: "note small" }, "Agents get the tools of ticked services only. A service connected later is off until you tick it."),
             ]
           : null,
+        data.people.length >= 2
+          ? [
+              h("div", { class: "label" }, "Who approves each kind of step"),
+              data.stepKinds.map((k) => {
+                const r = g.approvers[k.id] ?? { people: [], two: false };
+                return h(
+                  "div",
+                  { class: "termsrow" },
+                  h("div", {}, k.words),
+                  h("div", { class: "checks" }, data.people.map((p) => h("label", { class: "check" }, h("input", { type: "checkbox", disabled: !canEdit, checked: r.people.includes(p.id), onchange: (e) => save({ approvers: { [k.id]: { people: e.target.checked ? [...r.people, p.id] : r.people.filter((x) => x !== p.id) } } }) }), " ", p.name)), h("label", { class: "check" }, h("input", { type: "checkbox", disabled: !canEdit, checked: r.two, onchange: (e) => save({ approvers: { [k.id]: { two: e.target.checked } } }) }), " ", h("b", {}, "Two people must approve"))),
+                );
+              }),
+              h("p", { class: "note small" }, "With nobody ticked, anyone who may approve today still may. With people ticked, only they may. With two people, the step waits until a second, different person approves; either may refuse it. Such a step is approved each time, never “always”. These rules cover steps that already ask; whether a step asks is set above and on each agent."),
+            ]
+          : h("p", { class: "note small" }, "To name who approves each kind of step, or to require two people, add at least two people under People and sign-in."),
         h("label", {}, "The Marketplace", choice("market", [["any", "Anything may be added"], ["approved", "Only items an owner or administrator approved"]])),
         g.market === "approved"
           ? [

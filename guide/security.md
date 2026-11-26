@@ -226,6 +226,16 @@ Agents get the tools of ticked services only. A service you connect later stays 
 1. Under **Agent guardrails**, set **When an agent wants to change something** to **Always ask a person first**.
 2. From then on, no agent runs changes without asking, even one you had set to run without asking, and "always allow" no longer skips the question.
 
+### Choose who approves each kind of step, or require two people
+
+This needs at least two people under **People and sign-in**.
+
+1. Under **Agent guardrails**, find **Who approves each kind of step**. There are four kinds: sending something to someone outside (an email, a reply to a customer, publishing on your website, data to a web address), deleting in a connected service, changing something in a connected service, and running a command.
+2. Tick the people who may approve that kind. With nobody ticked, anyone who may approve today still may.
+3. Tick **Two people must approve** to make the step wait until a second, different person approves. Either of them can refuse it.
+
+Such a step is approved each time, never "always". The first approval of a two-person step is in the audit log, and it lapses after a day or when Talqava restarts. A named approver whose account is gone is not waited for. These rules cover steps that already ask you; whether a step asks is set by **When an agent wants to change something** and on each agent. Talqava has no step that moves money.
+
 ### Let only approved Marketplace items be added
 
 1. Under **Agent guardrails**, set **The Marketplace** to **Only items an owner or administrator approved**.

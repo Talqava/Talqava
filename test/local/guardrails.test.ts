@@ -148,3 +148,40 @@ test("only approved Marketplace items: others are refused and written down, and 
   assert.equal(G.guardrailsFrom({ maxMinutes: 5 }, rules).listings.length, 1, "other changes keep the list");
   assert.ok(G.describeGuardrails(rules).some((w) => /Only approved Marketplace items may be added \(1 approved\)/.test(w)));
 });
+
+test("who approves each kind of step: named people only, two different people when asked, and a refusal from either", () => {
+  const kit = (name: string) => (({ gmail__send: "send", gmail__read: "read", googlecalendar__delete_event: "delete", asana__create_task: "change" }) as Record<string, "send" | "read" | "delete" | "change">)[name] ?? null;
+  assert.deepEqual(
+    [G.stepKind("bash", {}, kit), G.stepKind("http_request", { method: "post" }, kit), G.stepKind("http_request", { method: "GET" }, kit), G.stepKind("wordpress__publish", {}, kit), G.stepKind("gmail__send", {}, kit), G.stepKind("gmail__read", {}, kit), G.stepKind("googlecalendar__delete_event", {}, kit), G.stepKind("asana__create_task", {}, kit), G.stepKind("stripe__create_invoice", {}, kit), G.stepKind("memory", {}, kit)],
+    ["command", "send", null, "send", "send", null, "delete", "change", "change", null],
+  );
+  const ada = { id: "p-ada", name: "Ada" }, bo = { id: "p-bo", name: "Bo" }, cy = { id: "p-cy", name: "Cy" };
+  const known = [ada.id, bo.id, cy.id];
+  let rules = G.guardrailsFrom({ approvers: { send: { people: [ada.id, bo.id, "bad id!"], two: true }, delete: { people: [ada.id] }, command: { two: false } } });
+  assert.deepEqual(rules.approvers, { send: { people: [ada.id, bo.id], two: true }, delete: { people: [ada.id], two: false } }, "a rule that asks for nothing is not kept");
+  // No rule for the kind, or nobody signed in: as before.
+  assert.deepEqual(G.decideStep("t:1", "change", cy, "always", known, rules), { go: true, decision: "always" });
+  assert.deepEqual(G.decideStep("t:1", "send", null, "always", known, rules), { go: true, decision: "always" });
+  // Named people only; with one approver the step goes ahead, but never "always".
+  assert.throws(() => G.decideStep("t:2", "delete", bo, "allow", known, rules), /not one of them/);
+  assert.deepEqual(G.decideStep("t:2", "delete", ada, "always", known, rules), { go: true, decision: "allow" });
+  // Two people: the first yes waits, the same person again does not count, a different named person completes it.
+  assert.throws(() => G.decideStep("t:3", "send", cy, "allow", known, rules), /not one of them/);
+  assert.equal(G.decideStep("t:3", "send", ada, "allow", known, rules).go, false);
+  assert.equal(G.firstApprover("t:3"), "Ada");
+  assert.match((G.decideStep("t:3", "send", ada, "allow", known, rules) as { message: string }).message, /different person/);
+  assert.deepEqual(G.decideStep("t:3", "send", bo, "always", known, rules), { go: true, decision: "allow" });
+  assert.equal(G.firstApprover("t:3"), null);
+  // Either may refuse, and a refusal clears the first yes.
+  assert.equal(G.decideStep("t:4", "send", ada, "allow", known, rules).go, false);
+  assert.deepEqual(G.decideStep("t:4", "send", bo, "deny", known, rules), { go: true, decision: "deny" });
+  assert.equal(G.firstApprover("t:4"), null);
+  // A named approver who has left is not waited for: with none of them left, anyone may approve.
+  assert.deepEqual(G.decideStep("t:5", "delete", cy, "allow", [bo.id, cy.id], rules), { go: true, decision: "allow" });
+  // One part of a rule can be changed without the other; clearing both takes the rule away.
+  rules = G.guardrailsFrom({ approvers: { send: { two: false } } }, rules);
+  assert.deepEqual(rules.approvers.send, { people: [ada.id, bo.id], two: false });
+  rules = G.guardrailsFrom({ approvers: { send: { people: [] } } }, rules);
+  assert.equal(rules.approvers.send, undefined);
+  assert.ok(G.describeGuardrails(G.guardrailsFrom({ approvers: { send: { two: true } } })).some((w) => /^Sending something to someone outside: two people must approve\.$/.test(w)));
+});
