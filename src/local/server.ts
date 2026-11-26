@@ -74,7 +74,7 @@ import { decide, listProposals } from "./proposals.ts";
 import { exportOrg, importOrg } from "./portable.ts";
 import { fileReport, parseDeck, workspace, writeDeck } from "./workspace.ts";
 import { PRIORITIES, work } from "./work.ts";
-import { PLANNED_BRIEFINGS, briefingOf, briefingPrompt, cleanTopic, digests, forgetDigest, listBriefings, missingService, runDigest, senderFor } from "./briefings.ts";
+import { PLANNED_BRIEFINGS, briefingOf, briefingPrompt, cleanTopic, digests, forgetDigest, listBriefings, missingService, runDigest, runWatch, senderFor } from "./briefings.ts";
 import { goals } from "./goals.ts";
 import { findTemplate, loadTemplates } from "./templates.ts";
 import { chainBudget, chainCost, chainOf, chainSize, journal, questStore, quests, rootOf, whyOf } from "./quests.ts";
@@ -265,7 +265,8 @@ async function runJob(job: Job): Promise<{ conversationId?: string; taskId?: str
   const briefing = briefingOf(job.briefing);
   // A briefing built from the organization's own tasks uses no AI model: it is put together and kept for the Inbox.
   if (briefing?.kind === "free") {
-    runDigest(briefing, org ?? orgs.active(), new Date(), job.topic ?? "");
+    if (briefing.watch) await runWatch(briefing, job.topic ?? "");
+    else runDigest(briefing, org ?? orgs.active(), new Date(), job.topic ?? "");
     return {};
   }
   if (briefing && job.owner && org && org.members.some((m) => m.bot === job.owner)) {
