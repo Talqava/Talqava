@@ -208,6 +208,15 @@ for (const c of all) {
 const block = (c) => [`### ${c.name}${c.version ? ` ${c.version}` : ""}`, "", `Licence: ${c.license}${c.copyright ? `  \n${c.copyright}` : ""}`, "", "```text", c.text || `Licensed under ${c.license}.`, "```", c.notice ? ["", "NOTICE:", "", "```text", c.notice, "```"].join("\n") : "", ...(c.extra ?? []).map((x) => ["", `Also in this package, ${x.file}${x.kind ? ` (${x.kind})` : ""}:`, "", "```text", x.text, "```"].join("\n"))].filter((x) => x !== "").join("\n");
 const count = (list) => Object.entries(list.reduce((n, c) => ((n[c.license] = (n[c.license] ?? 0) + 1), n), {})).sort((a, b) => b[1] - a[1]).map(([l, n]) => `${n} ${l}`).join(", ");
 // Public data the app downloads while it runs (nothing of it ships in the app); credited like the components.
+/** The speech program: built from whisper.cpp's source and placed beside the app in builds that write out speech. */
+const SPEECH = [
+  {
+    name: "whisper.cpp (the whisper-server program, from github.com/ggml-org/whisper.cpp; in builds that write out speech)",
+    license: "MIT",
+    copyright: "Copyright (c) 2023-2026 The ggml authors",
+    text: MIT_TEXT("2023-2026 The ggml authors"),
+  },
+];
 const RUNTIME_DATA = [
   {
     name: "LiteLLM model prices and context windows (model_prices_and_context_window.json, from github.com/BerriAI/litellm)",
@@ -253,6 +262,11 @@ const notices = [
   "## Fonts, in public/fonts",
   "",
   ...fonts().map(block).flatMap((b) => [b, ""]),
+  "## The speech program",
+  "",
+  "Talqava writes out speech with whisper.cpp, run as a separate program on the owner's computer. The speech model it uses is not part of Talqava: the owner downloads it from the whisper.cpp project's own files the first time they use speech.",
+  "",
+  ...SPEECH.map(block).flatMap((b) => [b, ""]),
   "## Data read while the app runs",
   "",
   ...RUNTIME_DATA.map(block).flatMap((b) => [b, ""]),

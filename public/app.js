@@ -212,6 +212,8 @@ const needsKey = (c) => c.model.startsWith("anthropic/") && !c.hasApiKey;
 async function boot() {
   try {
     state.config = await api("GET", "state");
+    // Whether this copy of Talqava can write out speech: asked once, since it cannot change while the app runs.
+    state.canSpeak = Boolean(state.config.speech);
   } catch {
     return;
   }
@@ -3320,6 +3322,145 @@ function libDialog(title, body, buttons) {
   });
 }
 
+// ---------- speech to text, on this computer ----------
+/** Any recording as the plain sound the speech program takes: one channel, 16,000 samples a second, 16 bits (WAV). */
+async function toPlainSound(blob) {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx || !window.OfflineAudioContext) throw new Error("This computer or browser cannot prepare sound for writing out.");
+  const ctx = new Ctx();
+  let heard;
+  try {
+    heard = await ctx.decodeAudioData(await blob.arrayBuffer());
+  } catch {
+    throw new Error("That recording could not be read. Try recording it again.");
+  } finally {
+    ctx.close();
+  }
+  if (heard.duration > 1200) throw new Error("That recording is longer than twenty minutes. Write out a shorter one.");
+  const off = new OfflineAudioContext(1, Math.max(1, Math.ceil(heard.duration * 16000)), 16000);
+  const source = off.createBufferSource();
+  source.buffer = heard;
+  source.connect(off.destination);
+  source.start();
+  const samples = (await off.startRendering()).getChannelData(0);
+  const out = new DataView(new ArrayBuffer(44 + samples.length * 2));
+  const text = (at, word) => [...word].forEach((ch, i) => out.setUint8(at + i, ch.charCodeAt(0)));
+  text(0, "RIFF");
+  out.setUint32(4, 36 + samples.length * 2, true);
+  text(8, "WAVEfmt ");
+  out.setUint32(16, 16, true);
+  out.setUint16(20, 1, true);
+  out.setUint16(22, 1, true);
+  out.setUint32(24, 16000, true);
+  out.setUint32(28, 32000, true);
+  out.setUint16(32, 2, true);
+  out.setUint16(34, 16, true);
+  text(36, "data");
+  out.setUint32(40, samples.length * 2, true);
+  for (let i = 0; i < samples.length; i++) out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, samples[i])) * 32767, true);
+  return new Blob([out], { type: "audio/wav" });
+}
+
+/** Sends plain sound to be written out and returns the server's answer. */
+async function writeOut(path, sound) {
+  const res = await fetch(`/api/${path}`, { method: "POST", headers: { "content-type": "audio/wav" }, body: sound });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "That could not be written out.");
+  return data;
+}
+
+/**
+ * Whether speech can be written out now. The first time, it explains the one download and waits for it.
+ * Resolves true when ready; false when the owner cancels or this copy of Talqava cannot do it.
+ */
+async function speechReady() {
+  let info = await api("GET", "speech");
+  if (info.state === "ready") return true;
+  if (info.state === "unavailable") return (toast("This copy of Talqava cannot write out speech yet: it was built without the speech program."), false);
+  const pick = h("select", { id: "speech-model", "aria-label": "Speech model" }, info.models.map((m) => h("option", { value: m.id, selected: m.id === info.model }, `${m.name} · ${m.mb} MB`)));
+  const about = h("span", { class: "note small" });
+  const say = () => (about.textContent = info.models.find((m) => m.id === pick.value)?.about ?? "");
+  pick.addEventListener("change", say);
+  say();
+  const body = h(
+    "div",
+    { class: "composeform" },
+    h("p", { class: "note" }, "Talqava writes out what you say on this computer. Nothing you say is sent anywhere, and it costs nothing to use."),
+    h("p", { class: "note" }, "It needs one download first: the speech model. It is kept on this computer."),
+    h("label", {}, "Speech model", pick, about),
+  );
+  const chosen = await libDialog("Write out speech", body, [["Download", () => pick.value, true]]);
+  if (!chosen) return false;
+  await api("POST", "speech/model", { model: chosen });
+  // The download carries on in the background; this waits for it, saying how far it is.
+  const status = h("p", { class: "note", role: "status" }, "Downloading the speech model…");
+  const waiting = h("dialog", { class: "needs libdialog" }, h("h2", {}, "Downloading the speech model"), status, h("p", { class: "note small" }, "You can keep using Talqava; this closes by itself when it is done."), h("div", { class: "row end" }, h("button", { class: "plain", onclick: () => waiting.close() }, "Hide")));
+  document.body.append(waiting);
+  waiting.showModal();
+  try {
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 1000));
+      info = await api("GET", "speech");
+      if (info.download?.problem) throw new Error(`The speech model could not be downloaded. ${info.download.problem}`);
+      if (info.state === "ready" && !info.download) return true;
+      status.textContent = `Downloading the speech model… ${info.download?.percent ?? 0}%`;
+    }
+  } finally {
+    waiting.close();
+    waiting.remove();
+  }
+}
+
+/**
+ * A microphone button for a text box: press, speak, press again, and what was said is added to the box.
+ * The words are written out on this computer.
+ */
+function micButton(box, cls = "") {
+  const MIC = "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7";
+  let recorder = null;
+  const button = h("button", { type: "button", class: `plain micbutton ${cls}`, "aria-label": "Speak instead of typing", title: "Speak instead of typing. Your words are written out on this computer." });
+  button.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${MIC}"/></svg>`;
+  const idle = () => ((recorder = null), button.classList.remove("recording", "working"), (button.disabled = false), button.setAttribute("aria-label", "Speak instead of typing"));
+  const start = async () => {
+    if (!(await speechReady())) return;
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw new Error("This computer or browser cannot record sound here.");
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {
+      throw new Error("The microphone could not be used. Allow Talqava to use the microphone (on a Mac: System Settings › Privacy & Security › Microphone), then try again.");
+    });
+    const parts = [];
+    recorder = new MediaRecorder(stream, { audioBitsPerSecond: 64000 });
+    const limit = setTimeout(() => recorder?.stop(), 300_000);
+    recorder.ondataavailable = (e) => e.data.size && parts.push(e.data);
+    recorder.onstop = async () => {
+      clearTimeout(limit);
+      stream.getTracks().forEach((t) => t.stop());
+      const type = (recorder?.mimeType || "audio/webm").split(";")[0];
+      button.classList.remove("recording");
+      button.classList.add("working");
+      button.disabled = true;
+      try {
+        if (!parts.length) return;
+        const heard = await writeOut("speech/write-out", await toPlainSound(new Blob(parts, { type })));
+        if (!heard.text) return toast("No words were heard. Try again, a little closer to the microphone.");
+        const at = box.selectionStart ?? box.value.length;
+        const before = box.value.slice(0, at);
+        box.value = `${before}${before && !/\s$/.test(before) ? " " : ""}${heard.text}${box.value.slice(box.selectionEnd ?? at)}`;
+        box.dispatchEvent(new Event("input", { bubbles: true }));
+        box.focus();
+      } catch (err) {
+        toast(err.message);
+      } finally {
+        idle();
+      }
+    };
+    recorder.start(1000);
+    button.classList.add("recording");
+    button.setAttribute("aria-label", "Stop and write out what you said");
+  };
+  button.addEventListener("click", () => (recorder ? recorder.state === "recording" && recorder.stop() : start().catch((err) => (idle(), toast(err.message)))));
+  return button;
+}
+
 /** Asks who may use one or more files or folders. Resolves with a body for the server, or null. */
 async function askAccess(lib, bots, targets) {
   const first = targets[0].item;
@@ -6071,7 +6212,7 @@ function conversationPane() {
   });
   ui.send.addEventListener("click", () => (state.running ? attempt(() => api("POST", `conversations/${state.convId}/stop`)) : submit()));
   state.running = false;
-  return h("div", { class: "convo" }, ui.scroll, h("div", { class: "compose" }, h("div", { class: "col" }, ui.input, ui.send)));
+  return h("div", { class: "convo" }, ui.scroll, h("div", { class: "compose" }, h("div", { class: "col" }, ui.input, state.canSpeak ? micButton(ui.input, "chatmic") : null, ui.send)));
 }
 
 /**
@@ -7921,6 +8062,18 @@ function attachmentsPart(page, id, col) {
       toast(r.words ? `Done: ${r.words} words were found. Search for any of them to find this ${page.kind === "note" ? "note" : "document"}.` : "No words were found in this picture.");
       openPage(id);
     }, col);
+  const SOUND = /^(webm|m4a|mp3|wav|ogg|mp4|aac|flac)$/;
+  // A recording: what is said in it is written out on this computer, so the note is found by those words.
+  const hear = (f, link) =>
+    attempt(async () => {
+      if (!(await speechReady())) return;
+      link.textContent = "Writing it out…";
+      link.disabled = true;
+      const sound = await toPlainSound(await (await fetch(at(f))).blob());
+      const r = await writeOut(`workspace/pages/${id}/attachments/${f.id}/write-out`, sound);
+      toast(r.words ? `Done: ${r.words} words were written out. Press Show words to read them.` : "No words were heard in this recording.");
+      openPage(id);
+    }, col).finally?.(() => ((link.textContent = f.words ? "Write it out again" : "Write it out"), (link.disabled = false)));
   const words = (f) => attempt(async () => alert((await api("GET", `workspace/pages/${id}/attachments/${f.id}/words`)).words), col);
   const remove = (f) => confirm(`Remove “${f.name}” from this ${page.kind === "note" ? "note" : "document"}? The file is deleted.`) && attempt(async () => (await api("DELETE", `workspace/pages/${id}/attachments/${f.id}`), openPage(id)), col);
   // A voice memo: recorded here with this computer's microphone and kept with the note. It is sent nowhere.
@@ -7977,17 +8130,18 @@ function attachmentsPart(page, id, col) {
           "div",
           { class: "row wrap" },
           f.picture ? h("button", { class: "plain link", onclick: () => read(f) }, f.words ? "Read again" : "Read the words") : null,
+          SOUND.test(f.type) && state.canSpeak ? h("button", { class: "plain link", onclick: (e) => hear(f, e.currentTarget) }, f.words ? "Write it out again" : "Write it out") : null,
           f.words ? h("button", { class: "plain link", onclick: () => words(f) }, "Show words") : null,
           h("button", { class: "plain link", onclick: () => remove(f) }, "Remove"),
         ),
         f.picture ? h("img", { class: "attachbig", hidden: true, src: at(f), alt: f.name, loading: "lazy" }) : null,
-        /^(webm|m4a|mp3|wav|ogg|mp4)$/.test(f.type) && /^voice memo/i.test(f.name) ? h("audio", { class: "attachbig", controls: true, preload: "none", src: at(f) }) : null,
+        SOUND.test(f.type) ? h("audio", { class: "attachbig", controls: true, preload: "none", src: at(f) }) : null,
       ),
     ),
     h("div", { class: "row wrap" }, h("button", { class: "small", onclick: () => picker.click() }, "Attach a photo or file"), recordButton),
     recordNote,
     picker,
-    h("p", { class: "note small" }, "Or drop files here. Up to 15 MB each. Attachments stay with you: agents are not given them. A voice memo is kept as sound; it is not written out or sent anywhere."),
+    h("p", { class: "note small" }, `Or drop files here. Up to 15 MB each. Attachments stay with you: agents are not given them. ${state.canSpeak ? "A voice memo is kept as sound. Press Write it out to have what is said written out on this computer, so you can find the note by those words; nothing is sent anywhere." : "A voice memo is kept as sound; it is not written out or sent anywhere."}`),
   );
   return [h("div", { class: "label" }, `Attachments${files.length ? ` · ${files.length}` : ""}`), zone];
 }
@@ -8550,6 +8704,7 @@ async function startView() {
           { class: "askbar" },
           h("span", { class: "askchip", title: "Plain words go to your assistant. Start with @ and a name to give that agent a task." }, "Your assistant answers"),
           h("span", { class: "askchip", title: "Agents ask you before they send, change or delete anything, unless you told one otherwise." }, "Asks before it changes anything"),
+          state.canSpeak ? micButton(box, "askmic") : null,
           h("button", { class: "primary asksend", "aria-label": "Send", title: "Send (Enter)", onclick: send }, "↑"),
         ),
       ),
