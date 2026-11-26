@@ -52,6 +52,7 @@ import { describeGuardrails, guardrails, guardrailsFrom } from "./guardrails.ts"
 import { securityOverview, securityReport } from "./securitycenter.ts";
 import { backupStatus, makeBackup, nightlyBackup, restoreTo, setBackup, testRestore } from "./backup.ts";
 import { finishSso, setSso, sso, ssoPublic, startSso } from "./sso.ts";
+import { disableScim, enableScim, handleScim, scimAuthorized, scimSettings } from "./scim.ts";
 import { RETENTION_CHOICES, findPerson, retention, retentionFrom, sweep } from "./retention.ts";
 import { REVIEW_EVERY_DAYS, alerts, feedStatus, reviews, setFeed, startAuditFeed } from "./auditfeed.ts";
 import { LEVELS, LEVEL_WORDS, RECOMMENDED, WHERE, WHERE_WORDS, describePolicy, higherLevel, policy, policyFrom } from "./sensitivity.ts";
@@ -769,6 +770,15 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   const sessionCookie = (token: string, maxAge: number) => ({ "set-cookie": `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secureCookie}` });
   // How to sign in: with an email and password once people are set up, with the one password otherwise.
   if (route === "GET login") return send(res, 200, { people: people.enabled(), password: Boolean(PASSWORD), sso: people.enabled() && Boolean(sso()), ssoOnly: Boolean(sso()?.only) });
+  // Directory sync: the company's identity provider adds people and switches them off. It carries its own token,
+  // not a person's session, so it is answered here, before the sign-in check.
+  if (parts[0] === "scim" && parts[1] === "v2") {
+    const scimSend = (status: number, payload?: unknown) => (res.writeHead(status, { "content-type": "application/scim+json; charset=utf-8", "cache-control": "no-store" }), res.end(payload === undefined ? "" : JSON.stringify(payload)));
+    if (!scimAuthorized(req.headers.authorization)) return scimSend(401, { schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"], status: "401", detail: "The token is missing or not accepted." });
+    const base = `${req.headers["x-forwarded-proto"] === "https" ? "https" : "http"}://${req.headers.host}/api/scim/v2`;
+    const answer = handleScim(req.method ?? "GET", parts.slice(2).map(decodeURIComponent), url.searchParams, body, base);
+    return scimSend(answer.status, answer.body);
+  }
   // A service's browser sign-in comes back here with a one-time code. The browser arrives from the service's site, so
   // it carries no session: the unguessable, single-use value Talqava put in the request stands in for one.
   if (parts[0] === "oauth" && parts[1] === "callback" && req.method === "GET") {
@@ -905,6 +915,10 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (route === "PUT people" && parts[1] === "settings") return send(res, 200, await tryIt(() => people.setSettings(body)));
     if (route === "GET people" && parts[1] === "sso") return send(res, 200, { sso: ssoPublic(), redirect: `${req.headers["x-forwarded-proto"] === "https" ? "https" : "http"}://${req.headers.host}/api/sso/callback` });
     if (route === "PUT people" && parts[1] === "sso") return send(res, 200, await tryIt(() => setSso(body.issuer ? body : null)));
+    // Directory sync: its state, switching it on (which shows the token once), and switching it off.
+    if (route === "GET people" && parts[1] === "directory") return send(res, 200, { ...scimSettings(), address: `${req.headers["x-forwarded-proto"] === "https" ? "https" : "http"}://${req.headers.host}/api/scim/v2` });
+    if (route === "POST people" && parts[1] === "directory") return send(res, 200, await tryIt(async () => enableScim(body)));
+    if (route === "DELETE people" && parts[1] === "directory") return send(res, 200, await tryIt(async () => disableScim()));
     if (route === "POST people" && !parts[1]) return send(res, 200, await tryIt(() => people.add(body, me)));
     if (route === "PATCH people" && parts[1]) return send(res, 200, await tryIt(() => people.update(parts[1], body, me)));
     if (route === "DELETE people" && parts[1]) return send(res, 200, await tryIt(() => people.remove(parts[1], me)));
