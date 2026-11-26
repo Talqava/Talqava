@@ -23,6 +23,26 @@ export const trello: ServiceDef = {
     "Press the Token link beside the key, press Allow, and copy the token it shows below.",
   ],
   docs: "https://developer.atlassian.com/cloud/trello/guides/rest-api/api-introduction/",
+  // Signing in through the browser: Trello shows its own approval page and hands the token straight back, so there is
+  // no token to copy. The API key is public by Trello's own description, and there is no secret.
+  browser: {
+    kind: "fragment",
+    authUrl: "https://trello.com/1/authorize",
+    tokenUrl: "",
+    scopes: ["read", "write"],
+    scopeSeparator: ",",
+    extra: { expiration: "never" },
+    secret: "never",
+    idKey: "key",
+    idLabel: "API key",
+    tokenKey: "token",
+    appSteps: [
+      "Open trello.com/apps/admin, make a new Power-Up named Talqava for your workspace, and open it.",
+      "On its API Key tab press Generate a new API Key.",
+      "On the same tab, under Allowed origins, add {origin} and save. Trello only sends you back to addresses listed there.",
+      "Copy the API key below and press the button. Trello asks you to allow Talqava; press Allow.",
+    ],
+  },
   fields: [
     { key: "key", label: "API key", secret: true },
     { key: "token", label: "Token", secret: true },

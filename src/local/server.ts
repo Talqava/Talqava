@@ -62,7 +62,7 @@ import { ROLES, ROLE_WORDS, mayDo, people } from "./people.ts";
 import type { Person } from "./people.ts";
 import { projects } from "./projects.ts";
 import { connectCatalog, connectorLabel, disconnectCatalog, listCatalog } from "./connector-catalog.ts";
-import { addWatch, changeRules, checkConnections, connectionProblems, finishBrowserSignIn, pollWatches, removeWatch, setWatch, startBrowserSignIn, type Happening, connectService, listServices, removeConnection, updateConnection } from "./connector-kit.ts";
+import { addWatch, changeRules, checkConnections, connectionProblems, awaitsFragment, finishBrowserSignIn, finishFragmentSignIn, pollWatches, removeWatch, setWatch, startBrowserSignIn, type Happening, connectService, listServices, removeConnection, updateConnection } from "./connector-kit.ts";
 import "./services/index.ts";
 import { installKit, listKits, previewKit, runPlaybook, undoKit } from "./kits.ts";
 import { connectLangfuse, langfuseIntegration, recordStep, removeLangfuse } from "./langfuse.ts";
@@ -795,11 +795,29 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL, approved
       res.writeHead(status, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
       res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safe(title)}</title><body style="font-family:system-ui,sans-serif;max-width:520px;margin:15vh auto;padding:0 16px"><h1 style="font-size:22px">${safe(title)}</h1><p>${safe(message)}</p></body>`);
     };
+    // A service that hands its token back after the # (which never reaches a server): this small page reads it in the
+    // browser and hands it over, then says how it went. The state in the address ties it to the sign-in started here.
+    if (parts[2] && awaitsFragment(parts[2])) {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "referrer-policy": "no-referrer" });
+      return res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connecting</title><body style="font-family:system-ui,sans-serif;max-width:520px;margin:15vh auto;padding:0 16px"><h1 id="t" style="font-size:22px">Connecting…</h1><p id="m"></p><script>
+const say=(t,m)=>{document.getElementById("t").textContent=t;document.getElementById("m").textContent=m};
+const token=new URLSearchParams(location.hash.slice(1)).get("token")||"";
+history.replaceState(null,"","/api/oauth/callback");
+fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({state:${JSON.stringify(parts[2])},token})}).then(r=>r.json()).then(d=>d.label?say("Connected",d.label+" is connected. You can close this tab and go back to Talqava."):say("Not connected",d.error||"The sign-in was not completed.")).catch(()=>say("Not connected","Talqava could not be reached. Start the sign-in again."));
+</script></body>`);
+    }
     try {
       const c = await finishBrowserSignIn(url.searchParams.get("state"), url.searchParams.get("code"), url.searchParams.get("error"));
       return page(200, "Connected", `${c.label} is connected. You can close this tab and go back to Talqava.`);
     } catch (err) {
       return page(400, "Not connected", (err as Error).message);
+    }
+  }
+  if (parts[0] === "oauth" && parts[1] === "callback" && req.method === "POST") {
+    try {
+      return send(res, 200, { label: (await finishFragmentSignIn(body.state, body.token)).label });
+    } catch (err) {
+      return send(res, 400, { error: (err as Error).message });
     }
   }
   // Single sign-on: off to the company's identity provider, and back again with its signed answer.

@@ -108,7 +108,31 @@ export interface BrowserSignIn {
   secret: "required" | "optional" | "never";
   /** How to register the app with the service, as numbered steps. {redirect} stands for the address to give it. */
   appSteps: string[];
+  /**
+   * "code" (the usual: a one-time code is exchanged for tokens) or "fragment" (the service hands the token straight
+   * back in the address, after the #, as Trello does; there is no secret and nothing to renew).
+   */
+  kind?: "code" | "fragment";
+  /** For a service that also takes a pasted key: the name its code reads the token from, so both ways work alike. */
+  tokenKey?: string;
+  /** The name the app's ID is kept under, when the service's calls need it too (Trello's API key). */
+  idKey?: string;
+  /** What the service calls the app's ID, for the form. "Client ID" when left out. */
+  idLabel?: string;
+  /** What separates the permissions in the address. A space when left out. */
+  scopeSeparator?: string;
+  /** False for a service whose documentation does not describe PKCE: the proof is then left out of the sign-in. */
+  pkce?: boolean;
 }
+
+/**
+ * An app Talqava's maker registered with a service, so an owner signs in with one press and registers nothing.
+ * Only an ID that is safe to publish belongs here (a public client that signs in with PKCE, or a public API key);
+ * never a secret. None are filled in yet: each needs the maker's own account with that service. An ID can also be
+ * given when starting the app, as TALQAVA_<SERVICE>_CLIENT_ID.
+ */
+const BUILT_IN_APPS: Record<string, string> = {};
+export const builtInApp = (def: ServiceDef): string => (def.browser && def.browser.secret !== "required" ? (process.env[`TALQAVA_${def.id.toUpperCase()}_CLIENT_ID`] || BUILT_IN_APPS[def.id] || "").trim() : "");
 
 export interface ServiceDef {
   id: string;
@@ -165,7 +189,7 @@ export function listServices() {
     steps: d.steps,
     docs: d.docs,
     fields: d.fields,
-    browser: d.browser ? { secret: d.browser.secret, appSteps: d.browser.appSteps, scopes: d.browser.scopes } : null,
+    browser: d.browser ? { secret: d.browser.kind === "fragment" ? "never" : d.browser.secret, appSteps: d.browser.appSteps, scopes: d.browser.scopes, idLabel: d.browser.idLabel ?? "Client ID", oneClick: Boolean(builtInApp(d)) } : null,
     triggers: (d.triggers ?? []).map((t) => ({ name: t.name, summary: t.summary, param: t.param ?? null })),
     watches: watches().filter((w) => all.some((c) => c.id === w.connection && c.service === d.id)).map(({ seen: _s, ...w }) => w),
     actions: d.actions.map((a) => ({ name: a.name, kind: a.kind, summary: a.alwaysAsk ? `${a.summary} (always asks you first)` : a.summary })),
@@ -441,16 +465,22 @@ export function startBrowserSignIn(id: string, input: { clientId?: unknown; clie
   const def = serviceOf(id);
   if (!def.browser) throw new Error(`${def.name} connects with a key, not a browser sign-in.`);
   if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(redirect) && !/^https:\/\//.test(redirect)) throw new Error("Open Talqava on this computer to sign in to a service.");
-  const clientId = String(input.clientId ?? "").trim();
+  const clientId = String(input.clientId ?? "").trim() || builtInApp(def);
   const clientSecret = String(input.clientSecret ?? "").trim();
-  if (!clientId || clientId.length > 500 || /\s/.test(clientId)) throw new Error("Paste your app's client ID.");
+  if (!clientId || clientId.length > 500 || /\s/.test(clientId)) throw new Error(`Paste your app's ${(def.browser.idLabel ?? "client ID").replace(/^Client/, "client")}.`);
   if (def.browser.secret === "required" && !clientSecret) throw new Error("Paste your app's client secret.");
   for (const [k, v] of pending) if (Date.now() - v.at > 600_000) pending.delete(k);
   if (pending.size > 50) throw new Error("Too many sign-ins were started. Wait ten minutes and try again.");
   const state = b64url(crypto.randomBytes(32));
   const verifier = b64url(crypto.randomBytes(48));
   pending.set(state, { service: id, clientId, clientSecret: def.browser.secret === "never" ? "" : clientSecret, verifier, redirect, rule: input.rule, at: Date.now() });
-  const q = new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: redirect, scope: def.browser.scopes.join(" "), state, code_challenge: b64url(crypto.createHash("sha256").update(verifier).digest()), code_challenge_method: "S256", ...(def.browser.extra ?? {}) });
+  const scope = def.browser.scopes.join(def.browser.scopeSeparator ?? " ");
+  if (def.browser.kind === "fragment") {
+    // The token comes back in the address after the #, which only the browser sees; the page it lands on hands it over.
+    const back = new URLSearchParams({ key: clientId, scope, response_type: "token", callback_method: "fragment", return_url: `${redirect}/${state}`, ...(def.browser.extra ?? {}) });
+    return { url: `${def.browser.authUrl}?${back}` };
+  }
+  const q = new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: redirect, scope, state, ...(def.browser.pkce === false ? {} : { code_challenge: b64url(crypto.createHash("sha256").update(verifier).digest()), code_challenge_method: "S256" }), ...(def.browser.extra ?? {}) });
   return { url: `${def.browser.authUrl}${def.browser.authUrl.includes("?") ? "&" : "?"}${q}` };
 }
 
@@ -467,8 +497,30 @@ export async function finishBrowserSignIn(state: unknown, code: unknown, problem
   if (!p || Date.now() - p.at > 600_000) throw new Error("That sign-in was not started here, or it took longer than ten minutes. Start it again from Integrations.");
   const def = serviceOf(p.service);
   if (problem || !code) throw new Error(problem === "access_denied" ? `You did not approve the sign-in, so ${def.name} was not connected.` : `${def.name} did not complete the sign-in${problem ? ` (${String(problem).slice(0, 80)})` : ""}.`);
-  const t = await tokenCall(def, { grant_type: "authorization_code", code: String(code), redirect_uri: p.redirect, client_id: p.clientId, code_verifier: p.verifier, ...(p.clientSecret ? { client_secret: p.clientSecret } : {}) });
-  const values: Record<string, string> = { client_id: p.clientId, ...(p.clientSecret ? { client_secret: p.clientSecret } : {}), access_token: t.access_token, ...(t.refresh_token ? { refresh_token: t.refresh_token } : {}), expires_at: String(Date.now() + (Number(t.expires_in) || 3600) * 1000) };
+  if (def.browser!.kind === "fragment") throw new Error(`${def.name} did not complete the sign-in.`);
+  const t = await tokenCall(def, { grant_type: "authorization_code", code: String(code), redirect_uri: p.redirect, client_id: p.clientId, ...(def.browser!.pkce === false ? {} : { code_verifier: p.verifier }), ...(p.clientSecret ? { client_secret: p.clientSecret } : {}) });
+  // A token with no stated lifetime and nothing to renew it with does not run out (the service says so by leaving both out).
+  const lasting = !t.expires_in && !t.refresh_token;
+  const values: Record<string, string> = { client_id: p.clientId, ...(p.clientSecret ? { client_secret: p.clientSecret } : {}), access_token: t.access_token, ...(def.browser!.tokenKey ? { [def.browser!.tokenKey]: t.access_token } : {}), ...(t.refresh_token ? { refresh_token: t.refresh_token } : {}), ...(lasting ? {} : { expires_at: String(Date.now() + (Number(t.expires_in) || 3600) * 1000) }) };
+  return signedIn(def, p, values);
+}
+
+/** Whether a sign-in that was started is one whose token comes back after the # (so the landing page must hand it over). */
+export const awaitsFragment = (state: unknown): boolean => ((p) => Boolean(p && serviceOf(p.service).browser?.kind === "fragment"))(pending.get(String(state ?? "")));
+
+/** Finishes a sign-in whose token came back in the address (Trello). The account is checked before it is saved. */
+export async function finishFragmentSignIn(state: unknown, token: unknown): Promise<PublicConnection> {
+  const p = pending.get(String(state ?? ""));
+  pending.delete(String(state ?? ""));
+  if (!p || Date.now() - p.at > 600_000) throw new Error("That sign-in was not started here, or it took longer than ten minutes. Start it again from Integrations.");
+  const def = serviceOf(p.service);
+  const given = String(token ?? "").trim();
+  if (def.browser?.kind !== "fragment" || !given) throw new Error(`You did not approve the sign-in, so ${def.name} was not connected.`);
+  if (given.length > 2000 || /[^\w.~-]/.test(given)) throw new Error(`${def.name} did not complete the sign-in.`);
+  return signedIn(def, p, { [def.browser.idKey ?? "client_id"]: p.clientId, [def.browser.tokenKey ?? "access_token"]: given });
+}
+
+async function signedIn(def: ServiceDef, p: Pending, values: Record<string, string>): Promise<PublicConnection> {
   const found = await def.check(values);
   const label = String(found.label || def.name).replace(/\s+/g, " ").trim().slice(0, 120);
   const all = saved();
@@ -511,7 +563,7 @@ async function fresh(c: Connection): Promise<Connection> {
     }
     const all = saved();
     const mine = all.find((x) => x.id === c.id) ?? c;
-    mine.values = { ...mine.values, access_token: t.access_token, ...(t.refresh_token ? { refresh_token: t.refresh_token } : {}), expires_at: String(Date.now() + (Number(t.expires_in) || 3600) * 1000) };
+    mine.values = { ...mine.values, access_token: t.access_token, ...(def.browser!.tokenKey ? { [def.browser!.tokenKey]: t.access_token } : {}), ...(t.refresh_token ? { refresh_token: t.refresh_token } : {}), expires_at: String(Date.now() + (Number(t.expires_in) || 3600) * 1000) };
     if (all.includes(mine)) store(all);
     return mine;
   })().finally(() => renewing.delete(c.id));

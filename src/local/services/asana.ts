@@ -16,6 +16,21 @@ export const asana: ServiceDef = {
   about: "Read and update the tasks and projects in your Asana workspace.",
   steps: ["In Asana, open the developer console at app.asana.com/0/my-apps.", "Create a personal access token and give it the description Talqava.", "Copy the token and paste it below. It acts as you, with your permissions; you can remove it there at any time."],
   docs: "https://developers.asana.com/docs/personal-access-token",
+  // Browser sign-in with the owner's own Asana app. Asana's page lists the app's secret as required when the code is
+  // exchanged, and requires the PKCE proof for an address on this computer; both are sent.
+  browser: {
+    authUrl: "https://app.asana.com/-/oauth_authorize",
+    tokenUrl: "https://app.asana.com/-/oauth_token",
+    scopes: ["users:read", "workspaces:read", "projects:read", "tasks:read", "tasks:write", "stories:write"],
+    secret: "required",
+    tokenKey: "token",
+    appSteps: [
+      "Open the developer console at app.asana.com/0/my-apps and press Create new app. Name it Talqava.",
+      "Under OAuth, add this redirect URL exactly: {redirect}",
+      "Under OAuth › Permission scopes, tick: users:read, workspaces:read, projects:read, tasks:read, tasks:write and stories:write.",
+      "Copy the Client ID and Client secret below, and press the button. Asana asks you to allow Talqava.",
+    ],
+  },
   fields: [{ key: "token", label: "Personal access token", secret: true }],
   async check(values) {
     const me = await api<{ name: string; email: string }>({ values }, "/users/me");

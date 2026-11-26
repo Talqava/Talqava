@@ -39,6 +39,22 @@ export const typeform: ServiceDef = {
     "Copy the token (it starts with tfp_) and paste it below.",
   ],
   docs: "https://www.typeform.com/developers/get-started/personal-access-token/",
+  // Browser sign-in with the owner's own Typeform app. Typeform's pages do not describe PKCE or say whether accounts
+  // kept in the EU sign in at another address, so an EU account uses the key below instead.
+  browser: {
+    authUrl: "https://api.typeform.com/oauth/authorize",
+    tokenUrl: "https://api.typeform.com/oauth/token",
+    scopes: ["forms:read", "responses:read", "offline"],
+    secret: "required",
+    pkce: false,
+    tokenKey: "token",
+    appSteps: [
+      "In Typeform, open your account's Developer apps and press Register a new app. Name it Talqava.",
+      "Give it this redirect URL exactly: {redirect}",
+      "Copy the Client ID and Client secret below (Typeform shows the secret only once), and press the button.",
+      "If your Typeform account is kept in the EU data centre, use a key instead (below).",
+    ],
+  },
   fields: [{ key: "token", label: "Personal token", secret: true, placeholder: "tfp_…" }],
   async check(values) {
     // The account may be stored in the US or in one of Typeform's two EU locations: the one that accepts the token is kept.
