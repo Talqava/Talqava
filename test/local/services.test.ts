@@ -10,6 +10,7 @@ import type { AddressInfo } from "node:net";
 process.env.TALQAVA_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "talqava-services-"));
 let K: typeof import("../../src/local/connector-kit.ts");
 let server: http.Server;
+let telegramUpdates: any[] = [];
 const seen: { method: string; path: string; auth: string; body: any }[] = [];
 const contacts = new Map<string, any>([["1", { id: "1", properties: { firstname: "Sam", lastname: "Lee", email: "sam@example.com" }, createdAt: "2026-11-01T00:00:00Z", updatedAt: "2026-11-20T00:00:00Z" }]]);
 const cards = new Map<string, any>([["card0001", { id: "card0001", name: "Bake rye", due: "2026-12-01T09:00:00.000Z", dueComplete: false, closed: false, idList: "list0001", desc: "Two loaves", shortUrl: "https://trello.com/c/x" }]]);
@@ -171,12 +172,49 @@ before(async () => {
         if (p === "/emailCampaigns") return json(200, { count: 1, campaigns: [{ id: 8, name: "November news", subject: "Stollen is back", status: "sent", sentDate: "2026-11-18T09:00:00.000Z", statistics: { globalStats: { delivered: 200, uniqueViews: 90, uniqueClicks: 20, unsubscriptions: 1, hardBounces: 2, softBounces: 1 } } }] });
         return json(404, { code: "document_not_found", message: "Contact does not exist" });
       }
+      if (svc === "bot123456:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw" || svc === "bot999999:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw") {
+        if (svc.startsWith("bot999999")) return p === "/getMe" ? json(200, { ok: true, result: { id: 2, first_name: "Other", username: "other_bot" } }) : json(200, { ok: true, result: { url: "https://example.com/hook" } });
+        if (p === "/getMe") return json(200, { ok: true, result: { id: 1, is_bot: true, first_name: "Bakery helper", username: "bakery_help_bot" } });
+        if (p === "/getWebhookInfo") return json(200, { ok: true, result: { url: "" } });
+        if (p === "/getUpdates") {
+          const from = Number(body?.offset ?? 0);
+          return json(200, { ok: true, result: telegramUpdates.filter((u) => u.update_id >= from) });
+        }
+        if (p === "/sendMessage") return body.chat_id === 404 ? json(400, { ok: false, error_code: 400, description: "Bad Request: chat not found" }) : json(200, { ok: true, result: { message_id: 77, chat: { id: body.chat_id, type: "private", first_name: "Sam" } } });
+        if (p === "/getChat") return json(200, { ok: true, result: { id: -1001, type: "supergroup", title: "Bakery staff", username: "bakerystaff" } });
+        return json(404, { ok: false, error_code: 404, description: "Not Found" });
+      }
+      if (svc === "klaviyo") {
+        if (auth !== "Klaviyo-API-Key pk_good_0123456789" || req.headers.revision !== "2026-10-15") return json(401, { errors: [{ status: 401, code: "authentication_failed", title: "Authentication failed", detail: "Incorrect authentication credentials." }] });
+        const sam = { type: "profile", id: "01HXSAM", attributes: { email: "sam@example.com", first_name: "Sam", last_name: "Customer", created: "2026-11-20T10:00:00+00:00", subscriptions: { email: { marketing: { consent: "NEVER_SUBSCRIBED" } } } } };
+        const sent = raw.startsWith("{") ? JSON.parse(raw) : null;
+        if (p === "/accounts") return json(200, { data: [{ type: "account", id: "AbC123", attributes: { contact_information: { organization_name: "Bakery Ltd", default_sender_email: "hello@bakery.example" } } }] });
+        if (p === "/lists") return json(200, { data: [{ type: "list", id: "Y6nRLr", attributes: { name: "Newsletter", opt_in_process: "double_opt_in" } }] });
+        if (p === "/profiles" && req.method === "GET") return json(200, { data: /lee%40example\.com/.test(u.search) ? [] : [sam] });
+        if (p === "/profiles" && req.method === "POST") return String(req.headers["content-type"]).startsWith("application/vnd.api+json") ? json(201, { data: { type: "profile", id: "01HXLEE", attributes: sent.data.attributes } }) : json(415, { errors: [{ detail: "Unsupported media type" }] });
+        if (p === "/profiles/01HXSAM") return json(200, { data: sam });
+        if (p === "/profile-subscription-bulk-create-jobs") return sent.data.relationships.list.data.id === "Nope1" ? json(400, { errors: [{ status: 400, code: "invalid", title: "Invalid input.", detail: "A list with id Nope1 does not exist." }] }) : (res.writeHead(202), res.end());
+        if (p === "/lists/Y6nRLr/relationships/profiles") return (res.writeHead(204), res.end());
+      }
+      if (svc === "square") {
+        if (auth !== "Bearer sq-good" || req.headers["square-version"] !== "2026-11-18") return json(401, { errors: [{ category: "AUTHENTICATION_ERROR", code: "UNAUTHORIZED", detail: "This request could not be authorized." }] });
+        const pay = { id: "PAY1abc", created_at: "2026-11-25T10:15:00Z", status: "COMPLETED", amount_money: { amount: 1250, currency: "USD" }, tip_money: { amount: 200, currency: "USD" }, total_money: { amount: 1450, currency: "USD" }, source_type: "CARD", card_details: { card: { card_brand: "VISA", last_4: "1111" } }, order_id: "ORD1abc", customer_id: "CUS1abc", receipt_url: "https://squareup.com/receipt/preview/PAY1abc", note: "Two loaves" };
+        if (p === "/merchants/me") return json(200, { merchant: { id: "M1", business_name: "Bakery Ltd", currency: "USD", main_location_id: "LOC1" } });
+        if (p === "/locations") return json(200, { locations: [{ id: "LOC1", name: "Main shop", status: "ACTIVE", currency: "USD", timezone: "America/New_York" }] });
+        if (p === "/payments") return json(200, { payments: [pay, { id: "PAY2abc", created_at: "2026-11-25T09:00:00Z", status: "COMPLETED", total_money: { amount: 500, currency: "JPY" }, source_type: "CASH" }] });
+        if (p === "/payments/PAY1abc") return json(200, { payment: pay });
+        if (p === "/orders/search") return json(200, { orders: [{ id: "ORD1abc", created_at: "2026-11-25T10:14:00Z", state: "COMPLETED", total_money: { amount: 1250, currency: "USD" }, line_items: [{ name: "Rye loaf", quantity: "2" }] }] });
+        if (p === "/customers/search" || (p === "/customers" && req.method === "GET")) return json(200, { customers: [{ id: "CUS1abc", given_name: "Sam", family_name: "Customer", email_address: "sam@example.com" }] });
+        if (p === "/customers") return body.email_address === "bad@example.com" ? json(400, { errors: [{ category: "INVALID_REQUEST_ERROR", code: "INVALID_EMAIL_ADDRESS", detail: "Expected email_address to be a valid email address." }] }) : json(200, { customer: { id: "CUS2abc", ...body } });
+        if (p === "/catalog/search-catalog-items") return json(200, { items: [{ id: "ITEM1abc", item_data: { name: "Rye loaf", variations: [{ item_variation_data: { name: "Whole", price_money: { amount: 625, currency: "USD" } } }, { item_variation_data: { name: "Half" } }] } }] });
+      }
       json(404, { message: "No route" });
     });
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  for (const id of ["SHOPIFY", "HUBSPOT", "MAILCHIMP", "TRELLO", "CALENDLY", "TYPEFORM", "PIPEDRIVE", "TODOIST", "JIRA", "CLICKUP", "FRESHDESK", "BREVO"]) process.env[`TALQAVA_${id}_API`] = `${url}/${id.toLowerCase()}`;
+  for (const id of ["SHOPIFY", "HUBSPOT", "MAILCHIMP", "TRELLO", "CALENDLY", "TYPEFORM", "PIPEDRIVE", "TODOIST", "JIRA", "CLICKUP", "FRESHDESK", "BREVO", "KLAVIYO", "SQUARE"]) process.env[`TALQAVA_${id}_API`] = `${url}/${id.toLowerCase()}`;
+  process.env.TALQAVA_TELEGRAM_API = url;
   K = await import("../../src/local/connector-kit.ts");
   await import("../../src/local/services/index.ts");
 });
@@ -450,4 +488,101 @@ test("Brevo: contacts, lists and campaign results with a key; nothing is sent fr
   const conn = { values: { api_key: "xkeysib-0123456789abcdef0123" } } as never;
   assert.deepEqual(await trigger.list(conn, ""), ["12"]);
   assert.equal((await trigger.describe(conn, "12", "")).title, "New contact: sam@example.com");
+});
+
+test("Telegram: a bot's messages are received once and kept in memory; sending always asks the owner", async () => {
+  await assert.rejects(K.connectService("telegram", { values: { token: "not a token" } }), /does not look like a bot token/);
+  await assert.rejects(K.connectService("telegram", { values: { token: "999999:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw" } }), /already sends its messages to another program/);
+  const c = await K.connectService("telegram", { values: { token: "123456:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw" }, rule: "auto" });
+  assert.equal(c.label, "Bakery helper (@bakery_help_bot)");
+  assert.equal(await run("telegram__recent_messages"), "No messages have arrived since Talqava was started.");
+
+  telegramUpdates = [
+    { update_id: 10, message: { message_id: 5, date: 1795478400, chat: { id: 42, type: "private", first_name: "Sam" }, from: { id: 42, is_bot: false, first_name: "Sam", last_name: "Customer" }, text: "Do you have rye today?" } },
+    { update_id: 11, message: { message_id: 6, date: 1795478460, chat: { id: -1001, type: "supergroup", title: "Bakery staff" }, from: { id: 9, is_bot: true, first_name: "Other bot" }, text: "ignored: from a bot" } },
+    { update_id: 12, channel_post: { message_id: 7, date: 1795478520, chat: { id: -1002, type: "channel", title: "Bakery news" }, caption: "New stollen" } },
+  ];
+  const got = await run("telegram__recent_messages");
+  assert.equal(got, "2026-11-24 00:02 · Bakery news · Bakery news [chat -1002, message 7]\nNew stollen\n\n2026-11-24 00:00 · Sam Customer · private chat [chat 42, message 5]\nDo you have rye today?");
+  // The next ask starts past what was received, so Telegram forgets those; they stay readable here.
+  await run("telegram__recent_messages", { chat: "42" });
+  assert.equal(seen.at(-1)!.body.offset, 13);
+  telegramUpdates = [];
+  assert.match(await run("telegram__recent_messages", { chat: "42" }), /^2026-11-24 00:00 · Sam Customer/);
+
+  assert.equal(asks("telegram__send_message"), true, "even when changes need no asking");
+  assert.equal(K.toolActionKind("telegram__send_message"), "send");
+  assert.equal(await run("telegram__send_message", { chat: "42", text: " Yes, until 3pm. ", reply_to: "5" }), "Sent to Sam (message 77).");
+  assert.deepEqual(seen.at(-1)!.body, { chat_id: 42, text: "Yes, until 3pm.", reply_parameters: { message_id: 5, allow_sending_without_reply: true } });
+  await assert.rejects(run("telegram__send_message", { chat: "404", text: "x" }), /Telegram answered 400: Bad Request: chat not found/);
+  await assert.rejects(run("telegram__send_message", { chat: "42", text: "x".repeat(4097) }), /4,096 characters/);
+  await assert.rejects(run("telegram__send_message", { chat: "someone", text: "x" }), /chat's number/);
+  assert.equal(await run("telegram__get_chat", { chat: "@bakerystaff" }), "supergroup · Bakery staff · @bakerystaff [chat -1001]");
+
+  // A new message can start a task, and is described from what was kept.
+  const trigger = K.services().find((s) => s.id === "telegram")!.triggers![0];
+  const conn = { values: { token: "123456:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw" } } as never;
+  telegramUpdates = [{ update_id: 13, message: { message_id: 8, date: 1795478600, chat: { id: 42, type: "private", first_name: "Sam" }, from: { id: 42, first_name: "Sam" }, text: "Thanks!" } }];
+  const ids = await trigger.list(conn, "");
+  assert.deepEqual(ids, ["42_8", "m1002_7", "42_5"]);
+  const told = await trigger.describe(conn, "42_8", "");
+  assert.equal(told.title, "Telegram message from Sam");
+  assert.match(told.text, /Thanks!\n\nTo answer, use send_message with chat 42\./);
+  await assert.rejects(trigger.describe(conn, "1_1", ""), /no longer kept/);
+});
+
+test("Klaviyo: profiles and lists with a private key; subscribing records consent and always asks first", async () => {
+  await assert.rejects(K.connectService("klaviyo", { values: { api_key: "sk_wrong" } }), /starts with pk_/);
+  await assert.rejects(K.connectService("klaviyo", { values: { api_key: "pk_bad_0123456789" } }), /Klaviyo refused that: Incorrect authentication credentials/);
+  assert.equal((await K.connectService("klaviyo", { values: { api_key: "pk_good_0123456789" }, rule: "auto" })).label, "Bakery Ltd (hello@bakery.example)");
+  assert.equal(await run("klaviyo__list_lists"), "[Y6nRLr] Newsletter · double opt in");
+  const row = "[01HXSAM] sam@example.com · Sam Customer · email: never subscribed · added 2026-11-20";
+  assert.equal(await run("klaviyo__list_profiles"), row);
+  assert.equal(seen.at(-1)!.path, "/klaviyo/profiles?sort=-created&additional-fields%5Bprofile%5D=subscriptions&page%5Bsize%5D=20");
+  assert.equal(await run("klaviyo__find_profile", { email: "Sam@Example.com" }), row);
+  assert.match(decodeURIComponent(seen.at(-1)!.path), /filter=equals\(email,"sam@example\.com"\)/);
+  await assert.rejects(run("klaviyo__find_profile", { email: 'a@b.c"),any(' }), /email address/, "an address cannot carry filter words of its own");
+
+  assert.equal(await run("klaviyo__save_profile", { email: "lee@example.com", first_name: "Lee" }), "Added the profile lee@example.com [01HXLEE].");
+  assert.deepEqual(seen.at(-1)!.body, { data: { type: "profile", attributes: { email: "lee@example.com", first_name: "Lee" } } });
+  assert.equal(await run("klaviyo__save_profile", { email: "sam@example.com" }), "sam@example.com is already a profile [01HXSAM]. Nothing was changed.");
+  assert.equal(await run("klaviyo__save_profile", { email: "sam@example.com", last_name: "Baker" }), "Updated the profile sam@example.com [01HXSAM].");
+  assert.deepEqual([seen.at(-1)!.method, seen.at(-1)!.body], ["PATCH", { data: { type: "profile", id: "01HXSAM", attributes: { last_name: "Baker" } } }]);
+
+  assert.equal(asks("klaviyo__subscribe_to_list"), true, "even when changes need no asking");
+  assert.equal(asks("klaviyo__save_profile"), false);
+  assert.match(await run("klaviyo__subscribe_to_list", { email: "sam@example.com", list: "Y6nRLr" }), /subscribed once they confirm by email/);
+  assert.deepEqual(seen.at(-1)!.body.data.attributes.profiles.data[0].attributes, { email: "sam@example.com", subscriptions: { email: { marketing: { consent: "SUBSCRIBED" } } } });
+  await assert.rejects(run("klaviyo__subscribe_to_list", { email: "sam@example.com", list: "Nope1" }), /Klaviyo answered 400: A list with id Nope1 does not exist/);
+  assert.equal(await run("klaviyo__remove_from_list", { email: "sam@example.com", list: "Y6nRLr" }), "Took sam@example.com off list Y6nRLr.");
+  assert.deepEqual([seen.at(-1)!.method, seen.at(-1)!.body], ["DELETE", { data: [{ type: "profile", id: "01HXSAM" }] }]);
+  const trigger = K.services().find((s) => s.id === "klaviyo")!.triggers![0];
+  const conn = { values: { api_key: "pk_good_0123456789" } } as never;
+  assert.deepEqual(await trigger.list(conn, ""), ["01HXSAM"]);
+  assert.equal((await trigger.describe(conn, "01HXSAM", "")).title, "New profile: sam@example.com");
+});
+
+test("Square: payments, orders, customers and items are read with the account's own token; money is said in whole units", async () => {
+  await assert.rejects(K.connectService("square", { values: { token: "wrong" } }), /Square refused that: This request could not be authorized/);
+  assert.equal((await K.connectService("square", { values: { token: "sq-good" }, rule: "auto" })).label, "Bakery Ltd (USD)");
+  const actions = K.services().find((s) => s.id === "square")!.actions;
+  assert.deepEqual(actions.filter((a) => a.kind !== "read").map((a) => a.name), ["add_customer"], "nothing takes a payment or gives a refund");
+  assert.equal(await run("square__list_locations"), "[LOC1] Main shop · active · USD · America/New_York");
+  assert.equal(await run("square__list_payments", { since: "2026-11-01", location: "LOC1" }), "[PAY1abc] 2026-11-25 10:15 · 14.50 USD (tip 2.00 USD) · completed · VISA ending 1111 · Two loaves\n[PAY2abc] 2026-11-25 09:00 · 500 JPY · completed · cash");
+  assert.equal(seen.at(-1)!.path, "/square/payments?sort_order=DESC&begin_time=2026-11-01T00%3A00%3A00Z&location_id=LOC1&limit=25");
+  await assert.rejects(run("square__list_payments", { since: "last week" }), /date like/);
+  assert.match(await run("square__get_payment", { payment: "PAY1abc" }), /Order ORD1abc · customer CUS1abc\nReceipt: https:\/\/squareup\.com\/receipt\/preview\/PAY1abc/);
+  await assert.rejects(run("square__get_payment", { payment: "../customers" }), /payment's id/);
+  assert.equal(await run("square__list_orders", { state: "completed" }), "[ORD1abc] 2026-11-25 10:14 · 12.50 USD · completed · 2 × Rye loaf");
+  assert.deepEqual(seen.at(-1)!.body, { location_ids: ["LOC1"], limit: 20, query: { filter: { state_filter: { states: ["COMPLETED"] } }, sort: { sort_field: "CREATED_AT", sort_order: "DESC" } } });
+  assert.equal(await run("square__find_customers", { email: "sam@" }), "[CUS1abc] Sam Customer · sam@example.com");
+  assert.deepEqual(seen.at(-1)!.body, { limit: 20, query: { filter: { email_address: { fuzzy: "sam@" } } } });
+  assert.match(await run("square__add_customer", { first_name: "Lee", email: "lee@example.com" }), /^Added the customer \[CUS2abc\] Lee · lee@example\.com$/);
+  await assert.rejects(run("square__add_customer", {}), /at least a name/);
+  await assert.rejects(run("square__add_customer", { first_name: "x", email: "bad@example.com" }), /Square answered 400: Expected email_address to be a valid email address/);
+  assert.equal(await run("square__find_items", { words: "rye" }), "[ITEM1abc] Rye loaf · Whole 6.25 USD, Half (no price)");
+  const trigger = K.services().find((s) => s.id === "square")!.triggers![0];
+  const conn = { values: { token: "sq-good" } } as never;
+  assert.deepEqual(await trigger.list(conn, ""), ["PAY1abc", "PAY2abc"]);
+  assert.equal((await trigger.describe(conn, "PAY1abc", "")).title, "Payment of 14.50 USD");
 });
