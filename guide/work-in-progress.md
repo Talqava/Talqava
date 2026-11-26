@@ -47,7 +47,7 @@ The Agents page is your control room. You hand out work, clear what is waiting o
 
 **Answer an approval**
 1. Find the card under **Waiting on you**. It shows what the agent wants to do.
-2. Click **Allow once**, **Deny**, or **Always, for this task**. "Always" lets the agent take that kind of step without asking for the rest of that task.
+2. Click **Allow**, **Don't allow**, or **Always, for this task**. "Always" lets the agent take that kind of step without asking for the rest of that task.
 
 **Follow one task**
 1. Click a task under **Under way**, **Latest results** or **Completed work**, or click a working agent on the left.

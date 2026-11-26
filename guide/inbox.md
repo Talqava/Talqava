@@ -56,7 +56,7 @@ Work handed between agents doesn't send you separate messages. Its progress show
 
 **Answer an approval**
 1. Open the **Approval needed** message. It shows exactly what the agent wants to do.
-2. Click **Allow once** or **Don't allow**, or **Open the task** to see more first.
+2. Click **Allow** or **Don't allow**, or **Open the task** to see more first. **Show the details** on the card opens the full step.
 
 **Reply to an agent**
 1. Open a finished task's message.

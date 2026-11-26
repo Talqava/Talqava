@@ -1067,26 +1067,63 @@ function clearStream() {
   ui.stream = null;
 }
 
+/** A step an agent asks about, in plain words: the question to put to the owner, and one line on what exactly. */
+function stepWords(approval) {
+  const name = approval.name;
+  const input = approval.input ?? {};
+  const cut = (v, n = 160) => ((t) => (t.length > n ? `${t.slice(0, n)}…` : t))(String(v ?? "").replace(/\s+/g, " ").trim());
+  if (name === "bash") return { ask: "Run a command on this computer?", what: cut(input.command) };
+  if (name === "str_replace_based_edit_tool") return { ask: input.command === "view" ? "Read a file?" : "Change a file?", what: cut(input.path) };
+  if (name === "http_request") {
+    let host = "";
+    try {
+      host = new URL(String(input.url)).hostname;
+    } catch {}
+    return { ask: /^(GET|HEAD)$/i.test(String(input.method ?? "GET")) ? `Read from ${host || "a web address"}?` : `Send data to ${host || "a web address"}?`, what: cut(`${input.method || "GET"} ${input.url || ""}`) };
+  }
+  if (name === "browser") return { ask: "Use the browser?", what: cut(`${input.action || ""} ${input.url || input.target || ""}`) };
+  if (name === "assign_task") return { ask: "Hand part of the work to someone else?", what: cut(`to ${input.to || "an agent"}: ${input.task || ""}`) };
+  // A connected service's step is named "<service>__<what it does>".
+  const [service, action] = name.split("__");
+  const said = Object.entries(input)
+    .filter(([, v]) => v !== null && v !== "" && typeof v !== "object")
+    .slice(0, 4)
+    .map(([k, v]) => `${k.replace(/_/g, " ")}: ${cut(v, 70)}`)
+    .join(" · ");
+  if (action) return { ask: `${service[0].toUpperCase()}${service.slice(1)}: ${action.replace(/_/g, " ")}?`, what: said };
+  return { ask: `Use ${NAMES[name] || name}?`, what: summarize(name, input) ? cut(summarize(name, input)) : said };
+}
+
+/**
+ * The card an agent's question is shown as, wherever it appears: who asks, the question in plain words, one line on
+ * what exactly, the full details folded away, and one clear button. Nothing happens until the owner presses it.
+ */
+function approvalAsk(approval, { who, bot = null, decide, always = "", extra = null, id = "" }) {
+  const words = stepWords(approval);
+  const full = approval.name === "bash" ? String(approval.input?.command ?? "") : JSON.stringify(approval.input ?? {}, null, 2);
+  return h(
+    "section",
+    { class: "askcard", ...(id ? { id } : {}), role: "group", "aria-label": `${who} asks: ${words.ask}` },
+    h("div", { class: "askcardhead" }, bot ? keycap(bot, 24, "", bot.type) : null, h("div", { class: "grow" }, h("b", {}, words.ask), h("span", { class: "note small" }, `${who} is asking before doing this.`))),
+    words.what ? h("p", { class: "askcardwhat" }, words.what) : null,
+    approval.reason ? h("p", { class: "note small" }, approval.reason) : null,
+    h("details", { class: "askcardmore" }, h("summary", {}, "Show the details"), h("pre", {}, full)),
+    h(
+      "div",
+      { class: "askcardfoot" },
+      h("span", { class: "note small grow" }, "Nothing happens until you say so."),
+      extra,
+      h("button", { class: "plain", onclick: () => decide("deny") }, "Don't allow"),
+      h("button", { class: "primary", onclick: () => decide("allow") }, "Allow"),
+    ),
+    always && !approval.reason ? h("button", { class: "plain link small askcardalways", onclick: () => decide("always") }, always) : null,
+  );
+}
+
 function addApproval(approval) {
   if (document.getElementById(`approval-${approval.id}`)) return;
   const decide = (decision) => attempt(() => api("POST", `conversations/${state.convId}/approvals/${approval.id}`, { decision }));
-  const detail = approval.name === "bash" ? approval.input.command : JSON.stringify(approval.input, null, 2);
-  add(
-    h(
-      "div",
-      { class: "approval", id: `approval-${approval.id}` },
-      h("strong", {}, `${speaker()} wants to use: ${NAMES[approval.name] || approval.name}`),
-      approval.reason ? h("div", { class: "note" }, approval.reason) : null,
-      h("pre", {}, detail),
-      h(
-        "div",
-        { class: "row" },
-        h("button", { class: "primary", onclick: () => decide("allow") }, "Allow once"),
-        approval.reason ? null : h("button", { onclick: () => decide("always") }, `Always allow ${NAMES[approval.name] || approval.name} in this chat`),
-        h("button", { class: "danger", onclick: () => decide("deny") }, "Don't allow"),
-      ),
-    ),
-  );
+  add(approvalAsk(approval, { who: speaker(), bot: chatBotOf(), decide, always: `Always allow ${NAMES[approval.name] || approval.name.replace(/__/g, ": ").replace(/_/g, " ")} in this chat`, id: `approval-${approval.id}` }));
 }
 
 // ---------- agents' tiles (drawn further down) and the app's accent ----------
@@ -1696,7 +1733,7 @@ function questCard(q) {
     q.status === "running" ? h("div", { class: "scanline", "aria-hidden": "true" }, h("span")) : null,
     h("div", { class: "head" }, h("b", {}, q.title), keycap(q.bot, 28, mood(q), q.bot.type)),
     approval
-      ? h("div", { class: "now wait" }, `◌ ${q.bot.name} wants to use ${NAMES[approval.name] || approval.name}`)
+      ? h("div", { class: "now wait" }, `◌ ${q.bot.name} asks: ${stepWords(approval).ask}`)
       : h("div", { class: "now" }, `● ${q.bot.name} · step ${q.steps || 1}${q.budget?.steps ? ` of up to ${q.budget.steps}` : ""} · ${doing}`),
     approval ? h("pre", {}, approval.name === "bash" ? approval.input.command : JSON.stringify(approval.input, null, 2)) : showOutput ? h("pre", {}, showOutput.trim()) : null,
     approval?.reason || (q.readOutside && q.status === "running")
@@ -1706,9 +1743,9 @@ function questCard(q) {
       ? h(
           "div",
           { class: "row" },
-          h("button", { class: "primary", onclick: decide(approval, "allow") }, "Allow once"),
-          approval.reason ? null : h("button", { onclick: decide(approval, "always") }, "Always, for this task"),
-          h("button", { class: "danger", onclick: decide(approval, "deny") }, "Deny"),
+          h("button", { class: "primary", onclick: decide(approval, "allow") }, "Allow"),
+          h("button", { onclick: decide(approval, "deny") }, "Don't allow"),
+          approval.reason ? null : h("button", { class: "plain link small", onclick: decide(approval, "always") }, "Always, for this task"),
         )
       : null,
     h(
@@ -2244,7 +2281,7 @@ function readMail(m) {
     if (n.kind === "approval") {
       const a = n.approval;
       const decide = (decision) => act(() => api("POST", `conversations/${q.id}/approvals/${a.id}`, { decision }));
-      fill(body, h("p", {}, `I want to use ${NAMES[a.name] || a.name} for “${q.title}”. Is that all right?`), h("pre", {}, a.name === "bash" ? a.input.command : JSON.stringify(a.input, null, 2)), h("div", { class: "row" }, h("button", { class: "primary", onclick: () => decide("allow") }, "Allow once"), h("button", { class: "danger", onclick: () => decide("deny") }, "Don't allow"), h("button", { class: "plain", onclick: () => go("quest", q.id) }, "Open the task")));
+      fill(body, h("p", {}, `For “${q.title}”:`), approvalAsk(a, { who: roleOf(q.bot.id)?.title || q.bot.name, bot: q.bot, decide, extra: h("button", { class: "plain link small", onclick: () => go("quest", q.id) }, "Open the task") }));
     } else if (n.kind === "plan") fill(body, planCard(q, () => act(async () => {})), h("button", { class: "plain small", onclick: () => go("quest", q.id) }, "Open the task"));
     else if (n.kind === "asking") {
       const answer = h("textarea", { rows: 4, placeholder: "Your answer. The task starts once you send it.", "aria-label": "Answer" });
@@ -2282,7 +2319,7 @@ function readMail(m) {
   const report = h("div", { class: "md readreport" }, q.said ? renderMarkdown(q.said) : null);
   mailFullText(q).then((text) => text && report.isConnected && fill(report, renderMarkdown(text)));
   const approvals = (q.approvals ?? []).map((a) =>
-    h("div", { class: "readapproval" }, h("b", {}, `May I use ${NAMES[a.name] || a.name}?`), h("pre", {}, a.name === "bash" ? a.input.command : JSON.stringify(a.input, null, 2)), h("div", { class: "row" }, h("button", { class: "primary small", onclick: () => act(() => api("POST", `conversations/${q.id}/approvals/${a.id}`, { decision: "allow" })) }, "Allow once"), h("button", { class: "danger small", onclick: () => act(() => api("POST", `conversations/${q.id}/approvals/${a.id}`, { decision: "deny" })) }, "Don't allow"))),
+    approvalAsk(a, { who: roleOf(q.bot.id)?.title || q.bot.name, bot: q.bot, decide: (decision) => act(() => api("POST", `conversations/${q.id}/approvals/${a.id}`, { decision })) }),
   );
   const parts = q.chain?.tasks > 1 ? `${q.chain.finished} of ${q.chain.tasks - 1} parts done${q.chain.working ? `, ${q.chain.working} under way` : ""}${q.chain.stopped ? `, ${q.chain.stopped} stopped` : ""}` : "";
   fill(
