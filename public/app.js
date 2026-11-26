@@ -7696,6 +7696,63 @@ async function renderWsPage(col, id) {
   }
 }
 
+/** In a note's or document's side panel: the photos and files attached to it, and the words found in pictures. */
+function attachmentsPart(page, id, col) {
+  const files = page.files ?? [];
+  const at = (f, rest = "") => `/api/workspace/pages/${id}/attachments/${f.id}${rest}`;
+  const size = (n) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} KB`);
+  const picker = h("input", { type: "file", multiple: true, hidden: true });
+  const add = (list) =>
+    attempt(async () => {
+      for (const file of list) {
+        if (file.size > 15_000_000) throw new Error(`“${file.name}” is larger than 15 MB. Put it in the Library instead, and mention it in the note.`);
+        const res = await fetch(`/api/workspace/pages/${id}/attachments?name=${encodeURIComponent(file.name)}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: file });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.error) throw new Error(data.error || "That file could not be attached.");
+      }
+      toast(list.length === 1 ? "Attached." : `${list.length} files attached.`);
+      openPage(id);
+    }, col);
+  picker.addEventListener("change", () => picker.files.length && add([...picker.files]));
+  const read = (f) =>
+    confirm(`Read the words in “${f.name}”?\n\nThe picture is sent to your team's AI model, which writes out the words it sees. They are kept with this ${page.kind === "note" ? "note" : "document"}, so you can find it by them. It costs about as much as a short question.`) &&
+    attempt(async () => {
+      const r = await api("POST", `workspace/pages/${id}/attachments/${f.id}/read-words`);
+      toast(r.words ? `Done: ${r.words} words were found. Search for any of them to find this ${page.kind === "note" ? "note" : "document"}.` : "No words were found in this picture.");
+      openPage(id);
+    }, col);
+  const words = (f) => attempt(async () => alert((await api("GET", `workspace/pages/${id}/attachments/${f.id}/words`)).words), col);
+  const remove = (f) => confirm(`Remove “${f.name}” from this ${page.kind === "note" ? "note" : "document"}? The file is deleted.`) && attempt(async () => (await api("DELETE", `workspace/pages/${id}/attachments/${f.id}`), openPage(id)), col);
+  const zone = h(
+    "div",
+    {
+      class: "attachzone",
+      ondragover: (e) => (e.preventDefault(), zone.classList.add("over")),
+      ondragleave: () => zone.classList.remove("over"),
+      ondrop: (e) => (e.preventDefault(), zone.classList.remove("over"), e.dataTransfer.files.length && add([...e.dataTransfer.files])),
+    },
+    files.map((f) =>
+      h(
+        "div",
+        { class: "attached" },
+        f.picture ? h("a", { href: at(f), target: "_blank", rel: "noopener" }, h("img", { class: "fthumb", src: at(f), alt: f.name, loading: "lazy" })) : null,
+        h("div", { class: "grow" }, h("a", { href: at(f, "?download=1"), download: f.name }, f.name), h("div", { class: "note small" }, size(f.size), f.words ? ` · ${f.words} words found` : "")),
+        h(
+          "div",
+          { class: "row wrap" },
+          f.picture ? h("button", { class: "plain link", onclick: () => read(f) }, f.words ? "Read again" : "Read the words") : null,
+          f.words ? h("button", { class: "plain link", onclick: () => words(f) }, "Show words") : null,
+          h("button", { class: "plain link", onclick: () => remove(f) }, "Remove"),
+        ),
+      ),
+    ),
+    h("button", { class: "small", onclick: () => picker.click() }, "Attach a photo or file"),
+    picker,
+    h("p", { class: "note small" }, "Or drop files here. Up to 15 MB each. Attachments stay with you: agents are not given them."),
+  );
+  return [h("div", { class: "label" }, `Attachments${files.length ? ` · ${files.length}` : ""}`), zone];
+}
+
 /** In a document's or note's side panel: its folder or notebook, tags, what it can become, and downloads. */
 function officePanel(page, id, surface, patch, col) {
   const isNote = page.kind === "note";
@@ -7734,6 +7791,7 @@ function officePanel(page, id, surface, patch, col) {
     folder,
     h("datalist", { id: listId }, names.map((n) => h("option", { value: n }))),
     isNote ? [h("div", { class: "label" }, "Tags"), tags, h("p", { class: "note small" }, "Separate tags with commas.")] : null,
+    attachmentsPart(page, id, col),
     h("div", { class: "label" }, "Turn it into"),
     h(
       "div",
@@ -8823,7 +8881,7 @@ async function notesView() {
     if (f0.notebook && !notebooks.includes(f0.notebook)) f0.notebook = null;
     if (f0.tag && !tags.includes(f0.tag)) f0.tag = null;
     const needle = f0.q.trim().toLowerCase();
-    const shown = notes.filter((n) => (!f0.notebook || n.folder === f0.notebook) && (!f0.tag || n.tags.includes(f0.tag)) && (!needle || `${n.title} ${n.summary} ${n.tags.join(" ")} ${n.folder}`.toLowerCase().includes(needle)));
+    const shown = notes.filter((n) => (!f0.notebook || n.folder === f0.notebook) && (!f0.tag || n.tags.includes(f0.tag)) && (!needle || `${n.title} ${n.summary} ${n.tags.join(" ")} ${n.folder} ${n.attached ?? ""}`.toLowerCase().includes(needle)));
     const q = h("input", { type: "search", value: f0.q, placeholder: "Search notes", "aria-label": "Search notes" });
     q.addEventListener("input", () => ((f0.q = q.value), drawSide(), side.querySelector("input[type=search]")?.focus()));
     const pick = (label, on, set, n) => h("button", { class: `plain wsrow officerow ${on ? "on" : ""}`, "aria-pressed": String(on), onclick: () => (set(), drawSide()) }, h("span", { class: "grow" }, label), h("span", { class: "note small" }, String(n)));
@@ -8854,7 +8912,7 @@ async function notesView() {
   if (ui.ws.open) return renderWsPage(col, ui.ws.open);
   fill(
     col,
-    h("div", { class: "officehome" }, h("h1", {}, "Notes"), h("p", { class: "lead" }, "Quick notes, meeting notes and ideas. A note is private: no agent can find or read it, and it is never sent to an AI model, until you choose who can see it.")),
+    h("div", { class: "officehome" }, h("h1", {}, "Notes"), h("p", { class: "lead" }, "Quick notes, meeting notes and ideas. A note is private: no agent can find or read it, and it is never sent to an AI model, until you choose who can see it or ask for the words in an attached picture to be read.")),
     h("div", { class: "row wrap" }, h("button", { class: "primary", onclick: () => officeNew("note", f0.notebook ?? "") }, "+ New note")),
     h("div", { class: "card form" }, h("b", {}, "What a note can become"), h("ul", {}, h("li", {}, "A task: open the note and give it to an agent."), h("li", {}, "A document, when it grows into a letter or proposal."), h("li", {}, "A Workspace page, when it becomes a procedure agents should follow."), h("li", {}, "Something your agents remember, in Memory."))),
   );

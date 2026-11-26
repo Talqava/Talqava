@@ -1175,6 +1175,11 @@ dialog.needs .row.end { justify-content: flex-end; margin-top: 8px; }
 .libicon { display: inline-flex; align-items: center; justify-content: center; color: var(--soft); }
 .ficon { color: var(--accent-ink); }
 .frow.uprow .ficon { color: var(--muted); }
+.attachzone { border: 1px dashed var(--line); border-radius: 8px; padding: 8px; display: grid; gap: 8px; }
+.attachzone.over { border-color: var(--accent); background: var(--bg); }
+.attached { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; align-items: center; overflow-wrap: anywhere; }
+.attached > .grow { grid-column: 2; }
+.attached > .row { grid-column: 1 / -1; gap: 10px; }
 .fthumb { width: 34px; height: 34px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); }
 .fkind { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 6px; font: 700 9.5px/1 var(--mono); letter-spacing: 0.04em; color: var(--kind, var(--muted)); background: color-mix(in srgb, var(--kind, var(--muted)) 13%, var(--bg)); border: 1px solid color-mix(in srgb, var(--kind, var(--muted)) 30%, var(--line)); }
 .fname { display: flex; flex-direction: column; min-width: 0; }
