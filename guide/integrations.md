@@ -94,7 +94,7 @@ A post can be given **categories**, **tags** and a **featured image**. Agents ch
 
 To ask for one post or one change by hand, give a task in your own words, such as "Write a post about our winter opening hours for the blog" or "Update the About page on our website with our new address".
 
-### Connect your shop, team chat or task list (WooCommerce, Slack, Asana)
+### Connect a built-in service (WooCommerce, HubSpot, Mailchimp, Slack, Asana, Trello, Calendly, Typeform)
 
 These services are built into Talqava and all work the same way.
 
@@ -111,6 +111,11 @@ What each one does:
 - **WooCommerce**: see orders, products and customers of the shop on your WordPress site; change a product's price, stock or text; move an order to another status; add a note to an order. A note marked for the customer is emailed to them.
 - **Slack**: read the channels the bot has been invited to, and post messages and replies. You make the bot in your own Slack workspace; the page lists the permissions to give it.
 - **Asana**: see projects and tasks, add tasks, change them or mark them done, and comment.
+- **HubSpot**: find and read contacts, companies and deals; add and change them. It connects with a HubSpot service key.
+- **Mailchimp**: see audiences and campaigns, look people up, and add or update someone on a list. Adding someone always says how they start: with Mailchimp's confirmation email first, subscribed at once, or recorded without sending. Agents do not create or send campaigns.
+- **Trello**: see boards, lists and cards; add, change, move and archive cards; comment.
+- **Calendly**: see booked meetings, who booked them and their answers, and your booking links. Reading only.
+- **Typeform**: see forms and the answers people sent. Reading only.
 
 You can connect more than one account of a service. To disconnect, press **Disconnect** on the account; its key is forgotten and nothing in the service is changed.
 
