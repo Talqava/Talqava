@@ -37,7 +37,7 @@ The first time, Talqava opens on a short chat with your assistant. It asks one t
 
 Your agents need an AI model to think with.
 
-1. Open **More**, then **Connections**, and choose **AI models**. (The set-up chat takes you there.) Pick a service: **Anthropic (Claude)** is the standard and works best for agent work.
+1. Press the account button at the bottom left, then **Connections**, and choose **AI models**. (The set-up chat takes you there.) Pick a service: **Anthropic (Claude)** is the standard and works best for agent work.
 2. Press **Connect**, follow the link to get a key from that company's website, paste it in, and press **Connect**.
 3. Choose a model and press **Use for my team**.
 
@@ -71,22 +71,24 @@ That's it: you have run your first task. From here, add more agents, set budgets
 
 ## A tour of the menu
 
-The menu on the left has five places and **More**. It follows one idea: **you ask, agents do the work, you stay in control.** The first time you open Talqava, a short welcome says the same; **Show the welcome again** at the bottom of the home screen brings it back.
+The menu is a narrow strip of icons down the left side. Point at an icon to see its name. It follows one idea: **you ask, agents do the work, you stay in control.** The first time you open Talqava, a short welcome says the same; **Show the welcome again** at the bottom of the home screen brings it back.
 
-Each place holds a few pages, shown as tabs across the top. Talqava remembers the tab you last used in each place. When a guide says "open **Connections**" or any other page, find its place in the list below, or type the page's name in the box at the top.
+Some places hold a few pages, shown as tabs across the top. Talqava remembers the tab you last used in each place. When a guide says "open **Connections**" or any other page, find its place in the list below, or type the page's name in the box at the top.
 
-In a narrow window or on a phone, the menu is behind the **☰** button at the top left, and pages with two columns stack into one.
+In a narrow window or on a phone the strip stays where it is, and pages with two columns stack into one.
 
 The box at the top finds anything: files by name or by the words inside, tasks, chats, agents, and any page of the app.
 
-**New**: Where Talqava opens. One box: ask for anything in your own words and press Enter. Plain words go to your assistant as a chat. Start with **@** and an agent's name to give that agent a task. Under the box are three things to try, and links to make a document, sheet, presentation or note. Below that: what is waiting on you, what is being worked on, and what got done today. **Your earlier chats** at the bottom opens the chat page. See [Chat](chat.md).
+**New** (the green button): Where Talqava opens. One box: ask for anything in your own words and press Enter. Plain words go to your assistant as a chat. Start with **@** and an agent's name to give that agent a task. Under the box are three things to try, and links to make a document, sheet, presentation or note. Below that: what is waiting on you, what is being worked on, and what got done today. **Your earlier chats** at the bottom opens the chat page. See [Chat](chat.md).
 
-**Inbox**: Everything that needs you, in one place: plans to approve, questions, finished work to review, changes agents want to make, and reminders.
+**Chats**: Your conversations with the assistant.
 
-**Tasks**: The work. Its tabs:
+**Inbox** (near the bottom of the strip, with a number when something waits on you): Everything that needs you, in one place: plans to approve, questions, finished work to review, changes agents want to make, and reminders.
+
+**Tasks and projects**: The work. Its tabs:
 - **Tasks**: every task in your organization: queued, working, needing you, to review and done.
 - **Projects**: one folder for each body of work, with its tasks and chats.
-- **Routines**: repeating work your agents do on their own, such as a morning news digest every weekday.
+- **Routines**: repeating work your agents do on their own, such as a morning news digest every weekday. Routines also has its own icon on the strip.
 
 **Team**: Who does the work. Its tabs:
 - **Agents**: your agents and what each is doing right now. Assign work and open any agent's page.
@@ -97,9 +99,9 @@ The box at the top finds anything: files by name or by the words inside, tasks, 
 - **Office**, **Documents**, **Sheets**, **Slides** and **Notes**: what you and your agents make together. See [Office](office.md).
 - **Workspace** (procedures, price lists and decisions as pages), **Library** (your files, in folders), **Memory** (what agents should always remember) and **Skills** (procedures agents wrote down for themselves).
 
-**Right now**: Under the five places, the menu lists up to five things in motion: an amber mark for what is waiting on you, green for what is being worked on. Click one to open it.
+**Search**: Puts you in the box at the top, which finds anything.
 
-**More**, at the bottom. Its tabs:
+**The account button**, the round one at the very bottom. It opens a menu with:
 - **Connections**: connect AI models, Git and GitHub, other services, and keys.
 - **Security**: who can open Talqava and what each person may do, which AI services may receive sensitive information, rules every agent must follow, alerts, and backups. See [Security](security.md).
 - **Activity log**: a full record of every operation, by you and by each agent, sealed so that changes to it show.
@@ -122,6 +124,6 @@ Every word Talqava uses, in one place: [Words Talqava uses](glossary.md).
 
 ## Where to get help
 
-- Press **Guide** at the top right of any page for that page's guide, or open **Help** at the bottom of the menu.
+- Press **Guide** at the top right of any page for that page's guide, or open **Help** from the account button at the bottom left.
 - Each page's guide has an **If something goes wrong** section with the common messages and fixes.
 - Visit talqava.com, or report a problem on the project's GitHub page (github.com/Talqava/Talqava/issues).

@@ -217,6 +217,15 @@ const SPEECH = [
     text: MIT_TEXT("2023-2026 The ggml authors"),
   },
 ];
+/** Code adapted from other projects into Talqava's own files. Each entry says which files carry it. */
+const ADAPTED = [
+  {
+    name: "OpenClaw (github.com/openclaw/openclaw): the interaction-layer colour tokens in public/shell.css, adapted from ui/src/styles/base.css",
+    license: "MIT",
+    copyright: "Copyright (c) 2026 OpenClaw Foundation",
+    text: MIT_TEXT("2026 OpenClaw Foundation"),
+  },
+];
 const RUNTIME_DATA = [
   {
     name: "LiteLLM model prices and context windows (model_prices_and_context_window.json, from github.com/BerriAI/litellm)",
@@ -267,6 +276,11 @@ const notices = [
   "Talqava writes out speech with whisper.cpp, run as a separate program on the owner's computer. The speech model it uses is not part of Talqava: the owner downloads it from the whisper.cpp project's own files the first time they use speech.",
   "",
   ...SPEECH.map(block).flatMap((b) => [b, ""]),
+  "## Code adapted from other projects",
+  "",
+  "Small parts of these projects were adapted into Talqava's own files. Their names, logos and artwork are not used.",
+  "",
+  ...ADAPTED.map(block).flatMap((b) => [b, ""]),
   "## Data read while the app runs",
   "",
   ...RUNTIME_DATA.map(block).flatMap((b) => [b, ""]),

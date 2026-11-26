@@ -346,7 +346,7 @@ const AREAS = {
   tasks: { name: "Tasks", views: [["tasks", "Tasks"], ["projects", "Projects"], ["jobs", "Routines"]], also: { project: "projects" } },
   team: { name: "Team", views: [["home", "Agents"], ["team", "Organization"], ["market", "Marketplace"]], also: { quest: "home", bot: "home", marketbot: "market" } },
   files: { name: "Files", views: [["office", "Office"], ["docs", "Documents"], ["sheets", "Sheets"], ["slides", "Slides"], ["notes", "Notes"], ["workspace", "Workspace"], ["library", "Library"], ["memory", "Memory"], ["skills", "Skills"]] },
-  more: { name: "More", views: [["integrations", "Connections"], ["security", "Security"], ["audit", "Activity log"], ["settings", "Settings"]] },
+  more: { name: "Account", views: [["integrations", "Connections"], ["security", "Security"], ["audit", "Activity log"], ["settings", "Settings"]] },
 };
 /** The tab a page belongs under: itself, or the page it was opened from (a task under Agents, a project under Projects). */
 const tabOf = (area, view) => AREAS[area].also?.[view] ?? view;
@@ -376,6 +376,7 @@ function renderAreaTabs() {
 // Line icons for the rail, drawn on a 20 px grid.
 const ICONS = {
   new: "M10 4.5v11M4.5 10h11",
+  search: "M9 14.5a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zM13 13l3.5 3.5",
   chat: "M4 5.5A2.5 2.5 0 0 1 6.5 3h7A2.5 2.5 0 0 1 16 5.5v5a2.5 2.5 0 0 1-2.5 2.5H9l-3.5 3v-3A2.5 2.5 0 0 1 4 10.5z",
   inbox: "M3.5 11.5l2-7h9l2 7M3.5 11.5v3a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-3M3.5 11.5h4l1 2h3l1-2h4",
   team: "M10 3.5v3M10 6.5H5v3M10 6.5h5v3M3 9.5h4v3H3zM13 9.5h4v3h-4zM8 13.5h4v3H8zM10 6.5v7",
@@ -410,34 +411,82 @@ function renderRail() {
   if (!ui.rail) return;
   const v = state.view;
   const area = areaOf(v);
-  const item = (view, label, on, title, glyph = view) => h("button", { class: `railitem ${on ? "on" : ""}`, onclick: () => go(view), title: title || label, "aria-current": on ? "page" : null }, icon(glyph), h("span", { class: "grow" }, label));
-  const place = (name, label, title, glyph) => item(lastIn(name), label, area === name, title, glyph);
-  const inbox = item("inbox", "Inbox", v === "inbox", "What needs your yes, what is being worked on, and what got done");
+  // A narrow rail of icons. Each says what it is when pointed at; the account and everything about the app sit at its foot.
+  const item = (view, label, on, glyph = view, cls = "", run = () => go(view)) => h("button", { class: `railitem ${cls} ${on ? "on" : ""}`, onclick: run, "aria-label": label, "data-tip": label, "aria-current": on ? "page" : null }, icon(glyph));
+  const inbox = item("inbox", "Inbox", v === "inbox");
   ui.inboxCount = h("span", { class: "count", hidden: true });
   inbox.append(ui.inboxCount);
-  ui.recent = h("div", { class: "railgroup railrecent" });
+  // What is in motion right now is counted on the Inbox; the list itself is on the home page.
+  ui.recent = h("div", { hidden: true });
+  const me = state.me?.person?.name || "";
+  const initials = (me || activeOrg().name || "You").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("") || "Y";
+  const account = h("button", { class: "acctbutton", "aria-label": "Account, connections and settings", "aria-haspopup": "menu", "aria-expanded": "false", "data-tip": "Account and settings", onclick: (e) => accountMenu(e.currentTarget) }, initials);
   fill(
     ui.rail,
-    h("button", { class: "plain brand", onclick: () => go("start"), title: "Home", "aria-label": "Talqava, home" }, brandLogo()),
+    h("button", { class: "plain brand", onclick: () => go("start"), title: "Home", "aria-label": "Talqava, home" }, brandLogo({ mark: 30, word: 0 })),
     h(
       "div",
       { class: "railgroup" },
-      item("start", "New", v === "start" || v === "chat" || v === "setup", "Ask for anything, or start a task", "new"),
-      inbox,
-      place("tasks", "Tasks", "Every task, your projects, and work that repeats by itself", "tasks"),
-      place("team", "Team", "Your agents, how they are organized, and ready-made additions", "team"),
-      place("files", "Files", "Documents, sheets, slides and notes, and what your agents work from", "office"),
+      item("start", "New", v === "start" || v === "setup", "new", "railnew"),
+      item("chat", "Chats", v === "chat", "chat"),
+      item(lastIn("tasks") === "jobs" ? "tasks" : lastIn("tasks"), "Tasks and projects", area === "tasks" && v !== "jobs", "tasks"),
+      item("jobs", "Routines", v === "jobs", "jobs"),
+      item(lastIn("team"), "Team", area === "team", "team"),
+      item(lastIn("files"), "Files", area === "files", "office"),
+      item("search", "Search", false, "search", "", () => ui.palette?.focus()),
     ),
-    ui.recent,
     h(
       "div",
       { class: "railgroup railend" },
-      place("more", "More", "Connections, security, the activity log and settings", "settings"),
-      h("button", { class: "railitem", onclick: () => showGuide(guideFor(v) ?? "getting-started"), title: "How to use Talqava, page by page" }, icon("guide"), h("span", { class: "grow" }, "Help")),
-      state.me?.person ? h("button", { class: "railitem", onclick: () => attempt(async () => (await api("POST", "logout"), (state.me = null), showLogin())), title: `Signed in as ${state.me.person.name} (${state.me.role.name})` }, icon("security"), h("span", { class: "grow" }, "Sign out")) : null,
+      inbox,
+      account,
     ),
   );
   syncInboxCount();
+}
+
+/** The account menu at the foot of the rail: connections, security, the activity log, settings, the look, and help. */
+function accountMenu(anchor) {
+  const open = document.querySelector(".acctmenu");
+  if (open) return open.close();
+  const me = state.me?.person;
+  const org = activeOrg();
+  const menu = h("div", { class: "acctmenu", role: "menu", "aria-label": "Account" });
+  const away = (e) => !menu.contains(e.target) && e.target !== anchor && menu.close();
+  const key = (e) => e.key === "Escape" && (menu.close(), anchor.focus());
+  menu.close = () => (menu.remove(), anchor.setAttribute("aria-expanded", "false"), document.removeEventListener("pointerdown", away, true), document.removeEventListener("keydown", key, true));
+  const row = (glyph, label, run) => h("button", { class: "acctrow", role: "menuitem", onclick: () => (menu.close(), run()) }, icon(glyph), h("span", { class: "grow" }, label));
+  const look = h("div", { class: "acctlook", role: "radiogroup", "aria-label": "Appearance" });
+  const drawLook = () =>
+    fill(
+      look,
+      [["dark", "Dark"], ["light", "Light"], ["system", "Match my computer"]].map(([id, label]) => {
+        const on = (window.talqavaTheme?.choice ?? "dark") === id;
+        return h("button", { class: on ? "on" : "", role: "radio", "aria-checked": String(on), onclick: () => (window.talqavaTheme?.set(id), drawLook()) }, label);
+      }),
+    );
+  drawLook();
+  const initials = anchor.textContent;
+  fill(
+    menu,
+    h("div", { class: "accthead" }, h("span", { class: "acctavatar", "aria-hidden": "true" }, initials), h("div", { class: "who" }, h("b", {}, me?.name || org.name || "You"), h("span", {}, me ? `${state.me.role.name}${org.name ? ` · ${org.name}` : ""}` : "On this computer"))),
+    h("div", { class: "acctsep" }),
+    row("integrations", "Connections", () => go("integrations")),
+    row("security", "Security", () => go("security")),
+    row("audit", "Activity log", () => go("audit")),
+    row("settings", "Settings", () => go("settings")),
+    h("div", { class: "acctsep" }),
+    h("div", { class: "acctlabel" }, "Look"),
+    look,
+    h("div", { class: "acctsep" }),
+    row("guide", "Help", () => showGuide(guideFor(state.view) ?? "getting-started")),
+    me ? row("security", "Sign out", () => attempt(async () => (await api("POST", "logout"), (state.me = null), showLogin()))) : null,
+  );
+  document.body.append(menu);
+  anchor.setAttribute("aria-expanded", "true");
+  document.addEventListener("pointerdown", away, true);
+  document.addEventListener("keydown", key, true);
+  menu.querySelector(".acctrow")?.focus();
 }
 
 /** Under the menu: the few things in motion right now, so the owner can step back into them. */
@@ -7380,7 +7429,7 @@ function aiModelsSection(col) {
 
 function settingsView() {
   const c = state.config;
-  const col = page("Settings", "How your agents work, what they may spend, and how Talqava looks. AI models and other services are connected under More › Connections.");
+  const col = page("Settings", "How your agents work, what they may spend, and how Talqava looks. AI models and other services are connected under Connections, in the account menu at the bottom left.");
   const save = (patch) =>
     attempt(async () => {
       state.config = await api("PUT", "settings", patch);
@@ -7404,14 +7453,14 @@ function settingsView() {
     fill(
       themeRow,
       [["light", "Light"], ["dark", "Dark"], ["system", "Match my computer"]].map(([id, label]) => {
-        const on = (window.talqavaTheme?.choice ?? "light") === id;
+        const on = (window.talqavaTheme?.choice ?? "dark") === id;
         return h("button", { class: on ? "on" : "", role: "radio", "aria-checked": String(on), onclick: () => (window.talqavaTheme?.set(id), drawTheme()) }, h("span", { class: `themeswatch ${id}`, "aria-hidden": "true" }), label);
       }),
     );
   drawTheme();
   col.append(
     h("h3", {}, "Look"),
-    h("p", { class: "note" }, "Appearance. Light is the standard look; Match my computer switches between light and dark with it."),
+    h("p", { class: "note" }, "Appearance. Dark is the standard look; Match my computer switches between light and dark with it."),
     themeRow,
     h("p", { class: "note" }, "Accent colour: ", accentLabel, ". Used for buttons and highlights. Each agent is shown as a tile in its department's colour, with a symbol for its role; you can change both when you edit the agent."),
     accentRow,

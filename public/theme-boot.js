@@ -1,9 +1,9 @@
 // Sets the light or dark theme before the page draws, so it never flashes the wrong one.
-// Light is the default; "system" follows the computer's appearance, and keeps following it.
+// Dark is the default; "system" follows the computer's appearance, and keeps following it.
 (() => {
-  let choice = "light";
+  let choice = "dark";
   try {
-    choice = localStorage.getItem("talqava.theme") || "light";
+    choice = localStorage.getItem("talqava.theme") || "dark";
   } catch {}
   const system = matchMedia("(prefers-color-scheme: light)");
   const apply = () => {
@@ -18,7 +18,7 @@
       return choice;
     },
     set(next) {
-      choice = ["light", "dark", "system"].includes(next) ? next : "light";
+      choice = ["light", "dark", "system"].includes(next) ? next : "dark";
       try {
         localStorage.setItem("talqava.theme", choice);
       } catch {}

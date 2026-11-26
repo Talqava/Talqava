@@ -1,0 +1,84 @@
+/* =====================================================================
+   Talqava, fifth pass: the slim rail.
+   Loaded last. The menu becomes a narrow rail of icons with the account
+   at its foot, the dark look is the standard one, and it is calmer: no
+   glow behind buttons and fields.
+
+   The three "interaction layer" tokens below (a hover, a selected and a
+   selected-hover surface mixed from the theme's own ink, so they sit
+   right on any surface in either theme) are adapted from OpenClaw's
+   ui/src/styles/base.css. Copyright (c) 2026 OpenClaw Foundation, MIT
+   licence; see THIRD_PARTY_NOTICES.md. Everything else here is Talqava's.
+   ===================================================================== */
+:root {
+  --surface-hover: color-mix(in srgb, var(--text) 6%, transparent);
+  --surface-selected: color-mix(in srgb, var(--text) 9%, transparent);
+  --surface-selected-hover: color-mix(in srgb, var(--text) 12%, transparent);
+  --rail-width: 56px;
+}
+/* Calm: the dark look keeps its green, without the glow around it. */
+:root:not([data-theme="light"]) { --accent-glow: transparent; }
+
+/* ---------- the rail ---------- */
+#app { grid-template-columns: var(--rail-width) minmax(0, 1fr); }
+.rail { padding: 10px 0 12px; align-items: center; gap: 4px; overflow: visible; z-index: 40; }
+.rail .brand { align-self: center; padding: 4px 0 10px; }
+.rail .railgroup { align-items: center; gap: 4px; width: 100%; }
+.rail .railend { margin-top: auto; padding-top: 8px; }
+.rail .railitem { width: 38px; min-height: 38px; height: 38px; padding: 0; justify-content: center; border-radius: 10px; color: var(--muted); }
+.rail .railitem .ico { color: inherit; }
+.rail .railitem:hover { background: var(--surface-hover); color: var(--text); }
+.rail .railitem.on { background: var(--surface-selected); color: var(--text); }
+.rail .railitem.on:hover { background: var(--surface-selected-hover); }
+.rail .railitem.on::before { display: none; }
+.rail .railitem.on .ico { color: var(--text); }
+.rail .railitem:active { transform: scale(0.96); }
+/* New: the one filled button on the rail. */
+.rail .railitem.railnew { background: var(--accent); color: var(--on-accent); margin-bottom: 6px; }
+.rail .railitem.railnew:hover, .rail .railitem.railnew.on { background: var(--accent); color: var(--on-accent); filter: brightness(1.08); }
+.rail .railitem.railnew .ico { color: var(--on-accent); }
+.rail .railsep { width: 24px; height: 1px; background: var(--line); margin: 4px 0; }
+/* What needs you, as a number on the Inbox icon. */
+.rail .railitem .count { position: absolute; top: -3px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; font: 600 10px/16px var(--sans); text-align: center; background: var(--warn, #ffb020); color: #0a0a0a; box-shadow: none; }
+/* Each icon says what it is when pointed at or reached with the keyboard. */
+.rail .railitem[data-tip]::after {
+  content: attr(data-tip); position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%);
+  padding: 5px 9px; border-radius: 7px; background: var(--raised); border: 1px solid var(--line2); color: var(--text);
+  font: 500 12px/1.2 var(--sans); white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.12s ease 0.25s; z-index: 80;
+}
+.rail .railitem[data-tip]:hover::after, .rail .railitem[data-tip]:focus-visible::after { opacity: 1; }
+.rail .acctbutton { width: 32px; height: 32px; min-height: 32px; padding: 0; border-radius: 50%; border: 1px solid var(--line2); background: var(--raised); color: var(--soft); font: 600 11px/1 var(--sans); display: grid; place-items: center; margin-top: 6px; }
+.rail .acctbutton:hover, .rail .acctbutton[aria-expanded="true"] { border-color: var(--accent); color: var(--text); }
+
+/* ---------- the account menu ---------- */
+.acctmenu {
+  position: fixed; left: calc(var(--rail-width) + 8px); bottom: 12px; width: min(300px, calc(100vw - var(--rail-width) - 24px)); z-index: 90;
+  background: var(--panel); border: 1px solid var(--line2); border-radius: 14px; padding: 8px; display: flex; flex-direction: column; gap: 2px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+}
+:root:not([data-theme="light"]) .acctmenu { background: #151615; }
+.accthead { display: flex; align-items: center; gap: 10px; padding: 8px 8px 10px; min-width: 0; }
+.accthead .who { min-width: 0; }
+.accthead .who b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.accthead .who span { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acctavatar { width: 30px; height: 30px; border-radius: 50%; background: var(--raised); border: 1px solid var(--line2); display: grid; place-items: center; font: 600 11px/1 var(--sans); color: var(--soft); flex: none; }
+.acctlabel { font: 600 10.5px/1 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding: 8px 8px 4px; }
+.acctsep { height: 1px; background: var(--line); margin: 6px 4px; }
+.acctrow { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 34px; padding: 0 8px; border: 0; border-radius: 8px; background: none; color: var(--text); text-align: left; font-size: 13.5px; }
+.acctrow:hover { background: var(--surface-hover); border: 0; }
+.acctrow .ico { display: inline-flex; color: var(--muted); flex: none; }
+.acctlook { display: flex; gap: 4px; padding: 2px 4px 4px; }
+.acctlook button { flex: 1; min-height: 30px; padding: 0 6px; font-size: 12.5px; border-radius: 8px; border: 1px solid var(--line); background: none; color: var(--soft); }
+.acctlook button.on { background: var(--surface-selected); border-color: var(--line2); color: var(--text); font-weight: 600; }
+
+/* ---------- small windows: the rail stays; there is no slide-out menu ---------- */
+.menubtn { display: none !important; }
+@media (max-width: 900px) {
+  #app { grid-template-columns: var(--rail-width) minmax(0, 1fr); }
+  .rail { position: static; inset: auto; width: auto; transform: none; box-shadow: none; }
+  body.menuopen .rail { box-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) { .rail .railitem[data-tip]::after { transition: none; } }
+
+/* A step not yet done shows its number in the page's own ink (it was drawn for a filled circle). */
+.istepmark { color: var(--soft); }
