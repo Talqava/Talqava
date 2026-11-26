@@ -32,6 +32,8 @@ export interface SignInField {
   secret?: boolean;
   placeholder?: string;
   help?: string;
+  /** What the value must look like (a pattern), for a value that becomes part of an address. */
+  pattern?: string;
 }
 
 /** A saved connection to one account of a service. */
@@ -123,7 +125,14 @@ export interface BrowserSignIn {
   scopeSeparator?: string;
   /** False for a service whose documentation does not describe PKCE: the proof is then left out of the sign-in. */
   pkce?: boolean;
+  /**
+   * Things asked before signing in that decide where to sign in, such as an account's own address. Each needs a
+   * pattern, because {key} in authUrl and tokenUrl is replaced by it. They are kept with the connection.
+   */
+  ask?: SignInField[];
 }
+/** An address with each {key} replaced by the value asked for it. */
+const filled = (address: string, values: Record<string, string>) => address.replace(/\{(\w+)\}/g, (_m, k) => encodeURIComponent(values[k] ?? ""));
 
 /**
  * An app Talqava's maker registered with a service, so an owner signs in with one press and registers nothing.
@@ -189,7 +198,7 @@ export function listServices() {
     steps: d.steps,
     docs: d.docs,
     fields: d.fields,
-    browser: d.browser ? { secret: d.browser.kind === "fragment" ? "never" : d.browser.secret, appSteps: d.browser.appSteps, scopes: d.browser.scopes, idLabel: d.browser.idLabel ?? "Client ID", oneClick: Boolean(builtInApp(d)) } : null,
+    browser: d.browser ? { secret: d.browser.kind === "fragment" ? "never" : d.browser.secret, appSteps: d.browser.appSteps, scopes: d.browser.scopes, idLabel: d.browser.idLabel ?? "Client ID", oneClick: Boolean(builtInApp(d)), ask: d.browser.ask ?? [] } : null,
     triggers: (d.triggers ?? []).map((t) => ({ name: t.name, summary: t.summary, param: t.param ?? null })),
     watches: watches().filter((w) => all.some((c) => c.id === w.connection && c.service === d.id)).map(({ seen: _s, ...w }) => w),
     actions: d.actions.map((a) => ({ name: a.name, kind: a.kind, summary: a.alwaysAsk ? `${a.summary} (always asks you first)` : a.summary })),
@@ -454,6 +463,7 @@ interface Pending {
   clientSecret: string;
   verifier: string;
   redirect: string;
+  asked: Record<string, string>;
   rule?: unknown;
   at: number;
 }
@@ -461,7 +471,7 @@ const pending = new Map<string, Pending>();
 const b64url = (b: Buffer) => b.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
 /** Starts a browser sign-in: returns the address to open. `redirect` is this app's own address for the answer. */
-export function startBrowserSignIn(id: string, input: { clientId?: unknown; clientSecret?: unknown; rule?: unknown }, redirect: string): { url: string } {
+export function startBrowserSignIn(id: string, input: { clientId?: unknown; clientSecret?: unknown; rule?: unknown; values?: unknown }, redirect: string): { url: string } {
   const def = serviceOf(id);
   if (!def.browser) throw new Error(`${def.name} connects with a key, not a browser sign-in.`);
   if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(redirect) && !/^https:\/\//.test(redirect)) throw new Error("Open Talqava on this computer to sign in to a service.");
@@ -469,23 +479,30 @@ export function startBrowserSignIn(id: string, input: { clientId?: unknown; clie
   const clientSecret = String(input.clientSecret ?? "").trim();
   if (!clientId || clientId.length > 500 || /\s/.test(clientId)) throw new Error(`Paste your app's ${(def.browser.idLabel ?? "client ID").replace(/^Client/, "client")}.`);
   if (def.browser.secret === "required" && !clientSecret) throw new Error("Paste your app's client secret.");
+  const asked: Record<string, string> = {};
+  for (const f of def.browser.ask ?? []) {
+    const v = String((input.values as Record<string, unknown> | undefined)?.[f.key] ?? "").trim().toLowerCase();
+    if (!v || !new RegExp(`^(?:${f.pattern ?? "[a-z0-9-]{1,63}"})$`).test(v)) throw new Error(`Give ${f.label[0].toLowerCase()}${f.label.slice(1)}${f.placeholder ? `, like ${f.placeholder}` : ""}.`);
+    asked[f.key] = v;
+  }
+  const authUrl = filled(def.browser.authUrl, asked);
   for (const [k, v] of pending) if (Date.now() - v.at > 600_000) pending.delete(k);
   if (pending.size > 50) throw new Error("Too many sign-ins were started. Wait ten minutes and try again.");
   const state = b64url(crypto.randomBytes(32));
   const verifier = b64url(crypto.randomBytes(48));
-  pending.set(state, { service: id, clientId, clientSecret: def.browser.secret === "never" ? "" : clientSecret, verifier, redirect, rule: input.rule, at: Date.now() });
+  pending.set(state, { service: id, clientId, clientSecret: def.browser.secret === "never" ? "" : clientSecret, verifier, redirect, asked, rule: input.rule, at: Date.now() });
   const scope = def.browser.scopes.join(def.browser.scopeSeparator ?? " ");
   if (def.browser.kind === "fragment") {
     // The token comes back in the address after the #, which only the browser sees; the page it lands on hands it over.
     const back = new URLSearchParams({ key: clientId, scope, response_type: "token", callback_method: "fragment", return_url: `${redirect}/${state}`, ...(def.browser.extra ?? {}) });
-    return { url: `${def.browser.authUrl}?${back}` };
+    return { url: `${authUrl}?${back}` };
   }
   const q = new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: redirect, scope, state, ...(def.browser.pkce === false ? {} : { code_challenge: b64url(crypto.createHash("sha256").update(verifier).digest()), code_challenge_method: "S256" }), ...(def.browser.extra ?? {}) });
-  return { url: `${def.browser.authUrl}${def.browser.authUrl.includes("?") ? "&" : "?"}${q}` };
+  return { url: `${authUrl}${authUrl.includes("?") ? "&" : "?"}${q}` };
 }
 
-async function tokenCall(def: ServiceDef, form: Record<string, string>): Promise<{ access_token: string; refresh_token?: string; expires_in?: number }> {
-  const t = await call<any>(baseOf(`${def.id}_token`, def.browser!.tokenUrl), { name: def.name, method: "POST", form });
+async function tokenCall(def: ServiceDef, form: Record<string, string>, asked: Record<string, string> = {}): Promise<{ access_token: string; refresh_token?: string; expires_in?: number }> {
+  const t = await call<any>(baseOf(`${def.id}_token`, filled(def.browser!.tokenUrl, asked)), { name: def.name, method: "POST", form });
   if (!t?.access_token) throw new Error(`${def.name} did not complete the sign-in.`);
   return t;
 }
@@ -498,10 +515,10 @@ export async function finishBrowserSignIn(state: unknown, code: unknown, problem
   const def = serviceOf(p.service);
   if (problem || !code) throw new Error(problem === "access_denied" ? `You did not approve the sign-in, so ${def.name} was not connected.` : `${def.name} did not complete the sign-in${problem ? ` (${String(problem).slice(0, 80)})` : ""}.`);
   if (def.browser!.kind === "fragment") throw new Error(`${def.name} did not complete the sign-in.`);
-  const t = await tokenCall(def, { grant_type: "authorization_code", code: String(code), redirect_uri: p.redirect, client_id: p.clientId, ...(def.browser!.pkce === false ? {} : { code_verifier: p.verifier }), ...(p.clientSecret ? { client_secret: p.clientSecret } : {}) });
+  const t = await tokenCall(def, { grant_type: "authorization_code", code: String(code), redirect_uri: p.redirect, client_id: p.clientId, ...(def.browser!.pkce === false ? {} : { code_verifier: p.verifier }), ...(p.clientSecret ? { client_secret: p.clientSecret } : {}) }, p.asked);
   // A token with no stated lifetime and nothing to renew it with does not run out (the service says so by leaving both out).
   const lasting = !t.expires_in && !t.refresh_token;
-  const values: Record<string, string> = { client_id: p.clientId, ...(p.clientSecret ? { client_secret: p.clientSecret } : {}), access_token: t.access_token, ...(def.browser!.tokenKey ? { [def.browser!.tokenKey]: t.access_token } : {}), ...(t.refresh_token ? { refresh_token: t.refresh_token } : {}), ...(lasting ? {} : { expires_at: String(Date.now() + (Number(t.expires_in) || 3600) * 1000) }) };
+  const values: Record<string, string> = { ...p.asked, client_id: p.clientId, ...(p.clientSecret ? { client_secret: p.clientSecret } : {}), access_token: t.access_token, ...(def.browser!.tokenKey ? { [def.browser!.tokenKey]: t.access_token } : {}), ...(t.refresh_token ? { refresh_token: t.refresh_token } : {}), ...(lasting ? {} : { expires_at: String(Date.now() + (Number(t.expires_in) || 3600) * 1000) }) };
   return signedIn(def, p, values);
 }
 
@@ -551,7 +568,7 @@ async function fresh(c: Connection): Promise<Connection> {
   const work = (async () => {
     let t;
     try {
-      t = await tokenCall(def, { grant_type: "refresh_token", refresh_token: c.values.refresh_token, client_id: c.values.client_id, ...(c.values.client_secret ? { client_secret: c.values.client_secret } : {}) });
+      t = await tokenCall(def, { grant_type: "refresh_token", refresh_token: c.values.refresh_token, client_id: c.values.client_id, ...(c.values.client_secret ? { client_secret: c.values.client_secret } : {}) }, c.values);
     } catch (err) {
       // The service no longer honours the sign-in (revoked, or too old): the owner has to sign in again.
       if ((err as Error).message.includes(" answered 400") || (err as { refused?: boolean }).refused) {
