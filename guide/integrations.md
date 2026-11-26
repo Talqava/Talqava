@@ -117,6 +117,8 @@ What each one does:
 - **Calendly**: see booked meetings, who booked them and their answers, and your booking links. Reading only.
 - **Typeform**: see forms and the answers people sent. Reading only.
 
+Talqava checks every few hours that each key still works. If a service stops accepting its key, the account shows **Needs attention**, and your Inbox gets a note saying which connection and why; make a new key and connect again, and the account keeps its settings.
+
 You can connect more than one account of a service. To disconnect, press **Disconnect** on the account; its key is forgotten and nothing in the service is changed.
 
 ### Connect a well-known service from the catalogue
