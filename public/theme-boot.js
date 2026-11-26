@@ -3,6 +3,12 @@
 (() => {
   let choice = "dark";
   try {
+    // The look chosen before dark became the standard one is set aside once, so everyone starts in the new look;
+    // a choice made after that is kept as before.
+    if (!localStorage.getItem("talqava.look")) {
+      localStorage.removeItem("talqava.theme");
+      localStorage.setItem("talqava.look", "2");
+    }
     choice = localStorage.getItem("talqava.theme") || "dark";
   } catch {}
   const system = matchMedia("(prefers-color-scheme: light)");
