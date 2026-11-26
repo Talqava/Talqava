@@ -9420,7 +9420,16 @@ function guardrailsSection(canEdit) {
         { class: "card form" },
         h("label", {}, "When an agent wants to change something (a file, a page, another system)", choice("changes", [["agent", "Each agent's own setting decides"], ["ask", "Always ask a person first"]])),
         h("label", {}, "Running commands on this computer", choice("commands", [["allowed", "Allowed for agents with that power"], ["ask", "Always ask a person first"], ["never", "Never"]])),
-        h("label", {}, "Connected services (connectors)", choice("connectors", [["allowed", "Allowed; their tools ask before changing anything"], ["never", "Never"]])),
+        h("label", {}, "Connected services (connectors)", choice("connectors", [["allowed", "Allowed; their tools ask before changing anything"], ["approved", "Only the services approved below"], ["never", "Never"]])),
+        g.connectors === "approved"
+          ? [
+              h("div", { class: "label" }, "Approved connected services"),
+              data.connected.length
+                ? h("div", { class: "checks" }, data.connected.map((c) => h("label", { class: "check" }, h("input", { type: "checkbox", disabled: !canEdit, checked: g.services.includes(c.id), onchange: (e) => save({ services: e.target.checked ? [...g.services, c.id] : g.services.filter((x) => x !== c.id) }) }), " ", c.name)))
+                : h("p", { class: "note small" }, "No service is connected yet. Connect one under Integrations, then approve it here."),
+              h("p", { class: "note small" }, "Agents get the tools of ticked services only. A service connected later is off until you tick it."),
+            ]
+          : null,
         h("label", {}, "The web", choice("web", [["any", "Any site, for agents with that power"], ["approved", "Only the sites approved below"], ["never", "Never"]])),
         g.web === "approved" ? [h("label", {}, "Approved sites", sites), h("p", { class: "note small" }, "A site covers its pages and its sub-sites: example.com also allows www.example.com. With none listed, the web is off."), canEdit ? h("div", {}, h("button", { onclick: () => save({ sites: sites.value }) }, "Save the list")) : null] : null,
         h("div", { class: "row wrap" }, h("label", { class: "grow" }, "Most one task may spend ($)", spend), h("label", { class: "grow" }, "Longest one task may run (minutes)", minutes)),

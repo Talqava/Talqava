@@ -964,7 +964,16 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     const cfg = getConfig();
     return send(res, 200, { policy: policy(cfg), levels: LEVELS.map((id) => ({ id, ...LEVEL_WORDS[id] })), where: WHERE.map((id) => ({ id, words: WHERE_WORDS[id] })), recommended: RECOMMENDED, services: cfg.providers.filter((p) => p.kind === "anthropic" ? Boolean(cfg.apiKey) : true).map((p) => ({ id: p.id, name: p.name, local: isLocalRef(`${p.id}/x`) })), words: describePolicy(policy(cfg)) });
   }
-  if (route === "GET guardrails") return send(res, 200, { rules: guardrails(), words: describeGuardrails(), refused: readAudit({ kind: "guardrail", limit: 30 }).entries });
+  if (route === "GET guardrails") {
+    // The connected services there are to approve: catalogue and hand-added connectors, built-in services, WordPress.
+    const cfg = getConfig();
+    const connected = [
+      ...cfg.mcpServers.map((s) => ({ id: s.name.toLowerCase(), name: connectorLabel(s.name) })),
+      ...listServices().filter((s) => s.connections.length).map((s) => ({ id: s.id, name: s.name })),
+      ...((cfg.wordpress ?? []).length ? [{ id: "wordpress", name: "WordPress" }] : []),
+    ];
+    return send(res, 200, { rules: guardrails(), connected, words: describeGuardrails(), refused: readAudit({ kind: "guardrail", limit: 30 }).entries });
+  }
   if (route === "GET state") return send(res, 200, publicConfig());
   if (route === "PUT settings") return send(res, 200, await updateSettings(body));
   if (route === "POST model-check") {

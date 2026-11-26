@@ -165,6 +165,13 @@ A page made inside a sensitive page starts at the same level. Tables follow thei
 2. Type one site on each line, such as `example.com`, and press **Save the list**. A site covers its pages and sub-sites.
 3. An agent that tries another site is refused, told not to look for a way round, and the attempt appears under **Refused by these rules**.
 
+### Let agents use only the connected services you approve
+
+1. Under **Agent guardrails**, set **Connected services (connectors)** to **Only the services approved below**.
+2. Tick the services agents may use.
+
+Agents get the tools of ticked services only. A service you connect later stays off until you tick it here, and with none ticked, connected services are off.
+
 ### Make every change ask a person
 
 1. Under **Agent guardrails**, set **When an agent wants to change something** to **Always ask a person first**.
@@ -192,8 +199,8 @@ A page made inside a sensitive page starts at the same level. Tables follow thei
 - Limiting sign-in to computers your company manages, and needing two administrators for a security change.
 - Approved networks are checked against the address the connection comes from. Behind a proxy or tunnel that hides it, every connection looks the same.
 - Approved sites hold page reading, including redirects, and the AI service's own web search. Calls to web services with saved keys and the built-in browser are checked at the address the agent gives; a redirect or a link clicked inside the browser is not checked yet.
-- Whether an item may leave by email or a connector; suggesting a higher level when card numbers or payroll figures are spotted; and a view of exactly what was sent to AI services.
-- Rules by kind of action (send, pay, delete) with named approvers, and a list of approved connectors and Marketplace items.
+- Whether an item may leave by email or a connector, and a view of exactly what was sent to AI services.
+- Rules by kind of action (send, pay, delete) with named approvers, and a list of approved Marketplace items.
 - Limiting a manager or member to their own groups: a manager can change the whole chart.
 - Handing the Owner role to someone else.
 - Using your Talqava team from the Claude app while sign-in is on.
