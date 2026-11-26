@@ -145,6 +145,25 @@ const filled = (address: string, values: Record<string, string>) => address.repl
 const BUILT_IN_APPS: Record<string, string> = {};
 export const builtInApp = (def: ServiceDef): string => (def.browser && def.browser.secret !== "required" ? (process.env[`TALQAVA_${def.id.toUpperCase()}_CLIENT_ID`] || BUILT_IN_APPS[def.id] || "").trim() : "");
 
+/**
+ * Talqava's sign-in service (see relay/README.md). Some services give their app a secret, which must never be in an
+ * app on someone's computer. For those, the maker registers one app, the secret is kept by a small service on
+ * Talqava's own website, and that service swaps the one-time code for tokens and renews them. It keeps nothing:
+ * the tokens come straight back to this computer. Only the app's ID, which is safe to publish, is listed here.
+ * None are filled in yet: each needs the maker's own account with that service. An ID can also be given when
+ * starting the app, as TALQAVA_<SERVICE>_RELAY_CLIENT_ID.
+ */
+const RELAY_APPS: Record<string, string> = {};
+export const relayApp = (def: ServiceDef): string => (def.browser && def.browser.kind !== "fragment" ? (process.env[`TALQAVA_${def.id.toUpperCase()}_RELAY_CLIENT_ID`] || RELAY_APPS[def.id] || "").trim() : "");
+/** Where the sign-in service is. */
+export const relayAddress = (): string => (process.env.TALQAVA_AUTH_RELAY || "https://auth.talqava.com").replace(/\/+$/, "");
+/** One call to the sign-in service. It answers with the service's own token answer, or says what went wrong. */
+async function relayCall(def: ServiceDef, what: "token" | "refresh", body: Record<string, unknown>): Promise<{ access_token: string; refresh_token?: string; expires_in?: number }> {
+  const t = await call<any>(`${relayAddress()}/${what}.php`, { name: `Talqava's sign-in service (for ${def.name})`, method: "POST", body: { service: def.id, ...body } });
+  if (!t?.access_token) throw new Error(`${def.name} did not complete the sign-in.`);
+  return t;
+}
+
 export interface ServiceDef {
   id: string;
   name: string;
@@ -200,7 +219,7 @@ export function listServices() {
     steps: d.steps,
     docs: d.docs,
     fields: d.fields,
-    browser: d.browser ? { secret: d.browser.kind === "fragment" ? "never" : d.browser.secret, appSteps: d.browser.appSteps, scopes: d.browser.scopes, idLabel: d.browser.idLabel ?? "Client ID", oneClick: Boolean(builtInApp(d)), ask: d.browser.ask ?? [] } : null,
+    browser: d.browser ? { secret: d.browser.kind === "fragment" ? "never" : d.browser.secret, appSteps: d.browser.appSteps, scopes: d.browser.scopes, idLabel: d.browser.idLabel ?? "Client ID", oneClick: Boolean(builtInApp(d) || relayApp(d)), viaTalqava: !builtInApp(d) && Boolean(relayApp(d)), ask: d.browser.ask ?? [] } : null,
     triggers: (d.triggers ?? []).map((t) => ({ name: t.name, summary: t.summary, param: t.param ?? null })),
     watches: watches().filter((w) => all.some((c) => c.id === w.connection && c.service === d.id)).map(({ seen: _s, ...w }) => w),
     actions: d.actions.map((a) => ({ name: a.name, kind: a.kind, summary: a.alwaysAsk ? `${a.summary} (always asks you first)` : a.summary })),
@@ -486,6 +505,8 @@ interface Pending {
   asked: Record<string, string>;
   rule?: unknown;
   at: number;
+  /** True when Talqava's sign-in service holds this app's secret and does the exchange. */
+  relay?: boolean;
 }
 const pending = new Map<string, Pending>();
 const b64url = (b: Buffer) => b.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -495,10 +516,17 @@ export function startBrowserSignIn(id: string, input: { clientId?: unknown; clie
   const def = serviceOf(id);
   if (!def.browser) throw new Error(`${def.name} connects with a key, not a browser sign-in.`);
   if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(redirect) && !/^https:\/\//.test(redirect)) throw new Error("Open Talqava on this computer to sign in to a service.");
-  const clientId = String(input.clientId ?? "").trim() || builtInApp(def);
-  const clientSecret = String(input.clientSecret ?? "").trim();
+  // The owner's own app first; else an app of Talqava's that needs no secret; else one whose secret Talqava's sign-in service keeps.
+  const own = String(input.clientId ?? "").trim();
+  const viaRelay = !own && !builtInApp(def) && Boolean(relayApp(def));
+  const clientId = own || builtInApp(def) || relayApp(def);
+  const clientSecret = viaRelay ? "" : String(input.clientSecret ?? "").trim();
   if (!clientId || clientId.length > 500 || /\s/.test(clientId)) throw new Error(`Paste your app's ${(def.browser.idLabel ?? "client ID").replace(/^Client/, "client")}.`);
-  if (def.browser.secret === "required" && !clientSecret) throw new Error("Paste your app's client secret.");
+  if (def.browser.secret === "required" && !clientSecret && !viaRelay) throw new Error("Paste your app's client secret.");
+  // Through the sign-in service, the browser comes back by way of Talqava's website, which sends it on to this computer.
+  const localPort = /^http:\/\/(?:127\.0\.0\.1|localhost):(\d{2,5})\//.exec(redirect)?.[1] ?? "";
+  if (viaRelay && !localPort) throw new Error("Open Talqava on this computer to sign in to a service.");
+  if (viaRelay) redirect = `${relayAddress()}/callback.php`;
   const asked: Record<string, string> = {};
   for (const f of def.browser.ask ?? []) {
     const v = String((input.values as Record<string, unknown> | undefined)?.[f.key] ?? "").trim().toLowerCase();
@@ -508,9 +536,10 @@ export function startBrowserSignIn(id: string, input: { clientId?: unknown; clie
   const authUrl = filled(def.browser.authUrl, asked);
   for (const [k, v] of pending) if (Date.now() - v.at > 600_000) pending.delete(k);
   if (pending.size > 50) throw new Error("Too many sign-ins were started. Wait ten minutes and try again.");
-  const state = b64url(crypto.randomBytes(32));
+  // Through the sign-in service the state starts with this app's port, so the website knows where on this computer to send the browser back.
+  const state = `${viaRelay ? `${localPort}.` : ""}${b64url(crypto.randomBytes(32))}`;
   const verifier = b64url(crypto.randomBytes(48));
-  pending.set(state, { service: id, clientId, clientSecret: def.browser.secret === "never" ? "" : clientSecret, verifier, redirect, asked, rule: input.rule, at: Date.now() });
+  pending.set(state, { service: id, clientId, clientSecret: def.browser.secret === "never" ? "" : clientSecret, verifier, redirect, asked, rule: input.rule, at: Date.now(), relay: viaRelay });
   const scope = def.browser.scopes.join(def.browser.scopeSeparator ?? " ");
   if (def.browser.kind === "fragment") {
     // The token comes back in the address after the #, which only the browser sees; the page it lands on hands it over.
@@ -535,10 +564,12 @@ export async function finishBrowserSignIn(state: unknown, code: unknown, problem
   const def = serviceOf(p.service);
   if (problem || !code) throw new Error(problem === "access_denied" ? `You did not approve the sign-in, so ${def.name} was not connected.` : `${def.name} did not complete the sign-in${problem ? ` (${String(problem).slice(0, 80)})` : ""}.`);
   if (def.browser!.kind === "fragment") throw new Error(`${def.name} did not complete the sign-in.`);
-  const t = await tokenCall(def, { grant_type: "authorization_code", code: String(code), redirect_uri: p.redirect, client_id: p.clientId, ...(def.browser!.pkce === false ? {} : { code_verifier: p.verifier }), ...(p.clientSecret ? { client_secret: p.clientSecret } : {}) }, p.asked);
+  const t = p.relay
+    ? await relayCall(def, "token", { code: String(code), ...(def.browser!.pkce === false ? {} : { code_verifier: p.verifier }), asked: p.asked })
+    : await tokenCall(def, { grant_type: "authorization_code", code: String(code), redirect_uri: p.redirect, client_id: p.clientId, ...(def.browser!.pkce === false ? {} : { code_verifier: p.verifier }), ...(p.clientSecret ? { client_secret: p.clientSecret } : {}) }, p.asked);
   // A token with no stated lifetime and nothing to renew it with does not run out (the service says so by leaving both out).
   const lasting = !t.expires_in && !t.refresh_token;
-  const values: Record<string, string> = { ...p.asked, client_id: p.clientId, ...(p.clientSecret ? { client_secret: p.clientSecret } : {}), access_token: t.access_token, ...(def.browser!.renewWithRedirect ? { redirect_uri: p.redirect } : {}), ...(def.browser!.tokenKey ? { [def.browser!.tokenKey]: t.access_token } : {}), ...(t.refresh_token ? { refresh_token: t.refresh_token } : {}), ...(lasting ? {} : { expires_at: String(Date.now() + (Number(t.expires_in) || 3600) * 1000) }) };
+  const values: Record<string, string> = { ...p.asked, client_id: p.clientId, ...(p.clientSecret ? { client_secret: p.clientSecret } : {}), access_token: t.access_token, ...(p.relay ? { relay: "1" } : {}), ...(def.browser!.renewWithRedirect ? { redirect_uri: p.redirect } : {}), ...(def.browser!.tokenKey ? { [def.browser!.tokenKey]: t.access_token } : {}), ...(t.refresh_token ? { refresh_token: t.refresh_token } : {}), ...(lasting ? {} : { expires_at: String(Date.now() + (Number(t.expires_in) || 3600) * 1000) }) };
   return signedIn(def, p, values);
 }
 
@@ -588,7 +619,9 @@ async function fresh(c: Connection): Promise<Connection> {
   const work = (async () => {
     let t;
     try {
-      t = await tokenCall(def, { grant_type: "refresh_token", refresh_token: c.values.refresh_token, client_id: c.values.client_id, ...(def.browser!.renewWithRedirect && c.values.redirect_uri ? { redirect_uri: c.values.redirect_uri } : {}), ...(c.values.client_secret ? { client_secret: c.values.client_secret } : {}) }, c.values);
+      t = c.values.relay
+        ? await relayCall(def, "refresh", { refresh_token: c.values.refresh_token, asked: Object.fromEntries((def.browser!.ask ?? []).map((f) => [f.key, c.values[f.key] ?? ""])) })
+        : await tokenCall(def, { grant_type: "refresh_token", refresh_token: c.values.refresh_token, client_id: c.values.client_id, ...(def.browser!.renewWithRedirect && c.values.redirect_uri ? { redirect_uri: c.values.redirect_uri } : {}), ...(c.values.client_secret ? { client_secret: c.values.client_secret } : {}) }, c.values);
     } catch (err) {
       // The service no longer honours the sign-in (revoked, or too old): the owner has to sign in again.
       if ((err as Error).message.includes(" answered 400") || (err as { refused?: boolean }).refused) {

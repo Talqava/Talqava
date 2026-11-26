@@ -4150,7 +4150,11 @@ async function servicePage(col, again, id) {
       { class: "card form", onsubmit: (e) => (e.preventDefault(), attempt(start, col)) },
       h("b", {}, svc.connections.length ? "Connect another account" : `Connect ${svc.name}`),
       oneClick
-        ? [h("p", { class: "note small" }, `Press the button, sign in to ${svc.name} in your browser and approve. Nothing to copy or paste.`), askRows]
+        ? [
+            h("p", { class: "note small" }, `Press the button, sign in to ${svc.name} in your browser and approve. Nothing to copy or paste.`),
+            svc.browser.viaTalqava ? h("p", { class: "note small" }, `The sign-in passes through Talqava's website (auth.talqava.com), which completes it with ${svc.name}. It keeps nothing: your sign-in is stored only on this computer.`) : null,
+            askRows,
+          ]
         : [
             h("p", { class: "note small" }, `${svc.name} signs in through your browser. It asks for an app registered with ${svc.name}; you register your own once, which takes about ten minutes, and it stays yours.`),
             h("ol", {}, svc.browser.appSteps.map((step) => h("li", {}, step.split(/(\{redirect\}|\{origin\})/).map((part) => (part === "{redirect}" ? h("code", {}, d.redirect) : part === "{origin}" ? h("code", {}, new URL(d.redirect).origin) : part))))),

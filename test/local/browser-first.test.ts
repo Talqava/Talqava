@@ -26,6 +26,13 @@ before(async () => {
       const auth = String(req.headers.authorization ?? "");
       seen.push({ path: u.pathname, auth, body, query: u.search, json: raw.startsWith("{") ? JSON.parse(raw) : null });
       const json = (status: number, v: unknown) => (res.writeHead(status, { "content-type": "application/json" }), res.end(JSON.stringify(v)));
+      // A stand-in for Talqava's sign-in service: it holds the app's secret, so the app never sends one.
+      if (u.pathname === "/relay/token.php" || u.pathname === "/relay/refresh.php") {
+        const sent = JSON.parse(raw);
+        if (sent.service !== "asana") return json(404, { error: "This service does not sign in through Talqava." });
+        if (u.pathname.endsWith("refresh.php")) return sent.refresh_token === "relay-rt1" ? json(200, { access_token: "second", refresh_token: "relay-rt2", expires_in: 1800 }) : json(400, { error: "invalid_grant" });
+        return sent.code === "ok" && sent.code_verifier ? json(200, { access_token: "first", refresh_token: "relay-rt1", expires_in: 1 }) : json(400, { error: "The sign-in code was not accepted." });
+      }
       if (u.pathname.endsWith("/token")) {
         if (body?.grant_type === "refresh_token") return json(200, { access_token: "second", refresh_token: "rt2", expires_in: 1800 });
         return body?.code === "ok" ? json(200, { access_token: "first", refresh_token: "rt1", expires_in: 1 }) : json(400, { error: "invalid_grant" });
@@ -80,6 +87,7 @@ before(async () => {
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   for (const id of ["ASANA", "HUBSPOT", "TYPEFORM", "TRELLO", "ZENDESK", "GITLAB", "XERO"]) (process.env[`TALQAVA_${id}_API`] = `${url}/${id.toLowerCase()}`), (process.env[`TALQAVA_${id}_TOKEN_API`] = `${url}/${id.toLowerCase()}/token`);
+  process.env.TALQAVA_AUTH_RELAY = `${url}/relay`;
   K = await import("../../src/local/connector-kit.ts");
   await import("../../src/local/services/index.ts");
 });
@@ -305,4 +313,37 @@ test("Xero signs in with PKCE and no secret, remembers which organisation was al
   assert.deepEqual(await trigger.list(conn, ""), ["11111111-2222-3333-4444-555555555555"]);
   assert.equal((await trigger.describe(conn, "11111111-2222-3333-4444-555555555555", "")).title, "Invoice INV-0042 to Corner Café");
   await assert.rejects(trigger.describe(conn, "../x", ""), /not an invoice/);
+});
+
+test("a service whose app has a secret signs in through Talqava's sign-in service: the app sends no secret, and renewal goes the same way", async () => {
+  // With no app of Talqava's registered, the owner still needs their own app and its secret.
+  assert.equal(K.listServices().find((s) => s.id === "asana")!.browser!.oneClick, false);
+  process.env.TALQAVA_ASANA_RELAY_CLIENT_ID = "talqava-asana-app";
+  try {
+    const asana = K.listServices().find((s) => s.id === "asana")!;
+    assert.deepEqual([asana.browser!.oneClick, asana.browser!.viaTalqava], [true, true], "one press, by way of Talqava's website");
+    const to = new URL(K.startBrowserSignIn("asana", {}, redirect).url);
+    assert.equal(to.searchParams.get("client_id"), "talqava-asana-app");
+    assert.match(to.searchParams.get("redirect_uri")!, /\/relay\/callback\.php$/, "the service sends the browser to Talqava's website");
+    const state = to.searchParams.get("state")!;
+    assert.match(state, /^8787\.[A-Za-z0-9_-]{20,}$/, "the state says which port on this computer to come back to");
+    assert.equal(to.searchParams.get("code_challenge_method"), "S256");
+    await assert.rejects(K.finishBrowserSignIn(state.replace("8787.", "9999."), "ok"), /not started here/, "a changed state is not accepted");
+    const c = await K.finishBrowserSignIn(state, "ok");
+    assert.equal(c.label, "Ada (ada@example.com)");
+    const exchange = seen.filter((s) => s.path === "/relay/token.php").at(-1)!.json;
+    assert.deepEqual([exchange.service, exchange.code, Boolean(exchange.code_verifier), exchange.client_secret, exchange.client_id], ["asana", "ok", true, undefined, undefined], "no secret and no app ID leave this computer");
+    // The token lasted a second: the next use renews it through the same service.
+    assert.match(String(await tool("asana__list_projects").run({}, {} as never)), /Bakery/);
+    const renew = seen.filter((s) => s.path === "/relay/refresh.php").at(-1)!.json;
+    assert.deepEqual([renew.service, renew.refresh_token, renew.client_secret], ["asana", "relay-rt1", undefined]);
+    assert.equal(seen.at(-1)!.auth, "Bearer second");
+    // An owner who gives their own app still uses it directly, with nothing passing through Talqava's website.
+    const own = new URL(K.startBrowserSignIn("asana", { clientId: "mine", clientSecret: "shh" }, redirect).url);
+    assert.deepEqual([own.searchParams.get("client_id"), own.searchParams.get("redirect_uri")], ["mine", redirect]);
+    // Opened from somewhere other than this computer, there is no port to come back to.
+    assert.throws(() => K.startBrowserSignIn("asana", {}, "https://talqava.example.com/api/oauth/callback"), /on this computer/);
+  } finally {
+    delete process.env.TALQAVA_ASANA_RELAY_CLIENT_ID;
+  }
 });
