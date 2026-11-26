@@ -48,7 +48,7 @@ interface StoredSession {
 interface Store {
   people: StoredPerson[];
   sessions: StoredSession[];
-  settings: { requireSecondStep: boolean; idleMinutes: number; networks?: string[]; askAgain?: boolean };
+  settings: { requireSecondStep: boolean; idleMinutes: number; networks?: string[]; askAgain?: boolean; twoAdmins?: boolean };
 }
 
 /** A person, as the app shows them: never the password key or the second step's secret. */
@@ -190,7 +190,16 @@ export const people = {
 
   settings() {
     const s = load().settings;
-    return { ...s, networks: s.networks ?? [], askAgain: s.askAgain !== false, idleChoices: IDLE_CHOICES, minPassword: MIN_PASSWORD, confirmMinutes: CONFIRM_MINUTES };
+    return { ...s, networks: s.networks ?? [], twoAdmins: Boolean(s.twoAdmins), admins: this.admins(), askAgain: s.askAgain !== false, idleChoices: IDLE_CHOICES, minPassword: MIN_PASSWORD, confirmMinutes: CONFIRM_MINUTES };
+  },
+
+  /** How many people can approve a security change: the owner and administrators whose accounts are on. */
+  admins(): number {
+    return load().people.filter((p) => (p.role === "owner" || p.role === "admin") && !p.off).length;
+  },
+  /** Whether a security change by one administrator must wait for another. Only in force while there are two. */
+  twoAdmins(): boolean {
+    return Boolean(load().settings.twoAdmins) && this.admins() >= 2;
   },
 
   /** The first account, which is the owner's. Only possible while nobody has one. */
@@ -292,10 +301,14 @@ export const people = {
     return view(p);
   },
 
-  setSettings(patch: { requireSecondStep?: unknown; idleMinutes?: unknown; networks?: unknown; askAgain?: unknown }) {
+  setSettings(patch: { requireSecondStep?: unknown; idleMinutes?: unknown; networks?: unknown; askAgain?: unknown; twoAdmins?: unknown }) {
     const s = load();
     if (patch.networks !== undefined) s.settings.networks = [...new Set((Array.isArray(patch.networks) ? patch.networks : String(patch.networks).split(/[\s,]+/)).map(cleanRange).filter(Boolean))].slice(0, 100);
     if (typeof patch.askAgain === "boolean") s.settings.askAgain = patch.askAgain;
+    if (typeof patch.twoAdmins === "boolean") {
+      if (patch.twoAdmins && this.admins() < 2) throw new Error("This needs at least two people who are owner or administrator. Add or promote someone first.");
+      s.settings.twoAdmins = patch.twoAdmins;
+    }
     if (typeof patch.requireSecondStep === "boolean") s.settings.requireSecondStep = patch.requireSecondStep;
     if (IDLE_CHOICES.includes(Number(patch.idleMinutes))) s.settings.idleMinutes = Number(patch.idleMinutes);
     save();

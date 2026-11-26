@@ -87,6 +87,8 @@ async function api(method, path, body) {
     return api(method, path, body);
   }
   if (!res.ok) throw Object.assign(new Error(data.error || `Request failed (${res.status}).`), { status: res.status });
+  // Where two administrators must agree, a security change is set aside instead of made: say so, plainly.
+  if (res.status === 202 && data.waiting) throw Object.assign(new Error(data.message), { waiting: true });
   return data;
 }
 
@@ -8975,6 +8977,8 @@ async function securityView() {
             h("p", { class: "note small" }, "Anyone without one is asked to set it up the next time they sign in, before they can do anything else."),
             h("label", {}, "Sign people out after this long without activity", h("select", { onchange: (e) => act(() => api("PUT", "people/settings", { idleMinutes: Number(e.target.value) })) }, st.idleChoices.map((m) => h("option", { value: m, selected: m === st.idleMinutes }, m < 120 ? `${m / 60} hour` : m < 2880 ? `${m / 60} hours` : `${m / 1440} days`)))),
             h("label", { class: "power" }, h("input", { type: "checkbox", checked: st.askAgain, onchange: (e) => act(() => api("PUT", "people/settings", { askAgain: e.target.checked })) }), `Ask for the password again before changes to people, rules or security (at most every ${st.confirmMinutes} minutes)`),
+            h("label", { class: "power" }, h("input", { type: "checkbox", checked: st.twoAdmins, disabled: !st.twoAdmins && st.admins < 2, onchange: (e) => act(() => api("PUT", "people/settings", { twoAdmins: e.target.checked })) }), "Two administrators must agree on security changes: one asks, a different one approves"),
+            st.admins < 2 ? h("p", { class: "note small" }, "This needs at least two people who are owner or administrator.") : null,
             h("label", {}, "Only allow signing in from these networks", networks),
             h("p", { class: "note small" }, "One range on each line, such as 203.0.113.0/24, or a single address. Leave empty to allow any network. The computer Talqava runs on is always allowed."),
             h("div", {}, h("button", { onclick: () => act(() => api("PUT", "people/settings", { networks: networks.value })) }, "Save the networks")),
@@ -8983,6 +8987,7 @@ async function securityView() {
           ),
         )
       : null,
+    admin ? waitingChangesSection() : null,
     admin ? ssoSection() : null,
     admin ? directorySection() : null,
     sensitivitySection(admin),
@@ -9064,6 +9069,37 @@ function backupSection(canEdit) {
 }
 
 /** Security › Single sign-on: people sign in through the company's identity provider. */
+/** Security: changes one administrator asked for that wait for a different one to approve. Shown only when there are any. */
+function waitingChangesSection() {
+  const box = h("section", { class: "isec", hidden: true });
+  const draw = async () => {
+    const list = await api("GET", "security-ops/changes").then((d) => d.changes).catch(() => []);
+    box.hidden = !list.length;
+    if (!list.length) return;
+    const mine = state.me?.person?.id;
+    fill(
+      box,
+      h("h2", {}, "Security changes waiting for a second administrator"),
+      h(
+        "div",
+        { class: "card form" },
+        list.map((c) =>
+          h(
+            "div",
+            { class: "reviewline" },
+            h("div", { class: "grow" }, h("b", {}, c.summary), h("div", { class: "note small" }, `Asked for by ${c.by.name}, ${new Date(c.at).toLocaleString()}`)),
+            c.by.id === mine ? h("span", { class: "note small" }, "Waiting for another administrator") : h("button", { class: "small primary", onclick: () => attempt(async () => (await api("POST", `security-ops/changes/${c.id}/approve`), toast("Approved. The change is made."), securityView()), box) }, "Approve"),
+            h("button", { class: "small", onclick: () => attempt(async () => (await api("POST", `security-ops/changes/${c.id}/decline`), toast(c.by.id === mine ? "Withdrawn." : "Declined."), draw()), box) }, c.by.id === mine ? "Withdraw" : "Decline"),
+          ),
+        ),
+        h("p", { class: "note small" }, "A waiting change lapses after a day, or when Talqava restarts. What it holds, such as a new password, is never written to disk while it waits."),
+      ),
+    );
+  };
+  draw();
+  return box;
+}
+
 /** Security › Directory sync: the company's identity provider adds people and switches them off, with a token made here. */
 function directorySection() {
   const box = h("section", { class: "isec" }, h("h2", {}, "Directory sync"));
