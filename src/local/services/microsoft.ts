@@ -60,6 +60,17 @@ export const outlook: ServiceDef = {
   fields: [],
   browser: signIn(["Mail.ReadWrite", "Mail.Send", "Calendars.ReadWrite"]),
   check: whoAmI,
+  triggers: [
+    {
+      name: "new_email",
+      summary: "A new email arrives",
+      list: async (c) => ((await graph<{ value: any[] }>(c, `/me/mailFolders/inbox/messages${query({ $top: 25, $select: "id" })}`)).value ?? []).map((m) => String(m.id)),
+      async describe(c, mail) {
+        const text = await outlook.actions.find((a) => a.name === "read_mail")!.run(c as Connection, { email: mail });
+        return { title: `Email: ${/^Subject: (.*)$/m.exec(text)?.[1] ?? "(no subject)"}`, text: `Email number ${mail}\n${text}` };
+      },
+    },
+  ],
   actions: [
     {
       name: "search_mail",

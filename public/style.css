@@ -2023,3 +2023,5 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .wppost { padding: 5px 0; border-top: 1px solid var(--line); gap: 10px; }
 .wpdaily { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; }
 .ihero .packicon.big { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 11px; font-size: 20px; font-weight: 700; }
+.checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px 14px; }
+.checks .check { display: flex; align-items: flex-start; gap: 8px; font-weight: 400; }

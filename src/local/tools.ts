@@ -670,13 +670,13 @@ function orgOverview(): string[] {
 }
 
 /** Connector tools for a run, and a line for the prompt about any connector that did not answer. */
-async function connectors(enabled: boolean) {
+async function connectors(enabled: boolean, agent?: string) {
   const cfg = getConfig();
   if (!enabled) return { tools: [] as Tool[], note: [] as string[], names: [] as string[] };
   // A connected WordPress site comes with its own tools, for agents with the same power as other connected services.
   // So do the services built on the connector kit: one tool per action, asking first where the owner's rule says so.
-  const site = [...wordpressTools(), ...serviceTools()];
-  const siteNote = [...(wordpressTools().length ? ["A WordPress site is connected: use the wordpress__content tool to read, draft and update its posts and pages, and wordpress__publish where the owner allows publishing."] : []), ...serviceNotes()];
+  const site = [...wordpressTools(), ...serviceTools(agent)];
+  const siteNote = [...(wordpressTools().length ? ["A WordPress site is connected: use the wordpress__content tool to read, draft and update its posts and pages, and wordpress__publish where the owner allows publishing."] : []), ...serviceNotes(agent)];
   if (!cfg.mcpServers.length) return { tools: site, note: siteNote, names: site.map((t) => t.name) };
   const { tools: found, problems } = await connectorTools(cfg.mcpServers);
   const tools = [...found, ...site];
@@ -730,7 +730,7 @@ function unguardedRunSpec(jobs: JobBook) {
       const model = resolveModel({ ...cfg, effort: choice.effort }, choice.ref);
       const claude = model.kind === "anthropic";
       const root = quest.copy?.worktree ?? WORKSPACE;
-      const linked = await connectors(bot.powers.includes("connectors"));
+      const linked = await connectors(bot.powers.includes("connectors"), bot.id);
       const where = quest.copy
         ? [`You are working in your own copy of the repository ${quest.project}, on the branch ${quest.copy.branch}. The user reviews your changes before they keep them, so make the changes directly here; do not commit, push or switch branches.`]
         : quest.project
@@ -803,7 +803,7 @@ function unguardedRunSpec(jobs: JobBook) {
     if (chatBot) {
       const model = resolveModel(cfg, chatBot.model ?? groupModelOf(orgs.active(), chatBot.id) ?? cfg.model);
       const claude = model.kind === "anthropic";
-      const linked = await connectors(chatBot.powers.includes("connectors"));
+      const linked = await connectors(chatBot.powers.includes("connectors"), chatBot.id);
       const org = orgs.active();
       const role = rolePrompt(chatBot, org);
       const onChart = Boolean(memberOf(org, chatBot.id));
