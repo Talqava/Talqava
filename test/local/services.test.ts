@@ -132,12 +132,51 @@ before(async () => {
         if (p === "/issue/SHOP-12/transitions") return req.method === "POST" ? (res.writeHead(204), res.end()) : json(200, { transitions: [{ id: "21", name: "Start work", to: { name: "In Progress" } }, { id: "31", name: "Done", to: { name: "Done" } }] });
         return json(404, { errorMessages: ["Issue does not exist or you do not have permission to see it."], errors: {} });
       }
+      if (svc === "clickup") {
+        if (auth !== "pk_good" && auth !== "Bearer oauth-token") return json(401, { err: "Token invalid", ECODE: "OAUTH_025" });
+        const task = { id: "86c0abc", name: "Order flour", status: { status: "to do" }, priority: { id: "1", priority: "urgent" }, due_date: "1795996800000", assignees: [{ id: 9, username: "Ada" }], list: { id: "901", name: "Shop" }, url: "https://app.clickup.com/t/86c0abc", text_content: "Two sacks" };
+        if (p === "/user") return json(200, { user: { id: 9, username: "Ada", email: "ada@example.com" } });
+        if (p === "/team") return json(200, { teams: [{ id: "55", name: "Bakery" }] });
+        if (p === "/team/55/space") return json(200, { spaces: [{ id: "7", name: "Operations" }] });
+        if (p === "/space/7/list") return json(200, { lists: [{ id: "901", name: "Shop" }] });
+        if (p === "/space/7/folder") return json(200, { folders: [{ id: "3", name: "Suppliers", lists: [{ id: "902", name: "Orders" }] }] });
+        if (p === "/list/901/task" && req.method === "GET") return json(200, { tasks: [task], last_page: true });
+        if (p === "/team/55/task") return json(200, { tasks: [task] });
+        if (p === "/list/901/task") return json(200, { ...task, id: "86c0new", name: body.name, priority: body.priority ? { priority: ["urgent", "high", "normal", "low"][body.priority - 1] } : null, due_date: body.due_date ? String(body.due_date) : null });
+        if (p === "/task/86c0abc" && req.method === "PUT") return json(200, { ...task, status: { status: body.status ?? "to do" } });
+        if (p === "/task/86c0abc") return json(200, task);
+        if (p === "/task/86c0abc/comment") return req.method === "POST" ? json(200, { id: 1 }) : json(200, { comments: [{ comment_text: "Ordered.", user: { username: "Sam" }, date: "1795478400000" }] });
+      }
+      if (svc === "freshdesk") {
+        if (auth !== `Basic ${Buffer.from("fd-key:X").toString("base64")}`) return json(401, { code: "invalid_credentials", message: "You have to be logged in to perform this action." });
+        const ticket = { id: 41, subject: "Late delivery", description_text: "Where is my bread?", status: 2, priority: 3, tags: ["delivery"], requester: { name: "Sam Customer", email: "sam@example.com" }, updated_at: "2026-11-25T10:00:00Z" };
+        if (p === "/agents/me") return json(200, { id: 7, contact: { name: "Ada Baker", email: "ada@example.com" } });
+        if (p === "/tickets" && req.method === "GET") return json(200, [ticket]);
+        if (p === "/tickets" && req.method === "POST") return body.email === "bad@example.com" ? json(400, { description: "Validation failed", errors: [{ field: "email", message: "It should be a valid email address", code: "invalid_value" }] }) : json(201, { ...ticket, id: 42, subject: body.subject });
+        if (p === "/search/tickets") return json(200, { total: 3, results: [ticket] });
+        if (p === "/tickets/41" && req.method === "GET") return json(200, ticket);
+        if (p === "/tickets/41") return json(200, { ...ticket, ...body });
+        if (p === "/tickets/41/conversations") return json(200, [{ incoming: true, private: false, body_text: "Still waiting.", created_at: "2026-11-25T09:00:00Z" }, { incoming: false, private: true, body_text: "Driver was late.", created_at: "2026-11-25T09:30:00Z" }]);
+        if (p === "/tickets/41/notes" || p === "/tickets/41/reply") return json(201, { id: 5 });
+      }
+      if (svc === "brevo") {
+        if (req.headers["api-key"] !== "xkeysib-0123456789abcdef0123") return json(401, { code: "unauthorized", message: "Key not found" });
+        const person = { id: 12, email: "sam@example.com", attributes: { FIRSTNAME: "Sam", LASTNAME: "Customer" }, emailBlacklisted: false, listIds: [3], createdAt: "2026-11-20T10:00:00.000+00:00" };
+        if (p === "/account") return json(200, { email: "ada@example.com", companyName: "Bakery Ltd" });
+        if (p === "/contacts/lists") return json(200, { count: 1, lists: [{ id: 3, name: "Newsletter", uniqueSubscribers: 240 }] });
+        if (p === "/contacts" && req.method === "GET") return json(200, { contacts: [person], count: 1 });
+        if (p === "/contacts/lists/3/contacts") return json(200, { contacts: [person], count: 1 });
+        if (p === "/contacts" && req.method === "POST") return json(201, { id: 13 });
+        if (p === "/contacts/sam%40example.com" || p === "/contacts/12") return req.method === "PUT" ? (res.writeHead(204), res.end()) : json(200, person);
+        if (p === "/emailCampaigns") return json(200, { count: 1, campaigns: [{ id: 8, name: "November news", subject: "Stollen is back", status: "sent", sentDate: "2026-11-18T09:00:00.000Z", statistics: { globalStats: { delivered: 200, uniqueViews: 90, uniqueClicks: 20, unsubscriptions: 1, hardBounces: 2, softBounces: 1 } } }] });
+        return json(404, { code: "document_not_found", message: "Contact does not exist" });
+      }
       json(404, { message: "No route" });
     });
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  for (const id of ["SHOPIFY", "HUBSPOT", "MAILCHIMP", "TRELLO", "CALENDLY", "TYPEFORM", "PIPEDRIVE", "TODOIST", "JIRA"]) process.env[`TALQAVA_${id}_API`] = `${url}/${id.toLowerCase()}`;
+  for (const id of ["SHOPIFY", "HUBSPOT", "MAILCHIMP", "TRELLO", "CALENDLY", "TYPEFORM", "PIPEDRIVE", "TODOIST", "JIRA", "CLICKUP", "FRESHDESK", "BREVO"]) process.env[`TALQAVA_${id}_API`] = `${url}/${id.toLowerCase()}`;
   K = await import("../../src/local/connector-kit.ts");
   await import("../../src/local/services/index.ts");
 });
@@ -333,4 +372,82 @@ test("Jira: issues with an email and API token; text goes in and comes out of At
   const conn = { values: { site: "bakery", email: "ada@example.com", token: "jira-good" } } as never;
   assert.deepEqual(await trigger.list(conn, "shop"), ["SHOP-12"]);
   assert.equal((await trigger.describe(conn, "SHOP-12", "shop")).title, "Issue SHOP-12: Checkout fails");
+});
+
+test("ClickUp: tasks with a personal token sent as it is, or a browser sign-in whose token is sent as Bearer", async () => {
+  const cu = K.listServices().find((s) => s.id === "clickup")!;
+  assert.ok(cu.browser && cu.fields.length === 1);
+  const to = new URL(K.startBrowserSignIn("clickup", { clientId: "capp", clientSecret: "shh" }, "http://localhost:8787/api/oauth/callback").url);
+  assert.deepEqual([to.origin + to.pathname, to.searchParams.get("client_id"), to.searchParams.get("code_challenge")], ["https://app.clickup.com/api", "capp", null]);
+
+  await assert.rejects(K.connectService("clickup", { values: { token: "pk_bad" } }), /ClickUp refused that: Token invalid/);
+  assert.equal((await K.connectService("clickup", { values: { token: "pk_good" }, rule: "auto" })).label, "Ada (Bakery)");
+  assert.equal(seen.at(-1)!.auth, "pk_good", "a personal token is sent without Bearer");
+  assert.equal(await run("clickup__list_lists"), "Operations\n  [901] Shop\n  Suppliers/\n    [902] Orders");
+  const row = "[86c0abc] Order flour · to do · urgent · due 2026-11-30 · for Ada · in Shop";
+  assert.equal(await run("clickup__list_tasks", { list: "901" }), row);
+  assert.equal(seen.at(-1)!.path, "/clickup/list/901/task?page=0");
+  assert.equal(await run("clickup__my_tasks"), row);
+  assert.equal(seen.at(-1)!.path, "/clickup/team/55/task?assignees%5B%5D=9&order_by=updated&page=0");
+  await assert.rejects(run("clickup__list_tasks", { list: "../user" }), /list's id/);
+  assert.match(await run("clickup__get_task", { task: "86c0abc" }), /https:\/\/app\.clickup\.com\/t\/86c0abc\n\nTwo sacks\n\n2026-11-24 · Sam\nOrdered\./);
+  assert.match(await run("clickup__add_task", { list: "901", name: "Call the mill", urgency: "high", due: "2026-12-01", description: "About **rye**" }), /^Added \[86c0new\] Call the mill · to do · high · due 2026-12-01/);
+  assert.deepEqual(seen.at(-1)!.body, { name: "Call the mill", markdown_content: "About **rye**", priority: 2, due_date: Date.parse("2026-12-01T12:00:00Z") });
+  await assert.rejects(run("clickup__add_task", { list: "901", name: "x", due: "friday" }), /date like/);
+  assert.match(await run("clickup__update_task", { task: "86c0abc", status: "done" }), /· done ·/);
+  await assert.rejects(run("clickup__update_task", { task: "86c0abc" }), /Say what to change/);
+  await run("clickup__comment_on_task", { task: "86c0abc", comment: "Done." });
+  assert.deepEqual(seen.at(-1)!.body, { comment_text: "Done.", notify_all: false });
+  const trigger = K.services().find((s) => s.id === "clickup")!.triggers![0];
+  assert.deepEqual(await trigger.list({ values: { token: "oauth-token" } } as never, "901"), ["86c0abc"]);
+  assert.equal(seen.at(-1)!.auth, "Bearer oauth-token");
+});
+
+test("Freshdesk: tickets with the agent's key; a reply to the customer always asks first", async () => {
+  await assert.rejects(K.connectService("freshdesk", { values: { domain: "evil.example.com/x", api_key: "fd-key" } }), /helpdesk domain/);
+  await assert.rejects(K.connectService("freshdesk", { values: { domain: "bakery", api_key: "wrong" } }), /Freshdesk refused that: You have to be logged in/);
+  assert.equal((await K.connectService("freshdesk", { values: { domain: "Bakery.freshdesk.com", api_key: "fd-key" }, rule: "auto" })).label, "Ada Baker (bakery.freshdesk.com)");
+  const row = "[41] Late delivery · open · high · from Sam Customer · updated 2026-11-25";
+  assert.equal(await run("freshdesk__list_tickets", { since: "2026-09-01" }), row);
+  assert.match(seen.at(-1)!.path, /updated_since=2026-09-01T00%3A00%3A00Z&order_by=updated_at&order_type=desc&include=requester&per_page=30/);
+  assert.equal(await run("freshdesk__find_tickets", { status: "open", priority: "high", tag: "deliv'ery" }), `${row}\n(3 in all)`);
+  assert.equal(new URLSearchParams(seen.at(-1)!.path.split("?")[1]).get("query"), `"status:2 AND priority:3 AND tag:'delivery'"`);
+  await assert.rejects(run("freshdesk__find_tickets", {}), /Give a status/);
+  const one = await run("freshdesk__get_ticket", { ticket: "#41" });
+  assert.match(one, /Customer: sam@example\.com\nTags: delivery\n\nWhere is my bread\?\n\n2026-11-25 09:00 · the customer\nStill waiting\.\n\n2026-11-25 09:30 · private note\nDriver was late\./);
+  await run("freshdesk__add_note", { ticket: 41, note: "Refund <offered>\nby phone" });
+  assert.deepEqual([seen.at(-1)!.path, seen.at(-1)!.body], ["/freshdesk/tickets/41/notes", { body: "Refund &lt;offered&gt;<br>by phone", private: true }]);
+  assert.equal(asks("freshdesk__reply_to_customer"), true, "even when changes need no asking");
+  assert.equal(asks("freshdesk__add_note"), false);
+  assert.equal(K.toolActionKind("freshdesk__reply_to_customer"), "send");
+  assert.match(await run("freshdesk__update_ticket", { ticket: 41, status: "resolved", priority: "low" }), /· resolved · low ·/);
+  assert.deepEqual(seen.at(-1)!.body, { status: 4, priority: 1 });
+  await assert.rejects(run("freshdesk__update_ticket", { ticket: 41, status: "gone" }), /choose one of: open, pending, resolved, closed/);
+  assert.equal(await run("freshdesk__create_ticket", { customer_email: "Lee@Example.com", subject: "Cake order", message: "Two cakes" }), "Opened ticket 42: “Cake order” for lee@example.com.");
+  assert.deepEqual(seen.at(-1)!.body, { email: "lee@example.com", subject: "Cake order", description: "Two cakes", status: 2, priority: 1 });
+  await assert.rejects(run("freshdesk__create_ticket", { customer_email: "bad@example.com", subject: "x", message: "y" }), /Freshdesk answered 400: email: It should be a valid email address/);
+});
+
+test("Brevo: contacts, lists and campaign results with a key; nothing is sent from here", async () => {
+  await assert.rejects(K.connectService("brevo", { values: { api_key: "short" } }), /starts with xkeysib-/);
+  await assert.rejects(K.connectService("brevo", { values: { api_key: "xkeysib-wrong-0123456789abc" } }), /Brevo refused that: Key not found/);
+  assert.equal((await K.connectService("brevo", { values: { api_key: "xkeysib-0123456789abcdef0123" }, rule: "auto" })).label, "Bakery Ltd (ada@example.com)");
+  assert.ok(!K.services().find((s) => s.id === "brevo")!.actions.some((a) => /send|campaign_create/.test(a.name)), "no action sends email");
+  assert.equal(await run("brevo__list_lists"), "[3] Newsletter · 240 people");
+  const row = "sam@example.com · Sam Customer · lists 3 · added 2026-11-20";
+  assert.equal(await run("brevo__list_contacts"), row);
+  assert.equal(await run("brevo__list_contacts", { list: "3" }), row);
+  assert.equal(await run("brevo__get_contact", { email: "Sam@Example.com" }), row);
+  assert.equal(seen.at(-1)!.path, "/brevo/contacts/sam%40example.com?identifierType=email_id");
+  await assert.rejects(run("brevo__get_contact", { email: "../account" }), /email address/);
+  assert.equal(await run("brevo__add_contact", { email: "lee@example.com", first_name: "Lee", lists: ["3"] }), "Saved the contact lee@example.com on list 3.");
+  assert.deepEqual(seen.at(-1)!.body, { email: "lee@example.com", attributes: { FIRSTNAME: "Lee" }, listIds: [3], updateEnabled: true });
+  assert.equal(await run("brevo__update_contact", { email: "sam@example.com", remove_from_lists: ["3"], unsubscribed: true }), "Updated the contact sam@example.com.");
+  assert.deepEqual([seen.at(-1)!.method, seen.at(-1)!.body], ["PUT", { unlinkListIds: [3], emailBlacklisted: true }]);
+  await assert.rejects(run("brevo__update_contact", { email: "sam@example.com" }), /Say what to change/);
+  assert.equal(await run("brevo__list_campaigns"), "[8] November news · “Stollen is back” · sent · sent 2026-11-18 · delivered 200 · opened 90 (45%) · clicked 20 (10%) · unsubscribed 1 · bounced 3");
+  const trigger = K.services().find((s) => s.id === "brevo")!.triggers![0];
+  const conn = { values: { api_key: "xkeysib-0123456789abcdef0123" } } as never;
+  assert.deepEqual(await trigger.list(conn, ""), ["12"]);
+  assert.equal((await trigger.describe(conn, "12", "")).title, "New contact: sam@example.com");
 });
