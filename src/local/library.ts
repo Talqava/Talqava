@@ -7,6 +7,7 @@
 // search are sent to a model, so a large library costs nothing until used.
 import { audit } from "./audit.ts";
 import { LEVEL_WORDS, levelOf, mayReceive } from "./sensitivity.ts";
+import { noteItem } from "./sent.ts";
 import type { Level } from "./sensitivity.ts";
 import fs from "node:fs";
 import path from "node:path";
@@ -601,6 +602,7 @@ export const library = {
       throw new Error(`“${row.name}” is marked ${LEVEL_WORDS[l].name}, and this organization's rules do not let you read it${l === "restricted" ? " unless you are named on it" : " on the AI service you are running on"}. Do not look for its content another way. Say in your report that you could not read it.`);
     }
     if (!row || !rowAccess || !handOver(org, rowAccess, botId, row.level)) throw new Error("There is no such document in the library, or it is not one you may use.");
+    if (botId !== OWNER) noteItem(row.name, levelOf(row.level), memberOf(org, String(botId))?.title ?? String(botId));
     const parts = db.prepare("select seq, text from passages where document = ? and seq >= ? order by seq").all(id, Math.max(1, from)) as unknown as { seq: number; text: string }[];
     const total = (db.prepare("select count(*) n from passages where document = ?").get(id) as { n: number }).n - 1;
     let text = "";

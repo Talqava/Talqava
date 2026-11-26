@@ -8875,6 +8875,7 @@ async function securityView() {
         h("div", {}, h("button", { class: "primary" }, "Turn on people and sign-in")),
       ),
       sensitivitySection(true),
+      sentSection(),
       guardrailsSection(true),
       securityOpsSection(true),
       backupSection(true),
@@ -8991,6 +8992,7 @@ async function securityView() {
     admin ? ssoSection() : null,
     admin ? directorySection() : null,
     sensitivitySection(admin),
+    admin || ["auditor", "manager"].includes(me?.role) ? sentSection() : null,
     guardrailsSection(admin),
     securityOpsSection(admin),
     admin || me?.role === "auditor" ? backupSection(admin) : null,
@@ -9004,7 +9006,7 @@ function securityTabs(col) {
   const tabOf = (el) => {
     if (el.classList.contains("seccenter")) return "overview";
     const title = el.querySelector("h2")?.textContent ?? "";
-    return /^Sensitive information/.test(title) ? "info" : /^Agent guardrails/.test(title) ? "agents" : /^Alerts and reviews/.test(title) ? "watching" : /^Backups/.test(title) ? "backups" : "people";
+    return /^(Sensitive information|What was sent)/.test(title) ? "info" : /^Agent guardrails/.test(title) ? "agents" : /^Alerts and reviews/.test(title) ? "watching" : /^Backups/.test(title) ? "backups" : "people";
   };
   const sections = [...col.children].slice(1);
   for (const el of sections) el.dataset.tab = tabOf(el);
@@ -9070,6 +9072,35 @@ function backupSection(canEdit) {
 
 /** Security › Single sign-on: people sign in through the company's identity provider. */
 /** Security: changes one administrator asked for that wait for a different one to approve. Shown only when there are any. */
+/** Security › Sensitive information: what left this computer on one day. Names and counts only, never the content. */
+function sentSection() {
+  const body = h("div", { class: "card form" }, h("p", { class: "note" }, "Loading…"));
+  const table = (heads, rows) => h("div", { class: "officetable" }, h("table", {}, h("thead", {}, h("tr", {}, heads.map((t) => h("th", { scope: "col" }, t)))), h("tbody", {}, rows)));
+  const num = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  const time = (at) => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const dayWords = (day, i) => (i === 0 ? "Today" : new Date(`${day}T12:00`).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" }));
+  const draw = async (day) => {
+    const d = await api("GET", `sent${day ? `?day=${day}` : ""}`).catch(() => null);
+    if (!d) return fill(body, h("p", { class: "note" }, "This could not be loaded."));
+    const out = d.ai.filter((a) => !a.local);
+    const here = d.ai.filter((a) => a.local);
+    const nothing = !d.ai.length && !d.items.length && !d.services.length && !d.web.length;
+    fill(
+      body,
+      h("label", {}, "Day", h("select", { "aria-label": "Day", onchange: (e) => draw(e.target.value) }, d.days.map((x, i) => h("option", { value: x, selected: x === d.day }, dayWords(x, i))))),
+      nothing ? h("p", { class: "note" }, "Nothing left this computer on this day.") : null,
+      out.length ? [h("h3", {}, `AI services · ${num(out.reduce((n, a) => n + a.calls, 0), "call")}`), h("p", { class: "note small" }, "Each call sends the conversation so far to the model: the task, the agent's instructions and what its tools returned. A token is about three quarters of a word."), table(["Model", "Calls", "Tokens sent", "Used by"], out.map((a) => h("tr", {}, h("td", {}, a.model), h("td", {}, String(a.calls)), h("td", {}, a.tokens.toLocaleString()), h("td", {}, a.agents.join(", ")))))] : null,
+      here.length ? h("p", { class: "note small" }, `Models on this computer answered ${num(here.reduce((n, a) => n + a.calls, 0), "call")} (${here.map((a) => a.model).join(", ")}). Nothing left the computer for those.`) : null,
+      d.items.length ? [h("h3", {}, `Pages and documents handed to an agent · ${d.items.length}`), h("p", { class: "note small" }, "What an agent reads becomes part of what its AI service receives."), table(["Title", "Level", "Read by", "Went to", "Time"], d.items.map((i) => h("tr", {}, h("td", {}, i.title), h("td", {}, LEVEL_NAMES[i.level] ?? "Internal"), h("td", {}, i.who), h("td", {}, i.to), h("td", {}, time(i.at)))))] : null,
+      d.services.length ? [h("h3", {}, `Changes made in connected services and websites · ${d.services.length}`), table(["Where", "What", "Time"], d.services.map((x) => h("tr", {}, h("td", {}, x.to), h("td", {}, x.what), h("td", {}, time(x.at)))))] : null,
+      d.web.length ? [h("h3", {}, `Websites agents called · ${d.web.length}`), table(["Site", "Times", "Used by"], d.web.map((w) => h("tr", {}, h("td", {}, w.host), h("td", {}, String(w.calls)), h("td", {}, w.agents.join(", ")))))] : null,
+      h("p", { class: "note small" }, "This lists where things went and how much, not the content itself. It is kept on this computer for 30 days. Reading from a connected service is not listed, only changes. Tools added from outside Talqava (connectors) appear in the audit log instead."),
+    );
+  };
+  draw();
+  return h("section", { class: "isec" }, h("h2", {}, "What was sent"), body);
+}
+
 function waitingChangesSection() {
   const box = h("section", { class: "isec", hidden: true });
   const draw = async () => {
@@ -9436,11 +9467,11 @@ function sensitivitySection(canEdit) {
         h(
           "table",
           {},
-          h("thead", {}, h("tr", {}, ["Level", "For example", "May be sent to"].map((t) => h("th", { scope: "col" }, t)))),
+          h("thead", {}, h("tr", {}, ["Level", "For example", "May be sent to", "May leave through connected services"].map((t) => h("th", { scope: "col" }, t)))),
           h(
             "tbody",
             {},
-            d.levels.map((l) => h("tr", {}, h("td", {}, h("b", {}, l.name)), h("td", {}, l.about), h("td", {}, h("select", { "aria-label": `${l.name} may be sent to`, disabled: !canEdit, onchange: (e) => save({ services: { [l.id]: e.target.value } }) }, d.where.map((w) => h("option", { value: w.id, selected: d.policy.services[l.id] === w.id }, w.words)))))),
+            d.levels.map((l) => h("tr", {}, h("td", {}, h("b", {}, l.name)), h("td", {}, l.about), h("td", {}, h("select", { "aria-label": `${l.name} may be sent to`, disabled: !canEdit, onchange: (e) => save({ services: { [l.id]: e.target.value } }) }, d.where.map((w) => h("option", { value: w.id, selected: d.policy.services[l.id] === w.id }, w.words)))), h("td", {}, l.id === "public" ? "Yes" : h("label", { class: "power" }, h("input", { type: "checkbox", "aria-label": `${l.name} may leave through connected services`, disabled: !canEdit, checked: d.policy.leave[l.id], onchange: (e) => save({ leave: { [l.id]: e.target.checked } }) }), "Yes")))),
           ),
         ),
       ),
@@ -9452,6 +9483,7 @@ function sensitivitySection(canEdit) {
         outside.length ? outside.map((x) => h("label", { class: "power" }, h("input", { type: "checkbox", disabled: !canEdit, checked: d.policy.approved.includes(x.id), onchange: (e) => save({ approved: e.target.checked ? [...d.policy.approved, x.id] : d.policy.approved.filter((a) => a !== x.id) }) }), x.name)) : h("p", { class: "note small" }, "No AI service outside this computer is connected."),
         canEdit ? h("div", { class: "row wrap" }, h("button", { onclick: () => confirm("Use the recommended settings?\n\nPublic and Internal: any connected AI service.\nConfidential: only approved services and models on this computer.\nRestricted: only models on this computer.\n\nAgents on a service that is not approved will stop being given Confidential items.") && save({ services: d.recommended }) }, "Use the recommended settings")) : h("p", { class: "note small" }, "Only owners and administrators change these rules."),
       ),
+      h("p", { class: "note small" }, "Untick “May leave” for a level, and a task that has read anything of that level sends nothing out for the rest of that task: no change in a connected service or on your website, no call that sends data to a web address, no typing into a web page, no connector. It still reads and works, and puts what it would have sent in its report. The rule follows the task because, once an agent has read a page, nothing can tell which words of an email came from it."),
       h("div", { class: "card form" }, h("label", {}, "Memory (what your agents remember) counts as", h("select", { disabled: !canEdit, onchange: (e) => save({ memory: e.target.value }) }, d.levels.map((l) => h("option", { value: l.id, selected: d.policy.memory === l.id }, l.name)))), h("p", { class: "note small" }, "Memory has one level as a whole. An agent whose AI service may not receive that level works without the organization's memory.")),
       h("div", { class: "card form" }, h("b", {}, "In plain words, right now"), h("ul", {}, d.words.map((w) => h("li", {}, w))), h("p", { class: "note small" }, "A task can fall back to a backup model, so it is only given what every model it might use may receive.")),
     );

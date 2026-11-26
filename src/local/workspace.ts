@@ -15,6 +15,7 @@ import { TEMPLATES } from "./workspace-templates.ts";
 import { loadCrew } from "./crew.ts";
 import { audit } from "./audit.ts";
 import { LEVEL_WORDS, levelOf, mayReceive } from "./sensitivity.ts";
+import { noteItem } from "./sent.ts";
 import type { Level } from "./sensitivity.ts";
 
 /** Who is acting: the owner (null), an agent's id, or the general chat agent. */
@@ -589,6 +590,7 @@ export const workspace = {
   get(org: Org, id: string, who: Who = OWNER): Page {
     const d = db(org.id);
     const { row, byId } = visible(org, d, id, who);
+    if (who !== OWNER) noteItem(row.title, levelOf(row.level), nameOf(org, String(who)));
     return { ...info(org, d, row, byId, openCounts(d)), ...content(d, row.id) };
   },
 

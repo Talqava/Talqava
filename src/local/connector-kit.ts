@@ -12,8 +12,9 @@ import type { Tool } from "../core/index.ts";
 import { defineTool } from "../core/index.ts";
 import { getConfig, saveConfig } from "./store.ts";
 import { audit } from "./audit.ts";
+import { noteSent } from "./sent.ts";
 import type { DirectoryCategory } from "./directory.ts";
-import { findSecrets } from "./sensitivity.ts";
+import { findSecrets, leaving } from "./sensitivity.ts";
 
 export type ActionKind = "read" | "write" | "destructive";
 export const CHANGE_RULES = ["read", "ask", "auto"] as const;
@@ -320,6 +321,7 @@ export function serviceTools(agent?: string): Tool[] {
             if (connection.off?.includes(action.name)) throw new Error(`On ${def.name} (${connection.label}) the owner switched this off: ${action.summary.toLowerCase()}. Say in your report what you would have done.`);
             // A key or password in what is being sent out is stopped here, before it reaches the service.
             if (action.kind !== "read") {
+              leaving(`${def.name}`);
               const found = findSecrets(JSON.stringify(input));
               if (found.length) throw new Error(`That would send ${found.join(" and ")} to ${def.name}. Take it out of the text and try again; keys and passwords are never sent to a connected service.`);
             }
@@ -334,7 +336,10 @@ export function serviceTools(agent?: string): Tool[] {
               throw err;
             }
             if (connection.problem) mark(connection.id, undefined);
-            if (action.kind !== "read") audit({ actor: "system", actorName: def.name, kind: "integration", action: `An agent used ${def.name}: ${action.summary.toLowerCase()}`, detail: `${connection.label} · ${out.slice(0, 160)}` });
+            if (action.kind !== "read") {
+              audit({ actor: "system", actorName: def.name, kind: "integration", action: `An agent used ${def.name}: ${action.summary.toLowerCase()}`, detail: `${connection.label} · ${out.slice(0, 160)}` });
+              noteSent({ kind: "service", to: `${def.name} (${connection.label})`, what: action.summary });
+            }
             return out.length > 30_000 ? `${out.slice(0, 30_000)}\n… (cut short; ask for less at a time)` : out;
           },
         }),
