@@ -226,6 +226,9 @@ Agents get the tools of ticked services only. A service you connect later stays 
 
 1. Under **Agent guardrails**, type an amount in **Most one task may spend** or a number of minutes in **Longest one task may run**.
 2. Leave a box empty for no extra cap. An agent with a lower budget of its own keeps it.
+3. To limit the whole organization, type an amount in **Most all tasks together may spend in a day**. When today's tasks have spent it, nothing more starts until the next day or until you raise it; a task already running is stopped when it reaches what is left. Chats with the assistant are not counted towards it, but they are held back too once it is reached.
+4. To have an agent paused when it keeps getting stuck, type a number in **Pause an agent after its work got stuck this many times in an hour**. Stuck means a task was stopped for repeating the same step or failing at every step. The pause is in the audit log and under **Refused by these rules**; nothing is lost, and you resume the agent from **Tasks**.
+5. To stop agents deleting in connected services altogether, set **Deleting in a connected service** to **Never**. Otherwise a deletion always asks you first.
 
 ### Stop every agent at once
 

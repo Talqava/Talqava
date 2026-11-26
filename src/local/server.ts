@@ -49,7 +49,7 @@ import { PUBLISH_RULES, PUBLISH_WORDS, connectSite, dailyPostPrompt, listContent
 import { fromDocx, fromXlsx, toDocx, toPptx, fromPptx, toXlsx } from "./officefiles.ts";
 import { listOfficeTemplates, useOfficeTemplate } from "./office-templates.ts";
 import { pageTool } from "../core/tools/page.ts";
-import { describeGuardrails, guardrails, guardrailsFrom } from "./guardrails.ts";
+import { describeGuardrails, guardrails, guardrailsFrom, noteStuck } from "./guardrails.ts";
 import { securityOverview, securityReport } from "./securitycenter.ts";
 import { backupStatus, makeBackup, nightlyBackup, restoreTo, setBackup, testRestore } from "./backup.ts";
 import { finishSso, setSso, sso, ssoPublic, startSso } from "./sso.ts";
@@ -69,7 +69,7 @@ import { connectLangfuse, langfuseIntegration, recordStep, removeLangfuse } from
 import { finishOpenRouterSignIn, openrouterIntegration, openrouterModels, removeOpenRouter, saveOpenRouterKey, startOpenRouterSignIn, useOpenRouterModel } from "./openrouter.ts";
 import { autoSetupGit, cloneRepository, disconnectRepository, gitIntegration, githubAccounts, githubRepos, installGit, listIntegrations, pollGithubSignIn, removeGitIntegration, startGithubSignIn, testGithub } from "./integrations.ts";
 import { ASSIGN_RULES, INDUSTRIES, REQUEST_RULES, STRUCTURES, seatsFor } from "./structures.ts";
-import { budgetBlock, groupSpend, monthlyBudgets } from "./spend.ts";
+import { budgetBlock, groupSpend, monthlyBudgets, spentToday } from "./spend.ts";
 import { decide, listProposals } from "./proposals.ts";
 import { exportOrg, importOrg } from "./portable.ts";
 import { fileReport, parseDeck, workspace, writeDeck } from "./workspace.ts";
@@ -187,6 +187,15 @@ function auditEvent(id: string, event: RunEvent) {
     lastCost.set(id, total);
     const quest = questStore.get(id);
     audit({ ...who, kind: "spend", action: quest ? `Stopped working (${quest.status === "asking" ? "waiting for you" : quest.status})` : "Finished answering", detail: `This run cost $${spent.toFixed(4)}; $${total.toFixed(4)} in all.`, cost: spent });
+  } else if (event.type === "stopped" && (event.reason === "repeat" || event.reason === "failing")) {
+    // An agent whose work keeps getting stuck is paused when the organization's rules say so, and it is recorded.
+    const quest = questStore.get(id);
+    if (quest && noteStuck(quest.bot.id)) {
+      try {
+        const org = orgs.active();
+        if (work.pauseAgents(org, [quest.bot.id]).length) audit({ actor: "system", actorName: "Guardrails", kind: "guardrail", ok: false, task: id, action: `Paused the ${who.actorName}: its work got stuck ${guardrails().pauseAfter} times within an hour`, detail: "Nothing is lost. Look at its last tasks, then resume it from Tasks." });
+      } catch {}
+    }
   } else if (event.type === "error") {
     audit({ ...who, kind: "problem", ok: false, action: "Stopped with an error", detail: event.text });
   } else if (event.type === "notice" && /budget/i.test(event.text)) {
@@ -1038,7 +1047,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
       ...listServices().filter((s) => s.connections.length).map((s) => ({ id: s.id, name: s.name })),
       ...((cfg.wordpress ?? []).length ? [{ id: "wordpress", name: "WordPress" }] : []),
     ];
-    return send(res, 200, { rules: guardrails(), connected, words: describeGuardrails(), refused: readAudit({ kind: "guardrail", limit: 30 }).entries });
+    return send(res, 200, { rules: guardrails(), connected, spentToday: spentToday(), words: describeGuardrails(), refused: readAudit({ kind: "guardrail", limit: 30 }).entries });
   }
   if (route === "GET state") return send(res, 200, publicConfig());
   if (route === "PUT settings") return send(res, 200, await updateSettings(body));

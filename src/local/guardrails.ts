@@ -6,6 +6,20 @@ import type { RunSpec, Tool } from "../core/index.ts";
 import { getConfig } from "./store.ts";
 import { audit } from "./audit.ts";
 import { webRules } from "../core/tools/page.ts";
+import { spentToday } from "./spend.ts";
+
+// ---------- an agent that keeps getting stuck ----------
+const stuck = new Map<string, number[]>();
+/**
+ * Notes that one of an agent's runs was stopped for going round in circles or failing at every step. Returns true
+ * when that has now happened as often within an hour as the rule allows, so the agent should be paused.
+ */
+export function noteStuck(agent: string, now = Date.now(), g: Guardrails = guardrails()): boolean {
+  if (g.pauseAfter === undefined) return false;
+  const times = [...(stuck.get(agent) ?? []).filter((t) => now - t < 3_600_000), now];
+  stuck.set(agent, times.length < g.pauseAfter ? times : []);
+  return times.length >= g.pauseAfter;
+}
 
 export interface Guardrails {
   /** "agent": each agent's own setting decides whether changes ask first. "ask": every change asks a person, always. */
@@ -24,9 +38,15 @@ export interface Guardrails {
   maxTaskSpend?: number;
   /** The longest one task may run, in minutes. */
   maxMinutes?: number;
+  /** The most every agent's tasks together may spend in one day, in US dollars. Reached, no run starts until tomorrow. */
+  maxDaySpend?: number;
+  /** Deleting in a connected service: ask a person first (as always), or never. */
+  deletes: "ask" | "never";
+  /** Pause an agent whose runs were stopped for being stuck this many times within an hour. Left out: never. */
+  pauseAfter?: number;
 }
 
-export const NO_GUARDRAILS: Guardrails = { changes: "agent", commands: "allowed", connectors: "allowed", services: [], web: "any", sites: [] };
+export const NO_GUARDRAILS: Guardrails = { changes: "agent", commands: "allowed", connectors: "allowed", services: [], web: "any", sites: [], deletes: "ask" };
 
 /** The guardrails in force. */
 export const guardrails = (): Guardrails => guardrailsFrom(getConfig().guardrails ?? {});
@@ -52,6 +72,9 @@ export function guardrailsFrom(input: unknown, before: Guardrails = NO_GUARDRAIL
     sites,
     maxTaskSpend: amount(g.maxTaskSpend, before.maxTaskSpend, 100_000),
     maxMinutes: amount(g.maxMinutes, before.maxMinutes, 24 * 60),
+    maxDaySpend: amount(g.maxDaySpend, before.maxDaySpend, 1_000_000),
+    deletes: pick(g.deletes, ["ask", "never"] as const, before.deletes ?? "ask"),
+    pauseAfter: ((n) => (n === undefined ? undefined : Math.max(2, Math.round(n))))(amount(g.pauseAfter, before.pauseAfter, 50)),
   };
 }
 
@@ -99,6 +122,12 @@ function onApprovedSites(tool: Tool, sites: string[], who: string): Tool {
  * guardrails set, the run is returned unchanged.
  */
 export function guard(spec: RunSpec, who: string, g: Guardrails = guardrails()): RunSpec {
+  // The organization's daily limit: once today's tasks have spent it, nothing starts until tomorrow or a higher limit.
+  const leftToday = g.maxDaySpend !== undefined ? g.maxDaySpend - spentToday() : Infinity;
+  if (leftToday <= 0) {
+    audit({ actor: "system", actorName: "Guardrails", kind: "guardrail", ok: false, action: `Refused: ${who} did not start, because today's spending limit is reached`, detail: `$${g.maxDaySpend} a day` });
+    throw new Error(`This organization's spending limit for today ($${g.maxDaySpend}) is reached, so nothing more starts today. The owner can raise it under Security › Agent guardrails, or work carries on tomorrow.`);
+  }
   // Page reading follows redirects itself, so it is told the rule too and checks every hop.
   webRules.allowed = g.web === "approved" ? (host) => g.sites.some((s) => host.toLowerCase() === s || host.toLowerCase().endsWith(`.${s}`)) : null;
   let tools = spec.tools;
@@ -125,6 +154,10 @@ export function guard(spec: RunSpec, who: string, g: Guardrails = guardrails()):
       taken.push(`connected services that are not approved (${off.join(", ")})`);
     }
   }
+  if (g.deletes === "never" && tools.some((t) => (t as { deletes?: boolean }).deletes)) {
+    tools = tools.filter((t) => !(t as { deletes?: boolean }).deletes);
+    taken.push("deleting things in connected services");
+  }
   if (g.web === "never" || (g.web === "approved" && !g.sites.length)) {
     if (tools.some((t) => WEB_TOOLS.has(t.name)) || hosted.some((t) => HOSTED_WEB_TOOLS.has((t as { name?: string }).name ?? ""))) taken.push("the web");
     tools = tools.filter((t) => !WEB_TOOLS.has(t.name));
@@ -136,7 +169,8 @@ export function guard(spec: RunSpec, who: string, g: Guardrails = guardrails()):
   }
   if (g.changes === "ask") alwaysAsk.add("*");
 
-  const budget = g.maxTaskSpend !== undefined ? { ...spec.budget, spend: Math.min(spec.budget?.spend ?? Infinity, g.maxTaskSpend) } : spec.budget;
+  const cap = Math.min(g.maxTaskSpend ?? Infinity, leftToday);
+  const budget = cap !== Infinity ? { ...spec.budget, spend: Math.min(spec.budget?.spend ?? Infinity, cap) } : spec.budget;
   const limits = g.maxMinutes !== undefined ? { ...spec.limits, minutes: Math.min(spec.limits?.minutes ?? Infinity, g.maxMinutes) } : spec.limits;
   const note = taken.length ? `\n\n# Rules of this organization\n\nThis organization does not let agents use: ${taken.join(", ")}. Those tools are not available to you. Do not look for another way to do the same thing; do what you can without them and say plainly in your report what you could not do.` : "";
   const sitesNote = g.web === "approved" && g.sites.length ? `\n\n# Approved sites\n\nYou may only open these sites and their pages: ${g.sites.slice(0, 60).join(", ")}${g.sites.length > 60 ? " and others" : ""}. Any other address is refused.` : "";
@@ -162,5 +196,8 @@ export function describeGuardrails(g: Guardrails = guardrails()): string[] {
     g.web === "never" ? "Agents may not use the web." : g.web === "approved" ? (g.sites.length ? `Agents may open only ${g.sites.length} approved site${g.sites.length === 1 ? "" : "s"}.` : "Agents may open only approved sites, and none is approved yet, so the web is off.") : "Agents with that power may open any site.",
     g.maxTaskSpend !== undefined ? `No task may spend more than $${g.maxTaskSpend}.` : "No extra cap on what a task may spend.",
     g.maxMinutes !== undefined ? `No task may run longer than ${g.maxMinutes} minutes.` : "No extra cap on how long a task may run.",
+    g.maxDaySpend !== undefined ? `All tasks together may spend at most $${g.maxDaySpend} a day; after that nothing starts until the next day.` : "No limit on what all tasks together spend in a day.",
+    g.deletes === "never" ? "Agents never delete anything in a connected service." : "Deleting in a connected service always asks a person first.",
+    g.pauseAfter !== undefined ? `An agent whose work is stopped for being stuck ${g.pauseAfter} times within an hour is paused, and it is recorded.` : "Agents are not paused automatically.",
   ];
 }
