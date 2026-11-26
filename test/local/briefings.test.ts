@@ -183,3 +183,29 @@ test("the page watcher says what was added and removed, in words, and ignores sc
 test("the agenda for each project is built from the tasks, and says nothing when no project has open work", () => {
   assert.equal(B.buildDigest(B.briefingOf("project-agenda")!, org), "");
 });
+
+test("the right person sends a briefing even when their department has another name, and the owner may choose the model", async () => {
+  const news = B.briefingOf("morning-news")!;
+  const m = (i: number, title: string, department: string) => ({ ...org.members[i], title, department });
+  // A Researcher in a department called Strategy: their title says the news is their work, before the General Manager.
+  const renamed = { ...org, groups: [], members: [m(0, "General Manager", "Head office"), m(1, "Market Researcher", "Strategy"), m(2, "Bookkeeper", "Back office")] };
+  assert.equal(B.senderFor(news, renamed)?.title, "Market Researcher");
+  assert.equal(B.senderFor(B.briefingOf("bills-due")!, renamed)?.title, "Bookkeeper");
+  assert.equal(B.senderFor(B.briefingOf("monday-plan")!, renamed)?.title, "General Manager", "leadership work goes to the General Manager by title");
+  // A short word must be the whole word: a Coordinator is not the COO.
+  const none = { ...org, groups: [], members: [m(0, "Receptionist", "Front desk"), m(1, "Events Coordinator", "Front desk")] };
+  assert.equal(B.senderFor(B.briefingOf("files-tidy")!, none)?.title, "Receptionist", "nobody fits: the first position");
+  assert.deepEqual(B.possibleSenders(renamed).map((x) => x.title), ["General Manager", "Market Researcher", "Bookkeeper"]);
+
+  const providers = [{ id: "anthropic" }, { id: "openrouter" }];
+  assert.equal(B.chosenModel("", providers), "", "nothing chosen: the sender's own model");
+  assert.equal(B.chosenModel(" openrouter/meta/llama-4 ", providers), "openrouter/meta/llama-4");
+  for (const bad of ["claude", "unknown/model", "anthropic/", "anthropic/has space", `anthropic/${"x".repeat(300)}`]) assert.throws(() => B.chosenModel(bad, providers), /from the list/, `refuses “${bad.slice(0, 20)}”`);
+
+  // The chosen model travels with the task, and is the one the gallery shows.
+  const { work } = await import("../../src/local/work.ts");
+  const item = work.create(org, { title: "Morning news", description: "x", owner: ids[1], createdBy: "owner", direct: true, model: "openrouter/meta/llama-4" });
+  assert.ok(item.id);
+  const shown = B.listBriefings(org, [{ id: "j9", name: "Morning news", prompt: "", schedule: "0 8 * * 1-5", enabled: true, createdAt: "", nextRunAt: null, lastRunAt: null, lastConversationId: null, owner: ids[1], org: org.id, briefing: "morning-news", topic: "", model: "openrouter/meta/llama-4" }]).find((b) => b.id === "morning-news")!;
+  assert.equal(shown.model, "openrouter/meta/llama-4");
+});

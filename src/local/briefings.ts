@@ -170,17 +170,54 @@ export const PLANNED_BRIEFINGS: string[] = [];
 
 export const briefingOf = (id: unknown): BriefingDef | undefined => BRIEFINGS.find((b) => b.id === id);
 
-/** Who sends a briefing: someone from a department that suits it, a lead before others; else the first position. */
+/** Words in a job title that mark someone as doing a kind of work, whatever their department is called. A word starts a title word (research: Researcher); one of three letters or fewer must be the whole word (coo, not Coordinator). */
+const TITLE_WORDS: Record<string, string[]> = {
+  Research: ["research", "analyst", "insight"],
+  Marketing: ["marketing", "content", "social media", "brand", "communications", "seo"],
+  Sales: ["sales", "business development", "account executive", "account manager"],
+  "Customer Support": ["support", "customer", "service desk", "success", "help desk"],
+  Finance: ["finance", "financial", "account", "bookkeep", "controller", "treasur", "cfo"],
+  Legal: ["legal", "counsel", "compliance", "lawyer", "paralegal"],
+  Operations: ["operations", "office manager", "administrat", "coo", "logistics"],
+  Technology: ["technology", "engineer", "developer", "cto", "devops", "it manager", "it support"],
+  Product: ["product"],
+  People: ["people", "human resources", "recruit", "talent"],
+  Leadership: ["general manager", "chief executive", "ceo", "founder", "managing director", "chief of staff"],
+};
+const hasWord = (text: string, word: string) => new RegExp(`(^|[^a-z])${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${word.length <= 3 ? "(?![a-z])" : ""}`, "i").test(text);
+
+/**
+ * Who sends a briefing, when the owner has not chosen: the person whose work it is. Each kind of work a briefing
+ * suits is tried in order: first someone in a department of that name, then someone whose own title says they do
+ * that work (a Researcher in a department called Strategy). A lead comes before others. Only when nobody fits does
+ * it fall to the first position on the chart.
+ */
 export function senderFor(def: BriefingDef, org: Org): { bot: string; title: string } | null {
   const crew = new Set(loadCrew().bots.map((b) => b.id));
   const members = org.members.filter((m) => crew.has(m.bot));
   const leads = new Set((org.groups ?? []).map((g) => g.lead));
-  for (const dept of def.suits) {
-    const inDept = members.filter((m) => m.department.toLowerCase().includes(dept.toLowerCase()));
-    const pick = inDept.find((m) => leads.has(m.bot)) ?? inDept[0];
+  for (const kind of def.suits) {
+    const inDept = members.filter((m) => m.department.toLowerCase().includes(kind.toLowerCase()));
+    const byTitle = members.filter((m) => (TITLE_WORDS[kind] ?? [kind.toLowerCase()]).some((w) => hasWord(m.title, w)));
+    const pick = inDept.find((m) => leads.has(m.bot)) ?? inDept[0] ?? byTitle.find((m) => leads.has(m.bot)) ?? byTitle[0];
     if (pick) return { bot: pick.bot, title: pick.title };
   }
   return members[0] ? { bot: members[0].bot, title: members[0].title } : null;
+}
+
+/** The people who could send a briefing, for the owner to choose from: everyone on the chart who is an agent. */
+export function possibleSenders(org: Org): { bot: string; title: string; department: string }[] {
+  const crew = new Set(loadCrew().bots.map((b) => b.id));
+  return org.members.filter((m) => crew.has(m.bot)).map((m) => ({ bot: m.bot, title: m.title, department: m.department }));
+}
+
+/** A model the owner chose, as it is kept: "service/model" for a service that is connected. Empty means the agent's own. */
+export function chosenModel(value: unknown, providers: { id: string }[]): string {
+  const ref = String(value ?? "").trim();
+  if (!ref) return "";
+  const slash = ref.indexOf("/");
+  if (slash < 1 || slash === ref.length - 1 || ref.length > 200 || /\s/.test(ref) || !providers.some((p) => p.id === ref.slice(0, slash))) throw new Error("Choose an AI model from the list.");
+  return ref;
 }
 
 /** What the agent is told for one run. The owner's answer is cut to a line, so it cannot carry instructions of its own. */
@@ -345,6 +382,8 @@ export function listBriefings(org: Org, jobList: Job[]) {
       review: def.review === true,
       quiet: def.quiet === true,
       sender,
+      // The AI model the owner chose for it; empty when it uses the sender's own.
+      model: job?.model ?? "",
       // Abilities switching it on would give the sender.
       grants: lacks,
       on: job ? { job: job.id, enabled: job.enabled, schedule: job.schedule, nextRunAt: job.nextRunAt, lastRunAt: job.lastRunAt, lastTaskId: job.lastTaskId ?? null } : null,

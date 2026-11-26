@@ -33,12 +33,14 @@ A briefing is a routine that is already written: a report an agent sends to your
 **Switch one on**
 1. Press **Switch on** on its card. A card that says **Needs Xero** (or another service) shows **Connect … first** instead; connect the service, then come back.
 2. Answer its one question if it has one. For the news you can leave it empty to follow your mission. For renewals and birthdays, type one on each line: a name, a comma, then the date (for example `Shop insurance, 2027-03-01`).
-3. Read the short list: when it arrives, where, who sends it, what it reads, what it costs, and that it changes nothing. Press **Switch on**.
-4. The first one arrives straight away.
+3. Read the short list: when it arrives, where, what it reads, what it costs, and that it changes nothing.
+4. Under **Who sends it**, Talqava has chosen someone; choose another person on your team if this is their work. Under **AI model**, leave **The sender's usual model** or choose one for this briefing only. A briefing built from your own tasks uses no AI model, so it has no such choice.
+5. Press **Switch on**.
+6. The first one arrives straight away.
 
-A briefing is sent by the position whose job it suits, for example your Bookkeeper for overdue invoices. If that agent could not search the web or use your connected services, switching the briefing on gives it that ability, and the list says so first.
+Talqava suggests the position whose job the briefing suits, for example your Bookkeeper for overdue invoices. It looks at departments first and then at job titles, so a Researcher is found even in a department called Strategy; when nobody fits, it suggests the first position on your chart. You can always choose someone else. If that agent could not search the web or use your connected services, switching the briefing on gives it that ability, and the list says so first.
 
-**Edit one.** Press **Edit** on its card to change its answer (or its list of names and dates) and when it arrives. The change applies from the next one; press **Send one now** to see it straight away.
+**Edit one.** Press **Edit** on its card to change its answer (or its list of names and dates), when it arrives, who sends it and which AI model it uses. The change applies from the next one; press **Send one now** to see it straight away.
 
 **Pause or switch one off.** On its card: **Pause**, **Send one now**, or **Switch off**. In the Inbox, an open briefing has **Pause** and **Edit** at its top.
 

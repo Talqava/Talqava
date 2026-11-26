@@ -6810,7 +6810,38 @@ const BRIEF_TIMES = [
 ];
 
 /** Editing a briefing that is on: its one answer (or its list), and when it arrives. */
+/** Who sends a briefing and which AI model it uses: two choices, filled from the team and the connected AI services. */
+async function briefingChoices(b, prefix) {
+  const c = state.config;
+  const team = (await api("GET", "jobs/briefings").catch(() => ({ team: [] }))).team ?? [];
+  const sender = h("select", { id: `${prefix}-sender`, "aria-label": "Who sends it" }, team.map((m) => h("option", { value: m.bot, selected: m.bot === b.sender?.bot }, m.department ? `${m.title} (${m.department})` : m.title)));
+  if (b.kind === "free") return { sender, model: null };
+  const label = (ref) => {
+    const slash = ref.indexOf("/");
+    const provider = c.providers.find((p) => p.id === ref.slice(0, slash));
+    const name = ref.slice(slash + 1);
+    return provider?.kind === "anthropic" ? `Claude · ${c.models.find((m) => m.id === name)?.label || name}` : `${provider?.name || ref.slice(0, slash)} · ${name}`;
+  };
+  const model = h("select", { id: `${prefix}-model`, "aria-label": "AI model" });
+  const show = (refs) => fill(model, h("option", { value: "", selected: !b.model }, "The sender's usual model"), [...new Set([...(b.model ? [b.model] : []), c.model, ...refs])].map((ref) => h("option", { value: ref, selected: ref === b.model }, label(ref))));
+  show([]);
+  // The models of every connected AI service, as the chat's own picker lists them.
+  Promise.all(
+    c.providers.map(async (p) => {
+      if (p.kind === "anthropic") return c.hasApiKey ? c.models.map((m) => `${p.id}/${m.id}`) : [];
+      const listed = await api("GET", `providers/${encodeURIComponent(p.id)}/models`).catch(() => ({ models: [] }));
+      return listed.models.map((m) => `${p.id}/${m}`);
+    }),
+  ).then((lists) => {
+    const had = model.value;
+    show(lists.flat());
+    model.value = had;
+  });
+  return { sender, model };
+}
+
 async function briefingEdit(b) {
+  const choice = await briefingChoices(b, "briefing-edit");
   const topic = !b.ask ? null : b.ask.list ? h("textarea", { id: "briefing-edit-topic", rows: 7, placeholder: b.ask.placeholder, maxlength: 4000, "aria-label": b.ask.label }, b.ask.value || "") : h("input", { id: "briefing-edit-topic", value: b.ask.value || "", placeholder: b.ask.placeholder, maxlength: 300, "aria-label": b.ask.label });
   const now = b.on?.schedule || b.schedule;
   const times = BRIEF_TIMES.some(([v]) => v === now) ? BRIEF_TIMES : [[now, "As set under your routines"], ...BRIEF_TIMES];
@@ -6820,9 +6851,11 @@ async function briefingEdit(b) {
     { class: "composeform briefdialog" },
     topic ? h("label", {}, b.ask.label, topic, h("span", { class: "note small" }, b.ask.list ? "One on each line: a name, a comma, then the date." : b.ask.required ? "Say it in a few words." : "Leave it empty to follow your mission.")) : null,
     h("label", {}, "When it arrives", time),
+    h("label", {}, "Who sends it", choice.sender),
+    choice.model ? h("label", {}, "AI model", choice.model, h("span", { class: "note small" }, "Used for this briefing only. A smaller model costs less; a larger one reads and writes better.")) : null,
     h("p", { class: "note small" }, "The change applies from the next one. Press Send one now on the card to see it straight away."),
   );
-  const got = await libDialog(`Edit ${b.name}`, body, [["Save", () => ({ topic: topic?.value.trim() ?? b.ask?.value ?? "", schedule: time.value }), true]]);
+  const got = await libDialog(`Edit ${b.name}`, body, [["Save", () => ({ topic: topic?.value.trim() ?? b.ask?.value ?? "", schedule: time.value, sender: choice.sender.value, ...(choice.model ? { model: choice.model.value } : {}) }), true]]);
   if (!got) return false;
   if (b.ask?.required && !got.topic) return (toast(`${b.name} needs an answer.`), false);
   try {
@@ -6839,6 +6872,7 @@ async function briefingEdit(b) {
 async function briefingOn(b) {
   if (!b.sender) return (toast("A briefing is sent by someone on your team. Set up your team first, under Team."), false);
   const org = activeOrg();
+  const choice = await briefingChoices(b, "briefing");
   const topic = !b.ask ? null : b.ask.list ? h("textarea", { id: "briefing-topic", rows: 5, placeholder: b.ask.placeholder, maxlength: 4000, "aria-label": b.ask.label }, b.ask.value || "") : h("input", { id: "briefing-topic", value: b.ask.value || "", placeholder: b.ask.placeholder, maxlength: 300, "aria-label": b.ask.label });
   const fact = (label, value) => h("div", { class: "brieffact" }, h("span", {}, label), h("b", {}, value));
   const body = h(
@@ -6852,18 +6886,19 @@ async function briefingOn(b) {
       fact("Arrives", b.when),
       fact("Where", b.review ? "Your Inbox, under Waiting on you" : "Your Inbox, under Updates"),
       b.needs?.length ? fact("Reads", b.needs.filter((n) => n.connected).map((n) => n.name).join(" and ")) : null,
-      fact("Sent by", `Your ${b.sender.title}`),
-      fact("Costs", b.kind === "free" ? "Nothing: it uses no AI model" : "A few cents each time, from your AI model"),
+      fact("Costs", b.kind === "free" ? "Nothing: it uses no AI model" : "A few cents each time, from the AI model you choose below"),
       fact("Can it change anything?", b.kind === "free" ? "No. It only reads what Talqava holds." : b.review ? "No. It drafts; you decide what is sent." : "No. It reads and writes to you."),
-      b.grants?.length ? fact("Also", `Lets your ${b.sender.title} ${b.grants.map((g) => (g === "web" ? "search the web" : g === "connectors" ? "use your connected services" : g)).join(" and ")}`) : null,
+      b.grants?.length ? fact("Also", `Lets whoever sends it ${b.grants.map((g) => (g === "web" ? "search the web" : g === "connectors" ? "use your connected services" : g)).join(" and ")}, if they cannot already`) : null,
     ),
+    h("label", {}, "Who sends it", choice.sender, h("span", { class: "note small" }, `Talqava suggests your ${b.sender.title}. Choose someone else if this is their work.`)),
+    choice.model ? h("label", {}, "AI model", choice.model, h("span", { class: "note small" }, "Used for this briefing only. A smaller model costs less; a larger one reads and writes better.")) : null,
     h("p", { class: "note small" }, b.quiet ? "It writes to you only when there is something to say; otherwise it stays quiet." : b.review ? "The first one arrives now. Reply to it with numbers to act: 1 send, 2 skip." : "The first one arrives now, so you can see it."),
   );
-  const got = await libDialog(b.name, body, [["Switch on", () => ({ topic: topic?.value.trim() ?? "" }), true]]);
+  const got = await libDialog(b.name, body, [["Switch on", () => ({ topic: topic?.value.trim() ?? "", sender: choice.sender.value, ...(choice.model ? { model: choice.model.value } : {}) }), true]]);
   if (!got) return false;
   if (b.ask?.required && !got.topic) return (toast(`${b.name} needs an answer first.`), false);
   try {
-    const r = await api("POST", `jobs/briefings/${b.id}/on`, { topic: got.topic });
+    const r = await api("POST", `jobs/briefings/${b.id}/on`, got);
     toast(r.problem ? `${b.name} is on, but the first one could not start: ${r.problem}` : `${b.name} is on. The first one is on its way to your Inbox.`);
     return true;
   } catch (err) {

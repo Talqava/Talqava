@@ -1122,6 +1122,12 @@ test("a task about the repository gets the only connected one; an agent is told 
   assert.match(spec.system, /No repository is attached to this task\. The owner has connected alpha-app, beta-site/);
   assert.match(spec.system, /Every step costs the owner money/);
   store.saveConfig({ projects: [] });
+  // A model the owner chose for one task (a briefing's) is the one that task uses, in place of the agent's own.
+  script.push(say("ok"));
+  const chosen = await quests.quests.start({ bot: leadBot, text: "Morning news.", direct: true, model: store.getConfig().model });
+  for (let i = 0; i < 100 && app.engine.isRunning(chosen.id); i++) await new Promise((r) => setTimeout(r, 50));
+  assert.equal(quests.questStore.get(chosen.id)!.modelOverride, store.getConfig().model);
+  assert.equal(quests.questStore.get(none.id)!.modelOverride, undefined);
 });
 
 test("cost saving is the owner's switch: off uses their model for everything, on matches the model to the work", async () => {

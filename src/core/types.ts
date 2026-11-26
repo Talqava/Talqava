@@ -100,6 +100,8 @@ export interface Job {
   /** Set when this is a ready-made briefing: which one, and the owner's one answer for it. */
   briefing?: string;
   topic?: string;
+  /** The AI model the owner chose for this routine ("service/model"). None: the agent's own, or the organization's. */
+  model?: string;
 }
 
 export interface Secret {
