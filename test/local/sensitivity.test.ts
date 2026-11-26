@@ -35,7 +35,7 @@ test("each level goes only where the owner allows: any service, approved ones, t
   assert.deepEqual([...S.levelsForRun("anthropic/claude-opus-5-5")], ["public"]);
   store.saveConfig({ backups: [] });
   // What the owner types is checked.
-  assert.deepEqual(S.policyFrom({ services: { internal: "everywhere", restricted: "local" }, approved: ["a", "a", 5], memory: "top-secret" }), { services: { public: "any", internal: "any", confidential: "any", restricted: "local" }, approved: ["a", "5"], memory: "internal" });
+  assert.deepEqual(S.policyFrom({ services: { internal: "everywhere", restricted: "local" }, approved: ["a", "a", 5], memory: "top-secret" }), { services: { public: "any", internal: "any", confidential: "any", restricted: "local" }, approved: ["a", "5"], memory: "internal", leave: { public: true, internal: true, confidential: true, restricted: true } });
   assert.equal(S.describePolicy().length, 4);
 });
 
@@ -132,4 +132,41 @@ test("text that looks more sensitive than its level is noticed, and keys and pas
   assert.deepEqual(S.findSecrets("Use sk-exampleexampleexampleexample and password: hunter2hunter2"), ["an AI service key", "a password or key"]);
   assert.deepEqual(S.findSecrets("-----BEGIN OPENSSH PRIVATE KEY-----\nabc"), ["a private key"]);
   assert.deepEqual(S.findSecrets("The password policy asks for twelve characters."), []);
+});
+
+test("a task that has read a level that may not leave sends nothing out, for the rest of the task", () => {
+  store.saveConfig({ sensitivity: { services: { public: "any", internal: "any", confidential: "any", restricted: "any" }, leave: { confidential: false, public: false } } });
+  assert.equal(S.policy().leave.public, true, "Public information may always leave");
+  assert.equal(S.policy().leave.confidential, false);
+  assert.ok(S.describePolicy().some((w) => /has read Confidential information sends nothing out/.test(w)));
+  const read = S.readOf("task-leave-1");
+  const inTask = <T>(fn: () => T) => S.withLevels(null, fn, "anthropic/claude-opus-5-5", read);
+  inTask(() => S.noteRead("internal"));
+  assert.equal(inTask(() => S.heldBack()), null, "Internal may leave, so nothing is held");
+  inTask(() => S.checkMayLeave("Mailchimp"));
+  inTask(() => S.noteRead("confidential"));
+  assert.equal(inTask(() => S.heldBack()), "confidential");
+  assert.throws(() => inTask(() => S.checkMayLeave("Mailchimp")), /read something marked Confidential.*Nothing was sent/s);
+  // Another task has read nothing; the owner, outside any task, is never held.
+  assert.equal(S.withLevels(null, () => S.heldBack(), "anthropic/claude-opus-5-5", S.readOf("task-leave-2")), null);
+  assert.equal(S.heldBack(), null);
+  S.checkMayLeave("Mailchimp");
+  // It is remembered across a restart: the file names the task and what it read.
+  const kept = JSON.parse(fs.readFileSync(path.join(process.env.TALQAVA_DATA_DIR!, "read-levels.json"), "utf8"));
+  assert.deepEqual(kept["task-leave-1"].sort(), ["confidential", "internal"]);
+  assert.equal(kept["task-leave-2"], undefined);
+  // Allowing the level again lets the same task send.
+  store.saveConfig({ sensitivity: { ...S.policy(), leave: { confidential: true } } });
+  inTask(() => S.checkMayLeave("Mailchimp"));
+});
+
+test("reading a page in a task is what marks the task", () => {
+  store.saveConfig({ sensitivity: { services: { public: "any", internal: "any", confidential: "any", restricted: "any" }, approved: [], leave: { confidential: false } } });
+  const page = workspace.create(org, null, { title: "Supplier contract", markdown: "Terms.", level: "confidential" });
+  const read = S.readOf("task-leave-3");
+  S.withLevels(null, () => workspace.get(org, page.id, "bookkeeper"), "anthropic/claude-opus-5-5", read);
+  assert.deepEqual([...read], ["confidential"]);
+  assert.throws(() => S.withLevels(null, () => S.leaving("a web address"), "anthropic/claude-opus-5-5", read), /Confidential/);
+  workspace.get(org, page.id);
+  assert.equal(S.heldBack(), null, "the owner reading a page marks nothing");
 });

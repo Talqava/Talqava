@@ -34,7 +34,7 @@ import { guard } from "./guardrails.ts";
 import { wordpressTools } from "./wordpress.ts";
 import { serviceNotes, serviceTools } from "./connector-kit.ts";
 import "./services/index.ts";
-import { preparing, withLevels } from "./sensitivity.ts";
+import { leaving, preparing, readOf, withLevels } from "./sensitivity.ts";
 import { sheetTool } from "./sheets.ts";
 import { goalsPrompt } from "./goals.ts";
 import { structureOf } from "./structures.ts";
@@ -679,7 +679,10 @@ async function connectors(enabled: boolean, agent?: string) {
   const siteNote = [...(wordpressTools().length ? ["A WordPress site is connected: use the wordpress__content tool to read, draft and update its posts and pages, and wordpress__publish where the owner allows publishing."] : []), ...serviceNotes(agent)];
   if (!cfg.mcpServers.length) return { tools: site, note: siteNote, names: site.map((t) => t.name) };
   const { tools: found, problems } = await connectorTools(cfg.mcpServers);
-  const tools = [...found, ...site];
+  // A connector added from outside is another company's service: whatever is put into one of its tools is sent to it.
+  // A task that has read information that may not leave does not use them (see sensitivity.ts).
+  const outside = found.map((t) => ({ ...t, run: (input: any, context: any) => (leaving("a connector"), t.run(input, context)) }) as Tool);
+  const tools = [...outside, ...site];
   const note = [...(problems.length ? [`These connectors could not be reached, so their tools are missing: ${problems.join("; ")}.`] : []), ...siteNote];
   return { tools, note, names: tools.map((t) => t.name) };
 }
@@ -710,9 +713,11 @@ export function localRunSpec(jobs: JobBook) {
     const quest = conversation.source === "quest" ? questStore.get(conversation.id) : null;
     // The model chosen while the run is prepared decides which sensitivity levels it may receive; every tool the
     // run calls then carries that with it, so the workspace hands over nothing above it.
-    const { result, levels } = await preparing(() => build(conversation));
+    const { result, levels, model } = await preparing(() => build(conversation));
+    // What the task has read so far decides whether it may still send things out (see sensitivity.ts).
+    const read = readOf(conversation.id);
     const spec = guard(result, quest ? `the ${quest.bot.title || quest.bot.name}` : "the assistant");
-    return { ...spec, tools: spec.tools.map((t) => ({ ...t, run: (input: any, context: any) => withLevels(levels, () => t.run(input, context)) }) as Tool) };
+    return { ...spec, tools: spec.tools.map((t) => ({ ...t, run: (input: any, context: any) => withLevels(levels, () => ((t.name === "http_request" && !["GET", "HEAD"].includes(String(input?.method ?? "GET").toUpperCase())) || (t.name === "browser" && input?.action === "type") ? leaving(t.name === "browser" ? "a web page" : "a web address", conversation.id) : null, t.run(input, context)), model, read) }) as Tool) };
   };
 }
 

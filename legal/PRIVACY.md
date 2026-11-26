@@ -21,6 +21,8 @@ Everything Talqava knows is stored in its data folder on your computer:
 
 On a Mac, the app keeps this in `~/Library/Application Support/Talqava Agents/data` (or `Talqava/data`). If you run Talqava from the source code or the installer, it is the `data` folder you chose. We cannot see or reach any of it.
 
+**A record of what was sent** is kept in that folder for 30 days: which AI models were called and how much text was sent, the titles and sensitivity levels of pages handed to agents, changes made in connected services, and the names of websites agents called. It holds no content and is sent nowhere; you read it under Security.
+
 **API keys and sign-ins** (for example an Anthropic key, OpenRouter or GitHub) are stored in that folder. Each is tied to the one service it belongs to, is sent only to that service, and is never shown to an AI agent.
 
 ## What leaves your computer, and where it goes

@@ -108,6 +108,29 @@ A page made inside a sensitive page starts at the same level. Tables follow thei
 2. For each level, choose where it may be sent. **Use the recommended settings** sets Confidential to approved services only and Restricted to models on this computer only.
 3. Under **Approved AI services**, tick the services you trust. Check each service's terms first: that it does not train on your data, and where it processes it.
 
+### Stop sensitive information leaving through a connected service
+
+1. Open **Security** and find **Sensitive information**.
+2. In the column **May leave through connected services**, untick a level, for example **Confidential**.
+
+From then on, a task that has read anything of that level sends nothing out for the rest of that task: it makes no change in a connected service or on your website, sends no data to a web address, types nothing into a web page and uses no connector you added. It can still read and do its work, and it puts what it would have sent in its report so you can send it yourself. Each attempt is in the audit log. Public information may always leave.
+
+The rule follows the whole task, not single sentences, because once an agent has read a page nothing can tell which words of a message came from it. Two limits: Memory is not counted as something a task has read, and a colleague the task hands work to starts fresh, so keep sensitive pages limited to the agents who need them.
+
+### See what was sent on a day
+
+1. Open **Security** and find **What was sent**, under the **Information** tab.
+2. Choose **Today** or an earlier day (30 days are kept).
+
+It lists, for that day:
+
+- **AI services**: each model, how many calls it answered, how many tokens were sent, and which agents used it. Calls answered by a model on this computer are counted separately, because nothing left the computer for them.
+- **Pages and documents handed to an agent**: the title, its sensitivity level, who read it, and which AI service that agent runs on.
+- **Changes made in connected services and websites**: where and what, such as a draft saved on your website.
+- **Websites agents called**: each site and how many times.
+
+It shows where things went and how much, never the content itself, and it is kept only on this computer. Reading from a connected service is not listed, only changes. Owners, administrators, managers and auditors can see it.
+
 ### Sign in with your company account (single sign-on)
 
 1. In your identity provider (Microsoft Entra ID, Google Workspace, Okta, or another that supports OpenID Connect), register a new web application called Talqava.

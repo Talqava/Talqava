@@ -7,8 +7,9 @@ import type { Tool } from "../core/index.ts";
 import { defineTool } from "../core/index.ts";
 import { getConfig, saveConfig } from "./store.ts";
 import { audit } from "./audit.ts";
+import { noteSent } from "./sent.ts";
 import { stripTags } from "./library.ts";
-import { findSecrets } from "./sensitivity.ts";
+import { findSecrets, leaving } from "./sensitivity.ts";
 
 export const PUBLISH_RULES = ["drafts", "ask", "auto"] as const;
 export type PublishRule = (typeof PUBLISH_RULES)[number];
@@ -439,6 +440,7 @@ export function wordpressTools(): Tool[] {
       const image = Number(input.image) > 0 ? Math.trunc(Number(input.image)) : undefined;
       if ((categories || tags) && what === "page") throw new Error("Pages have no categories or tags; those are for posts.");
       const extra = { ...(categories ? { categories } : {}), ...(tags ? { tags } : {}), ...(image ? { image } : {}) };
+      leaving(`the website ${site.name}`);
       const leaked = findSecrets(`${input.title ?? ""}\n${input.markdown ?? ""}\n${input.excerpt ?? ""}`);
       if (leaked.length) throw new Error(`That text holds ${leaked.join(" and ")}. Take it out and try again; keys and passwords are never put on a website.`);
       const title = String(input.title ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
@@ -448,6 +450,7 @@ export function wordpressTools(): Tool[] {
         if (!title || !text) throw new Error("Give a title and the text.");
         const p = await calls.create(input.kind, { title, html: markdownToHtml(text), excerpt, ...extra });
         audit({ actor: "system", actorName: "WordPress", kind: "integration", action: `An agent saved a draft on ${site.name}`, detail: `${title} (${what} ${p.id})` });
+        noteSent({ kind: "service", to: `WordPress (${site.name})`, what: `Saved a draft: ${title}` });
         return `Saved as a draft on ${site.name}: “${title}” (${what} ${p.id}). It is not public. ${site.publish === "drafts" ? "The owner publishes it in WordPress; say so in your report, with its title." : "Publish it with the publish tool when it is ready."}`;
       }
       if (!input.id) throw new Error("Say which one to update (its number, from list).");
@@ -457,6 +460,7 @@ export function wordpressTools(): Tool[] {
       if (before.status === "publish" && site.publish === "drafts") throw new Error(`“${before.title}” is already public, and on this site you only write drafts. Save your version as a new draft and tell the owner what should replace what.`);
       const p = await calls.update(input.kind, Number(input.id), { ...(title ? { title } : {}), ...(text ? { html: markdownToHtml(text) } : {}), excerpt, ...extra });
       audit({ actor: "system", actorName: "WordPress", kind: "integration", action: `An agent changed a ${what} on ${site.name}`, detail: `${p.title} (${p.id}), ${p.status}` });
+        noteSent({ kind: "service", to: `WordPress (${site.name})`, what: `Changed a ${what}: ${p.title}` });
       return `Updated “${p.title}” on ${site.name} (${p.status === "publish" ? "it is public, so the change is live" : `status: ${p.status}`}). WordPress keeps the earlier version under Revisions. Say so in your report.`;
     },
   });
@@ -485,6 +489,7 @@ export function wordpressTools(): Tool[] {
       const later = Boolean(when && when.getTime() > Date.now() + 60_000);
       const p = await siteCalls(site).update(input.kind, Number(input.id), later ? { status: "future", date: when! } : { status: "publish" });
       audit({ actor: "system", actorName: "WordPress", kind: "integration", action: `An agent ${later ? "scheduled" : "published"} a ${input.kind === "page" ? "page" : "post"} on ${site.name}`, detail: `${p.title} · ${p.link}` });
+        noteSent({ kind: "service", to: `WordPress (${site.name})`, what: `${later ? "Scheduled" : "Published"}: ${p.title}` });
       return `${later ? `Scheduled for ${when!.toISOString().slice(0, 16).replace("T", " ")}` : "Published"}: “${p.title}” · ${p.link}. Say so in your report, with the link.`;
     },
   });

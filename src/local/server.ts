@@ -38,6 +38,7 @@ import { execFile } from "node:child_process";
 import { needsFor } from "./preflight.ts";
 import { acceptSuggestion, suggestPositions } from "./suggest.ts";
 import { audit, readAudit, redact, verifyAudit } from "./audit.ts";
+import { hostOf, noteModelCall, noteSent, sentOn } from "./sent.ts";
 import { addKey, connect, disconnect, refreshHealth, serviceProblems, findLocal, gatewayState, listModels, setBackups, isLocalRef, memoryGb } from "./gateway.ts";
 import { board } from "./board.ts";
 import { accessGraph, accessGraphs } from "./access.ts";
@@ -162,11 +163,16 @@ function actorOf(id: string) {
 function auditEvent(id: string, event: RunEvent) {
   const who = { ...actorOf(id), task: id };
   if (event.type === "assistant") {
+    if (event.step) noteModelCall(event.step.model, who.actorName, event.step.input);
     for (const block of event.content as { type: string; name?: string; input?: unknown }[]) {
       if (block.type !== "tool_use" && block.type !== "server_tool_use") continue;
       const input = (block.input ?? {}) as Record<string, unknown>;
       const detail = typeof input.command === "string" ? input.command : typeof input.path === "string" ? `${input.command ?? ""} ${input.path}`.trim() : typeof input.query === "string" ? input.query : typeof input.url === "string" ? input.url : JSON.stringify(redact(input));
       audit({ ...who, kind: "tool", action: TOOL_WORDS[block.name ?? ""] ?? `Used ${block.name}`, detail });
+      // What an agent calls on the web is part of "what was sent today": the site's name only, not what was sent.
+      const host = ["http_request", "web_fetch", "browser"].includes(block.name ?? "") ? hostOf(input.url) : null;
+      if (host) noteSent({ kind: "web", to: host, who: who.actorName });
+      else if (block.name === "web_search") noteSent({ kind: "web", to: "Web search", who: who.actorName });
     }
   } else if (event.type === "tool_result") {
     const result = event.result as { is_error?: boolean; content?: unknown };
@@ -1660,6 +1666,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL, approved
     if (route === "DELETE library" && parts[1]) return send(res, 200, await attempt(async () => (await library.remove(org, Number(parts[1])), { ok: true })));
   }
 
+  if (route === "GET sent") return send(res, 200, sentOn(url.searchParams.get("day") || undefined));
   if (route === "GET audit" && parts[1] === "verify") return send(res, 200, verifyAudit());
   if (route === "GET audit") {
     return send(res, 200, readAudit({ limit: Number(url.searchParams.get("limit")) || 500, actor: url.searchParams.get("actor") || undefined, kind: url.searchParams.get("kind") || undefined, q: url.searchParams.get("q") || undefined, since: url.searchParams.get("since") || undefined }));

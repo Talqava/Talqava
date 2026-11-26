@@ -127,7 +127,7 @@ export interface Config {
   /** Where every audit entry is also sent as it is written: a monitoring system's https address, and a secret to sign with. */
   auditFeed?: { url: string; secret: string };
   /** Which AI services may receive each sensitivity level, and which services are approved (see sensitivity.ts). */
-  sensitivity?: { services?: Record<string, string>; approved?: string[]; memory?: string };
+  sensitivity?: { services?: Record<string, string>; approved?: string[]; memory?: string; leave?: Record<string, boolean> };
   /** Rules above every agent's own settings (see guardrails.ts). None means today's behaviour. */
   guardrails?: { changes?: string; commands?: string; connectors?: string; web?: string; sites?: string[]; maxTaskSpend?: number; maxMinutes?: number };
   /** A stuck task tries once with a stronger model (the team's model or a backup) before stopping. Default on. */
