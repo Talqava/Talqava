@@ -33,7 +33,7 @@ Answers are JSON: the service's `access_token`, `refresh_token`, `expires_in`, `
 
 1. Upload `callback.php`, `token.php`, `refresh.php`, `lib.php` and `index.html` into the subdomain's folder (on this hosting: `public_html/auth`).
 2. Copy `config.example.php` to **one folder above `public_html`** and name it `talqava-auth-config.php`. It must not be inside `public_html`.
-3. For each service, register an app in the company's name with the return address `https://auth.talqava.com/callback.php`, and paste its ID and secret into that file.
+3. For each service, register an app in the company's name with the return address `https://auth.talqava.com/callback.php`, and paste its ID and secret into that file. [REGISTERING.md](REGISTERING.md) says where, which kind of app and which permissions, service by service.
 4. Put the same ID in the Talqava app (`RELAY_APPS` in `src/local/connector-kit.ts`). Until then the Talqava app does not use this service for it.
 5. Open `https://auth.talqava.com/` and check it shows the one line. Open `https://auth.talqava.com/token.php` and check it answers `{"error":"Send this with POST."}`.
 

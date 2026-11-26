@@ -8,8 +8,10 @@
 import { call, count, plain, query, type Connection, type ServiceDef } from "../connector-kit.ts";
 
 type Keys = Pick<Connection, "values">;
-const base = (c: Keys) => (process.env.TALQAVA_PIPEDRIVE_API || `https://${c.values.domain}.pipedrive.com/api`).replace(/\/+$/, "");
-const api = <T = any>(c: Keys, path: string, method = "GET", body?: unknown) => call<T>(`${base(c)}${path}`, { name: "Pipedrive", method, headers: { "x-api-token": c.values.api_token }, body });
+// Signed in through the browser, Pipedrive names the address to use (api_domain) in its token answer; with a token, the company's own.
+const apiDomain = (c: Keys) => (/^https:\/\/[a-z0-9][a-z0-9-]{0,61}\.pipedrive\.com$/.test(String(c.values.api_domain)) ? `${c.values.api_domain}/api` : "");
+const base = (c: Keys) => (process.env.TALQAVA_PIPEDRIVE_API || apiDomain(c) || `https://${c.values.domain}.pipedrive.com/api`).replace(/\/+$/, "");
+const api = <T = any>(c: Keys, path: string, method = "GET", body?: unknown) => call<T>(`${base(c)}${path}`, { name: "Pipedrive", method, headers: c.values.access_token ? { authorization: `Bearer ${c.values.access_token}` } : { "x-api-token": c.values.api_token }, body });
 
 const id = (v: unknown, what: string) => {
   const t = String(v ?? "").trim();
@@ -47,7 +49,30 @@ export const pipedrive: ServiceDef = {
     { key: "domain", label: "Company domain", placeholder: "yourcompany", help: "The first part of yourcompany.pipedrive.com.", pattern: "[a-z0-9][a-z0-9-]{0,61}[a-z0-9]" },
     { key: "api_token", label: "Personal API token", secret: true },
   ],
+  // Browser sign-in with the owner's own Pipedrive app. Making one needs a Pipedrive developer sandbox account;
+  // the app's secret is always needed, sent as a Basic sign-in header; its pages do not describe PKCE, and do not
+  // say whether an address on this computer is accepted. The permissions are chosen on the app itself.
+  browser: {
+    authUrl: "https://oauth.pipedrive.com/oauth/authorize",
+    tokenUrl: "https://oauth.pipedrive.com/oauth/token",
+    scopes: [],
+    secret: "required",
+    pkce: false,
+    tokenStyle: "basic",
+    keep: ["api_domain"],
+    appSteps: [
+      "Making a Pipedrive app needs a free developer sandbox account (developers.pipedrive.com). If you would rather not, use your personal API token instead, below.",
+      "In the sandbox, open Settings › Developer Hub, press Create an app, then Create private app. Name it Talqava and set the OAuth Callback URL to exactly: {redirect}",
+      "On the app's OAuth & access scopes tab, choose full access to deals, contacts and activities, and read access to search and users.",
+      "Copy the Client ID and Client secret from that tab, paste them below and press the button. Pipedrive asks which company Talqava may use.",
+    ],
+  },
   async check(values) {
+    if (values.access_token) {
+      if (!apiDomain({ values }) && !process.env.TALQAVA_PIPEDRIVE_API) throw Object.assign(new Error("Pipedrive did not say which company address to use. Sign in again."), { refused: true });
+      const who = (await api<{ data: any }>({ values }, "/v1/users/me")).data ?? {};
+      return { label: `${plain(who.name, 80) || "Your account"} (${plain(who.company_name, 80) || "Pipedrive"})` };
+    }
     const domain = String(values.domain ?? "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\.pipedrive\.com.*$/, "");
     if (!/^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/.test(domain)) throw new Error("Give your company domain: the first part of yourcompany.pipedrive.com.");
     const token = String(values.api_token ?? "").trim();

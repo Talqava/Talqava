@@ -132,6 +132,13 @@ export interface BrowserSignIn {
   ask?: SignInField[];
   /** For a service whose renewal call also wants the address the sign-in came back to (GitLab's examples send it). */
   renewWithRedirect?: boolean;
+  /**
+   * How the service wants the app's ID and secret when the code is exchanged: in the form (the usual), as a Basic
+   * sign-in header (Pipedrive, Klaviyo), or in a JSON body (Atlassian, Square).
+   */
+  tokenStyle?: "form" | "basic" | "json";
+  /** Fields of the token answer the service's own code needs, kept with the connection (Pipedrive's api_domain). */
+  keep?: string[];
 }
 /** An address with each {key} replaced by the value asked for it. */
 const filled = (address: string, values: Record<string, string>) => address.replace(/\{(\w+)\}/g, (_m, k) => encodeURIComponent(values[k] ?? ""));
@@ -550,11 +557,28 @@ export function startBrowserSignIn(id: string, input: { clientId?: unknown; clie
   return { url: `${authUrl}${authUrl.includes("?") ? "&" : "?"}${q}` };
 }
 
-async function tokenCall(def: ServiceDef, form: Record<string, string>, asked: Record<string, string> = {}): Promise<{ access_token: string; refresh_token?: string; expires_in?: number }> {
-  const t = await call<any>(baseOf(`${def.id}_token`, filled(def.browser!.tokenUrl, asked)), { name: def.name, method: "POST", form });
+type TokenAnswer = { access_token: string; refresh_token?: string; expires_in?: number; expires_at?: string } & Record<string, unknown>;
+async function tokenCall(def: ServiceDef, form: Record<string, string>, asked: Record<string, string> = {}): Promise<TokenAnswer> {
+  const url = baseOf(`${def.id}_token`, filled(def.browser!.tokenUrl, asked));
+  const style = def.browser!.tokenStyle ?? "form";
+  const { client_id, client_secret, ...rest } = form;
+  const t =
+    style === "basic"
+      ? await call<any>(url, { name: def.name, method: "POST", form: rest, headers: { authorization: `Basic ${Buffer.from(`${client_id}:${client_secret ?? ""}`).toString("base64")}` } })
+      : style === "json"
+        ? await call<any>(url, { name: def.name, method: "POST", body: form })
+        : await call<any>(url, { name: def.name, method: "POST", form });
   if (!t?.access_token) throw new Error(`${def.name} did not complete the sign-in.`);
   return t;
 }
+/** When a token runs out, in milliseconds: from how long it lasts, or from the moment the service names. Nothing when it does not say. */
+const expiryOf = (t: TokenAnswer): number | null => {
+  if (Number(t.expires_in) > 0) return Date.now() + Number(t.expires_in) * 1000;
+  const at = typeof t.expires_at === "string" ? Date.parse(t.expires_at) : NaN;
+  return Number.isFinite(at) ? at : null;
+};
+/** The extra fields of a token answer a service asked to keep. */
+const kept = (def: ServiceDef, t: TokenAnswer): Record<string, string> => Object.fromEntries((def.browser!.keep ?? []).filter((k) => typeof t[k] === "string" && t[k]).map((k) => [k, String(t[k]).slice(0, 500)]));
 
 /** Finishes a browser sign-in with the code the service sent back. The account is checked before it is saved. */
 export async function finishBrowserSignIn(state: unknown, code: unknown, problem?: unknown): Promise<PublicConnection> {
@@ -568,8 +592,8 @@ export async function finishBrowserSignIn(state: unknown, code: unknown, problem
     ? await relayCall(def, "token", { code: String(code), ...(def.browser!.pkce === false ? {} : { code_verifier: p.verifier }), asked: p.asked })
     : await tokenCall(def, { grant_type: "authorization_code", code: String(code), redirect_uri: p.redirect, client_id: p.clientId, ...(def.browser!.pkce === false ? {} : { code_verifier: p.verifier }), ...(p.clientSecret ? { client_secret: p.clientSecret } : {}) }, p.asked);
   // A token with no stated lifetime and nothing to renew it with does not run out (the service says so by leaving both out).
-  const lasting = !t.expires_in && !t.refresh_token;
-  const values: Record<string, string> = { ...p.asked, client_id: p.clientId, ...(p.clientSecret ? { client_secret: p.clientSecret } : {}), access_token: t.access_token, ...(p.relay ? { relay: "1" } : {}), ...(def.browser!.renewWithRedirect ? { redirect_uri: p.redirect } : {}), ...(def.browser!.tokenKey ? { [def.browser!.tokenKey]: t.access_token } : {}), ...(t.refresh_token ? { refresh_token: t.refresh_token } : {}), ...(lasting ? {} : { expires_at: String(Date.now() + (Number(t.expires_in) || 3600) * 1000) }) };
+  const lasting = expiryOf(t) === null && !t.refresh_token;
+  const values: Record<string, string> = { ...p.asked, client_id: p.clientId, ...(p.clientSecret ? { client_secret: p.clientSecret } : {}), access_token: t.access_token, ...(p.relay ? { relay: "1" } : {}), ...(def.browser!.renewWithRedirect ? { redirect_uri: p.redirect } : {}), ...(def.browser!.tokenKey ? { [def.browser!.tokenKey]: t.access_token } : {}), ...(t.refresh_token ? { refresh_token: t.refresh_token } : {}), ...(lasting ? {} : { expires_at: String(expiryOf(t) ?? Date.now() + 3600_000) }), ...kept(def, t) };
   return signedIn(def, p, values);
 }
 
@@ -633,7 +657,7 @@ async function fresh(c: Connection): Promise<Connection> {
     }
     const all = saved();
     const mine = all.find((x) => x.id === c.id) ?? c;
-    mine.values = { ...mine.values, access_token: t.access_token, ...(def.browser!.tokenKey ? { [def.browser!.tokenKey]: t.access_token } : {}), ...(t.refresh_token ? { refresh_token: t.refresh_token } : {}), expires_at: String(Date.now() + (Number(t.expires_in) || 3600) * 1000) };
+    mine.values = { ...mine.values, access_token: t.access_token, ...(def.browser!.tokenKey ? { [def.browser!.tokenKey]: t.access_token } : {}), ...(t.refresh_token ? { refresh_token: t.refresh_token } : {}), expires_at: String(expiryOf(t) ?? Date.now() + 3600_000), ...kept(def, t) };
     if (all.includes(mine)) store(all);
     return mine;
   })().finally(() => renewing.delete(c.id));

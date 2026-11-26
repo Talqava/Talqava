@@ -49,8 +49,27 @@ export const square: ServiceDef = {
   ],
   docs: "https://developer.squareup.com/docs/build-basics/access-tokens",
   fields: [{ key: "token", label: "Production access token", secret: true }],
+  // Browser sign-in with the owner's own Square application, with the proof called PKCE and no secret. Square's
+  // token call takes JSON, and says when the token runs out as a moment (expires_at). Its pages disagree on whether
+  // an address on this computer is accepted in production; the steps say so, and the token stays as the other way.
+  browser: {
+    authUrl: "https://connect.squareup.com/oauth2/authorize",
+    tokenUrl: "https://connect.squareup.com/oauth2/token",
+    scopes: ["MERCHANT_PROFILE_READ", "PAYMENTS_READ", "ORDERS_READ", "CUSTOMERS_READ", "CUSTOMERS_WRITE", "ITEMS_READ"],
+    extra: { session: "false" },
+    secret: "never",
+    tokenStyle: "json",
+    tokenKey: "token",
+    idLabel: "Application ID",
+    appSteps: [
+      "Open developer.squareup.com/apps, sign in with your Square account and create an application named Talqava.",
+      "Open the application's OAuth page, switch it to Production, and add this Redirect URL exactly: {redirect}",
+      "If Square refuses that address (its pages disagree on whether one on your own computer is allowed), use the access token instead, below.",
+      "Open the Credentials page, copy the Production Application ID, paste it below and press the button. Square asks you to allow Talqava to see payments, orders, customers and items.",
+    ],
+  },
   async check(values) {
-    const token = String(values.token ?? "").trim();
+    const token = String(values.token ?? values.access_token ?? "").trim();
     if (!token || /\s/.test(token) || token.length > 500) throw new Error("Paste the production access token.");
     const me = (await api<{ merchant: any }>({ values: { token } }, "/merchants/me")).merchant;
     if (!me?.id) throw Object.assign(new Error("Square did not say whose account this is. Check that you copied the Production token, not the Sandbox one."), { refused: true });

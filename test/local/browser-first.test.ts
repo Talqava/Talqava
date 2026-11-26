@@ -34,11 +34,22 @@ before(async () => {
         return sent.code === "ok" && sent.code_verifier ? json(200, { access_token: "first", refresh_token: "relay-rt1", expires_in: 1 }) : json(400, { error: "The sign-in code was not accepted." });
       }
       if (u.pathname.endsWith("/token")) {
-        if (body?.grant_type === "refresh_token") return json(200, { access_token: "second", refresh_token: "rt2", expires_in: 1800 });
-        return body?.code === "ok" ? json(200, { access_token: "first", refresh_token: "rt1", expires_in: 1 }) : json(400, { error: "invalid_grant" });
+        // Some services take the exchange as JSON (Square, Atlassian); Square says when the token runs out as a moment; Pipedrive names the address to use.
+        const sent = body ?? (raw.startsWith("{") ? JSON.parse(raw) : {});
+        const lasts = (seconds: number) => (u.pathname === "/square/token" ? { expires_at: new Date(Date.now() + seconds * 1000).toISOString() } : { expires_in: seconds });
+        const more = u.pathname === "/pipedrive/token" ? { api_domain: "https://bakery.pipedrive.com", scope: "deals:full" } : {};
+        if (sent.grant_type === "refresh_token") return json(200, { access_token: "second", refresh_token: "rt2", ...lasts(1800), ...more });
+        return sent.code === "ok" ? json(200, { access_token: "first", refresh_token: "rt1", ...lasts(1), ...more }) : json(400, { error: "invalid_grant" });
       }
       if (u.pathname === "/trello/members/me") return auth.includes('oauth_token="ttoken"') && auth.includes('oauth_consumer_key="tkey"') ? json(200, { fullName: "Ada Baker", username: "ada" }) : json(401, { message: "invalid token" });
       if (!/^Bearer (first|second)$/.test(auth)) return json(401, { message: "no" });
+      if (u.pathname === "/square/merchants/me") return json(200, { merchant: { id: "M1", business_name: "Bakery", currency: "USD", main_location_id: "L1" } });
+      if (u.pathname === "/square/locations") return json(200, { locations: [{ id: "L1", name: "Main shop", status: "ACTIVE", currency: "USD" }] });
+      if (u.pathname === "/klaviyo/accounts") return json(200, { data: [{ id: "A1", attributes: { contact_information: { organization_name: "Bakery", default_sender_email: "hi@bakery.example" } } }] });
+      if (u.pathname === "/klaviyo/lists") return json(200, { data: [{ id: "LIST01", attributes: { name: "News" } }] });
+      if (u.pathname === "/jira-sites") return json(200, [{ id: "11111111-2222-3333-4444-555555555555", url: "https://bakery.atlassian.net", name: "bakery" }]);
+      if (u.pathname === "/jira/myself") return json(200, { accountId: "acc1", displayName: "Ada Baker" });
+      if (u.pathname === "/pipedrive/v1/users/me") return json(200, { data: { name: "Ada Baker", company_name: "Bakery" } });
       if (u.pathname === "/asana/users/me") return json(200, { data: { name: "Ada", email: "ada@example.com" } });
       if (u.pathname === "/asana/workspaces") return json(200, { data: [{ gid: "11", name: "Bakery" }] });
       if (u.pathname.startsWith("/gitlab/")) {
@@ -86,7 +97,8 @@ before(async () => {
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  for (const id of ["ASANA", "HUBSPOT", "TYPEFORM", "TRELLO", "ZENDESK", "GITLAB", "XERO"]) (process.env[`TALQAVA_${id}_API`] = `${url}/${id.toLowerCase()}`), (process.env[`TALQAVA_${id}_TOKEN_API`] = `${url}/${id.toLowerCase()}/token`);
+  for (const id of ["ASANA", "HUBSPOT", "TYPEFORM", "TRELLO", "ZENDESK", "GITLAB", "XERO", "SQUARE", "KLAVIYO", "JIRA", "PIPEDRIVE"]) (process.env[`TALQAVA_${id}_API`] = `${url}/${id.toLowerCase()}`), (process.env[`TALQAVA_${id}_TOKEN_API`] = `${url}/${id.toLowerCase()}/token`);
+  process.env.TALQAVA_JIRA_SITES_API = `${url}/jira-sites`;
   process.env.TALQAVA_AUTH_RELAY = `${url}/relay`;
   K = await import("../../src/local/connector-kit.ts");
   await import("../../src/local/services/index.ts");
@@ -346,4 +358,55 @@ test("a service whose app has a secret signs in through Talqava's sign-in servic
   } finally {
     delete process.env.TALQAVA_ASANA_RELAY_CLIENT_ID;
   }
+});
+
+const basic = (id: string, secret: string) => `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}`;
+
+test("Square signs in with PKCE and no secret, exchanges the code as JSON, and reads when its token runs out from the moment Square names", async () => {
+  const sq = K.listServices().find((s) => s.id === "square")!;
+  assert.deepEqual([sq.fields.length, sq.browser!.secret, sq.browser!.idLabel], [1, "never", "Application ID"]);
+  const to = new URL(K.startBrowserSignIn("square", { clientId: "sq0idp-app" }, redirect).url);
+  assert.equal(to.origin + to.pathname, "https://connect.squareup.com/oauth2/authorize");
+  assert.deepEqual([to.searchParams.get("session"), to.searchParams.get("code_challenge_method"), to.searchParams.get("scope")], ["false", "S256", "MERCHANT_PROFILE_READ PAYMENTS_READ ORDERS_READ CUSTOMERS_READ CUSTOMERS_WRITE ITEMS_READ"]);
+  const c = await K.finishBrowserSignIn(to.searchParams.get("state"), "ok");
+  assert.equal(c.label, "Bakery (USD)");
+  const exchange = seen.filter((s) => s.path === "/square/token").at(-1)!;
+  assert.equal(exchange.body, null, "not a form");
+  assert.deepEqual([exchange.json.client_id, exchange.json.client_secret, exchange.json.grant_type, Boolean(exchange.json.code_verifier)], ["sq0idp-app", undefined, "authorization_code", true]);
+  // The stand-in's token runs out a second from now, said as a moment: the first use renews it.
+  assert.match(String(await tool("square__list_locations").run({}, {} as never)), /Main shop/);
+  assert.equal(seen.at(-1)!.auth, "Bearer second", "the renewed token is the one Square is called with");
+  const renew = seen.filter((s) => s.path === "/square/token").at(-1)!.json;
+  assert.deepEqual([renew.grant_type, renew.refresh_token, renew.client_secret], ["refresh_token", "rt1", undefined]);
+});
+
+test("Klaviyo and Pipedrive send the app's ID and secret as a sign-in header, never in the form", async () => {
+  await assert.rejects(async () => K.startBrowserSignIn("klaviyo", { clientId: "kapp" }, redirect), /secret/i, "Klaviyo's secret is required");
+  const k = new URL(K.startBrowserSignIn("klaviyo", { clientId: "kapp", clientSecret: "ksecret" }, redirect).url);
+  assert.equal(k.origin + k.pathname, "https://www.klaviyo.com/oauth/authorize");
+  assert.equal(k.searchParams.get("code_challenge_method"), "S256");
+  assert.equal((await K.finishBrowserSignIn(k.searchParams.get("state"), "ok")).label, "Bakery (hi@bakery.example)");
+  const kx = seen.filter((s) => s.path === "/klaviyo/token").at(-1)!;
+  assert.deepEqual([kx.auth, kx.body!.client_id, kx.body!.client_secret, kx.body!.grant_type, Boolean(kx.body!.code_verifier)], [basic("kapp", "ksecret"), undefined, undefined, "authorization_code", true]);
+  assert.match(String(await tool("klaviyo__list_lists").run({}, {} as never)), /\[LIST01\] News/);
+  assert.equal(seen.at(-1)!.auth, "Bearer second", "signed in, Klaviyo is called with the token, not a key");
+
+  const p = new URL(K.startBrowserSignIn("pipedrive", { clientId: "papp", clientSecret: "psecret" }, redirect).url);
+  assert.equal(p.origin + p.pathname, "https://oauth.pipedrive.com/oauth/authorize");
+  assert.equal(p.searchParams.get("code_challenge"), null, "no PKCE: Pipedrive's pages do not describe it");
+  assert.equal((await K.finishBrowserSignIn(p.searchParams.get("state"), "ok")).label, "Ada Baker (Bakery)");
+  const px = seen.filter((s) => s.path === "/pipedrive/token").at(-1)!;
+  assert.deepEqual([px.auth, px.body!.client_secret, px.body!.code_verifier], [basic("papp", "psecret"), undefined, undefined]);
+  assert.equal(seen.at(-1)!.auth, "Bearer first");
+});
+
+test("Jira signs in through Atlassian with the code exchanged as JSON, and remembers which site was allowed", async () => {
+  const j = new URL(K.startBrowserSignIn("jira", { clientId: "japp", clientSecret: "jsecret" }, redirect).url);
+  assert.equal(j.origin + j.pathname, "https://auth.atlassian.com/authorize");
+  assert.deepEqual([j.searchParams.get("audience"), j.searchParams.get("prompt"), j.searchParams.get("scope"), j.searchParams.get("code_challenge")], ["api.atlassian.com", "consent", "read:jira-work write:jira-work read:jira-user offline_access", null]);
+  const c = await K.finishBrowserSignIn(j.searchParams.get("state"), "ok");
+  assert.equal(c.label, "Ada Baker (bakery.atlassian.net)");
+  const jx = seen.filter((s) => s.path === "/jira/token").at(-1)!;
+  assert.deepEqual([jx.body, jx.json.client_id, jx.json.client_secret, jx.json.redirect_uri], [null, "japp", "jsecret", redirect]);
+  assert.ok(seen.some((s) => s.path === "/jira-sites" && s.auth === "Bearer first"), "asked Atlassian which site was allowed");
 });

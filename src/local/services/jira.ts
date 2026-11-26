@@ -9,8 +9,10 @@
 import { call, count, plain, query, type Connection, type ServiceDef } from "../connector-kit.ts";
 
 type Keys = Pick<Connection, "values">;
-const base = (c: Keys) => (process.env.TALQAVA_JIRA_API || `https://${c.values.site}.atlassian.net/rest/api/3`).replace(/\/+$/, "");
-const api = <T = any>(c: Keys, path: string, method = "GET", body?: unknown) => call<T>(`${base(c)}${path}`, { name: "Jira", method, headers: { authorization: `Basic ${Buffer.from(`${c.values.email}:${c.values.token}`).toString("base64")}` }, body });
+// Signed in through the browser, Jira is reached by way of Atlassian's own address with the site's id; with a token, at the site itself.
+const base = (c: Keys) => (process.env.TALQAVA_JIRA_API || (c.values.cloud_id ? `https://api.atlassian.com/ex/jira/${c.values.cloud_id}/rest/api/3` : `https://${c.values.site}.atlassian.net/rest/api/3`)).replace(/\/+$/, "");
+const api = <T = any>(c: Keys, path: string, method = "GET", body?: unknown) =>
+  call<T>(`${base(c)}${path}`, { name: "Jira", method, headers: { authorization: c.values.access_token ? `Bearer ${c.values.access_token}` : `Basic ${Buffer.from(`${c.values.email}:${c.values.token}`).toString("base64")}` }, body });
 
 const key = (v: unknown) => {
   const t = String(v ?? "").trim().toUpperCase();
@@ -64,7 +66,34 @@ export const jira: ServiceDef = {
     { key: "email", label: "Your Atlassian email", placeholder: "you@example.com" },
     { key: "token", label: "API token", secret: true },
   ],
+  // Browser sign-in with the owner's own Atlassian app. Atlassian's token call takes JSON and always needs the
+  // app's secret; its pages do not describe PKCE, and do not say whether an address on this computer is accepted.
+  browser: {
+    authUrl: "https://auth.atlassian.com/authorize",
+    tokenUrl: "https://auth.atlassian.com/oauth/token",
+    scopes: ["read:jira-work", "write:jira-work", "read:jira-user", "offline_access"],
+    extra: { audience: "api.atlassian.com", prompt: "consent" },
+    secret: "required",
+    pkce: false,
+    tokenStyle: "json",
+    appSteps: [
+      "Open developer.atlassian.com/console/myapps, press Create and choose OAuth 2.0 integration. Name it Talqava.",
+      "Under Permissions, press Add next to Jira API, then configure it with these scopes: read:jira-work, write:jira-work, read:jira-user.",
+      "Under Authorization, press Configure next to OAuth 2.0 (3LO) and enter this Callback URL exactly: {redirect}",
+      "Under Settings, copy the Client ID and Secret, paste them below and press the button. Atlassian asks which site Talqava may use.",
+    ],
+  },
   async check(values) {
+    if (values.access_token) {
+      // Which Jira site was allowed: the first one Atlassian lists for this sign-in.
+      const sites = await call<any[]>(process.env.TALQAVA_JIRA_SITES_API || "https://api.atlassian.com/oauth/token/accessible-resources", { name: "Jira", headers: { authorization: `Bearer ${values.access_token}` } });
+      const found = (Array.isArray(sites) ? sites : []).find((x) => /^[0-9a-f-]{8,64}$/i.test(String(x?.id)));
+      if (!found) throw Object.assign(new Error("Atlassian signed you in, but no Jira site was allowed. Sign in again and choose your site."), { refused: true });
+      const siteName = String(found.url ?? "").replace(/^https?:\/\//, "").replace(/\.atlassian\.net.*$/, "") || String(found.name ?? "jira");
+      const who = await api<{ accountId: string; displayName?: string }>({ values: { access_token: values.access_token, cloud_id: String(found.id) } }, "/myself");
+      if (!who?.accountId) throw Object.assign(new Error("Jira did not say who signed in. Sign in again."), { refused: true });
+      return { label: `${plain(who.displayName, 80) || "Your account"} (${plain(siteName, 80)}.atlassian.net)`, values: { cloud_id: String(found.id), site: plain(siteName, 80), account_id: String(who.accountId) } as Record<string, string> };
+    }
     const site = String(values.site ?? "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\.atlassian\.net.*$/, "");
     if (!/^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/.test(site)) throw new Error("Give your Jira site: the first part of yoursite.atlassian.net.");
     const email = String(values.email ?? "").trim();
@@ -73,7 +102,7 @@ export const jira: ServiceDef = {
     if (!token || /\s/.test(token) || token.length > 500) throw new Error("Paste the API token.");
     const me = await api<{ accountId: string; displayName?: string }>({ values: { site, email, token } }, "/myself");
     if (!me?.accountId) throw Object.assign(new Error("Jira did not say who signed in. Check the email and the token."), { refused: true });
-    return { label: `${plain(me.displayName, 80) || email} (${site}.atlassian.net)`, values: { site, email, token, account_id: String(me.accountId) } };
+    return { label: `${plain(me.displayName, 80) || email} (${site}.atlassian.net)`, values: { site, email, token, account_id: String(me.accountId) } as Record<string, string> };
   },
   triggers: [
     {

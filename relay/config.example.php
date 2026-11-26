@@ -16,5 +16,9 @@ return [
         'typeform' => ['client_id' => '', 'client_secret' => '', 'token_url' => 'https://api.typeform.com/oauth/token'],
         'todoist'  => ['client_id' => '', 'client_secret' => '', 'token_url' => 'https://api.todoist.com/oauth/access_token'],
         'clickup'  => ['client_id' => '', 'client_secret' => '', 'token_url' => 'https://api.clickup.com/api/v2/oauth/token'],
+        'klaviyo'  => ['client_id' => '', 'client_secret' => '', 'token_url' => 'https://a.klaviyo.com/oauth/token', 'style' => 'basic'],
+        'jira'     => ['client_id' => '', 'client_secret' => '', 'token_url' => 'https://auth.atlassian.com/oauth/token', 'style' => 'json'],
+        // Pipedrive names the address to use for each company in its answer; the app needs it passed on.
+        'pipedrive' => ['client_id' => '', 'client_secret' => '', 'token_url' => 'https://oauth.pipedrive.com/oauth/token', 'style' => 'basic', 'pass' => ['api_domain']],
     ],
 ];
