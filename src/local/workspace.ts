@@ -599,7 +599,8 @@ export const workspace = {
     // Documents and notes are not inside pages: a folder or notebook groups them.
     const parent = kind === "page" && input.parent ? visible(org, d, String(input.parent), who).row.id : null;
     if (who !== OWNER && kind === "page" && !parent) throw new Error("Put the page under a page you may see.");
-    if (who !== OWNER && kind === "note") throw new Error("Notes are the owner's. Save your result as a document instead.");
+    // The owner's notebooks are the owner's. An agent's own notes go to the one notebook kept for them.
+    if (who !== OWNER && kind === "note" && String(input.folder ?? "") !== AGENT_NOTEBOOK) throw new Error("Notes are the owner's. Save your result as a document instead.");
     const title = cleanTitle(input.title) || "Untitled";
     const md = String(input.markdown ?? "");
     if (md.length > MAX_PAGE) throw new Error("That page is too long.");
