@@ -346,7 +346,7 @@ export class QuestRunner {
     await this.#engine.startRun(id, message, { keepTitle: true });
   }
 
-  async start({ bot, text, project, title, template, parent, kind, item }: { bot: Bot; text: string; project?: string; title?: string; template?: Quest["template"]; parent?: { id: string; by: string }; kind?: "question" | "decision"; item?: string }): Promise<Quest> {
+  async start({ bot, text, project, title, template, parent, kind, item, direct }: { bot: Bot; text: string; project?: string; title?: string; template?: Quest["template"]; parent?: { id: string; by: string }; kind?: "question" | "decision"; item?: string; direct?: boolean }): Promise<Quest> {
     if (this.running().length >= MAX_RUNNING) throw new Error(`${MAX_RUNNING} tasks are already under way. Wait for one to finish, or stop one.`);
     // A bot that has used its month's budget starts nothing new.
     const blocked = budgetBlock(bot);
@@ -384,7 +384,8 @@ export class QuestRunner {
     journal.append(quest.id, { type: "quest_start", bot: bot.id, title: quest.title, project: project ?? null, branch: quest.copy?.branch ?? null });
     audit({ actor: bot.id, actorName: bot.title || bot.name, kind: "task", action: parent ? `Started a task handed on by ${parent.by}` : kind ? `Received a ${kind}` : "Started a task", detail: quest.title, task: quest.id });
     // Big work starts with a plan for the owner to approve: a task the owner gives to a lead, or to anyone if set so.
-    if (!parent && !kind && !template) {
+    // A briefing the owner switched on is not big work: it starts straight away, with no plan and no questions first.
+    if (!parent && !kind && !template && !direct) {
       const when = getConfig().planFirst ?? "leads";
       const { assignableBy } = await import("./orgs.ts");
       if (when === "all" || (when === "leads" && assignableBy(org, bot.id).length > 0)) {
@@ -393,7 +394,7 @@ export class QuestRunner {
       }
     }
     // A task the owner gave (not a hand-off or a question between agents) is checked first: does the agent have what it needs?
-    if (!parent && !kind && !template && getConfig().checkFirst !== false) {
+    if (!parent && !kind && !template && !direct && getConfig().checkFirst !== false) {
       const asked = await this.#checkFirst(quest, text, project).catch((err) => {
         audit({ actor: bot.id, actorName: bot.title || bot.name, kind: "problem", action: "Could not check the task before starting; started anyway", detail: (err as Error).message, task: quest.id, ok: false });
         return false;

@@ -58,7 +58,7 @@ const SVC = ["connectors"];
 export const BRIEFINGS: BriefingDef[] = [
   // ---------- the outside world ----------
   { id: "morning-news", name: "Morning news", group: "The outside world", about: "The stories that matter for your business, two lines each, with links.", kind: "ai", schedule: "0 8 * * 1-5", when: "Weekdays at 8:00", ask: { label: "What should it watch?", placeholder: "e.g. Bakeries, cafés and food prices in the UK" }, powers: WEB, suits: ["Research", "Marketing", "Leadership", "Operations"],
-    prompt: `Write this morning's news briefing for the owner. Watch: {topic}.\n\nSearch the web for news from the last two days (the last week if there is little). Choose up to five stories that matter most to this organization, given its mission. For each one write: the headline in bold; two short lines on what happened and why it matters to us; and the source as a link. Put the most important first. If nothing worth the owner's time happened, say so in one line instead of filling the list.\n\n${NO_INVENTING} Your report is the briefing itself: start with the first story, with no introduction.` },
+    prompt: `Write this morning's news briefing for the owner. {topic}\n\nSearch the web for news from the last two days (the last week if there is little). Choose up to five stories and put the most important first. For each one write: the headline in bold; two short lines on what happened and why it matters; and the source as a link. If nothing worth the owner's time happened, say so in one line instead of filling the list.\n\n${NO_INVENTING} Your report is the briefing itself: start with the first story, with no introduction.` },
   { id: "competitor-watch", name: "Competitor watch", group: "The outside world", about: "What changed at your competitors this week: prices, products, news.", kind: "ai", schedule: "0 8 * * 1", when: "Mondays at 8:00", ask: { label: "Which competitors?", placeholder: "e.g. Corner Bakery (cornerbakery.example), Daily Bread" }, powers: WEB, suits: ["Research", "Marketing", "Sales", "Leadership"],
     prompt: `Write this week's competitor briefing for the owner. The competitors: {topic}.\n\nFor each competitor, look at their website and recent news on the web. Report only what is new or changed in about the last week: prices, products or services, opening hours or locations, offers, hiring, and news about them. For each competitor write its name in bold, then up to three short points, each with the page it came from as a link. If you find nothing new for one, say "nothing new this week" for it.\n\n${NO_INVENTING} If you cannot tell whether something is new, say so. Your report is the briefing itself, with no introduction.` },
   { id: "rules-deadlines", name: "Rules and deadlines", group: "The outside world", about: "Tax dates, filings and rule changes coming up for your kind of business.", kind: "ai", schedule: "0 8 * * 1", when: "Mondays at 8:00", ask: { label: "What kind of business, and where?", placeholder: "e.g. A limited company running a café in England" }, powers: WEB, suits: ["Finance", "Legal", "Operations", "Leadership"],
@@ -185,9 +185,13 @@ export function senderFor(def: BriefingDef, org: Org): { bot: string; title: str
 
 /** What the agent is told for one run. The owner's answer is cut to a line, so it cannot carry instructions of its own. */
 export function briefingPrompt(def: BriefingDef, topic: string): string {
-  const said = String(topic ?? "").replace(/\s+/g, " ").trim().slice(0, 300) || "this organization's own industry and market, as its mission describes";
-  return (def.prompt ?? "").replace("{topic}", said);
+  const said = String(topic ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+  // The owner's own words decide what the news covers. Only when they said nothing does it follow the mission.
+  if (def.id === "morning-news") return (def.prompt ?? "").replace("{topic}", said ? `The owner asked for this, in their own words: “${said}”. Cover exactly that, as widely or as narrowly as they said. Do not narrow it to this organization's field, and do not add this organization's angle, unless their words ask for it.` : "The owner gave no subject, so cover what matters to this organization, given its mission, and say why each story matters to it.");
+  return (def.prompt ?? "").replace("{topic}", said || "this organization's own industry and market, as its mission describes") + (said ? OWNER_WORDS : "");
 }
+/** Added to every briefing the owner answered a question for: their words come first. */
+const OWNER_WORDS = "\n\nWhat the owner typed above is their instruction: follow it as written, and where it differs from what you would have chosen, their words win.";
 
 /** The owner's answer as it is kept: one line, or for a list the lines as typed. */
 export function cleanTopic(def: BriefingDef, topic: unknown): string {

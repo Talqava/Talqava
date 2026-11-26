@@ -42,6 +42,10 @@ A briefing is sent by the position whose job it suits, for example your Bookkeep
 
 **Pause or switch one off.** On its card: **Pause**, **Send one now**, or **Switch off**. In the Inbox, an open briefing has **Pause** and **Edit** at its top.
 
+**Your words decide.** What you type for a briefing is followed as written. For the Morning news, type exactly what you want covered, for example "What is going on around the world today" or "UK business news and football". It covers that and does not narrow it to your business. Leave it empty and it covers what matters to your business instead.
+
+**A briefing just arrives.** It starts straight away each time: no plan to approve and no questions first, even when the position sending it is a lead.
+
 **What to keep in mind.** Rules and deadlines and the Month-end pack are reminders and summaries, not legal, tax or accounting advice: confirm with your accountant. A briefing that reads a service can only report what that service holds.
 
 ## Key ideas
