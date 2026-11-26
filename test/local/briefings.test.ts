@@ -162,6 +162,7 @@ test("the page watcher says what was added and removed, in words, and ignores sc
   const fetcher = (async () => new Response(page, { status: 200 })) as never;
   const at = (day: number) => new Date(2026, 10, day, 8);
   assert.deepEqual(B.pageLines(page), ["Prices", "Bread & rolls: 3.00", "Butter: 2.50"]);
+  assert.deepEqual(B.pageLines("<p>Write &amp;lt;b&amp;gt; for bold</p>"), ["Write &lt;b&gt; for bold"], "text is decoded once, never twice");
   assert.match(await B.watchOnce(def, "https://supplier.example.com/prices", at(1), fetcher), /^Now watching https:\/\/supplier\.example\.com\/prices \(3 lines of text\)/);
   assert.equal(await B.watchOnce(def, "https://supplier.example.com/prices", at(2), fetcher), "", "nothing changed: quiet");
   page = page.replace("Bread &amp; rolls: 3.00", "Bread &amp; rolls: 3.40").replace("<p>Butter: 2.50</p>", "<p>Butter: 2.50</p><p>Delivery: free over 50</p>");

@@ -388,11 +388,12 @@ export function pageLines(html: string): string[] {
     .replace(/<\/(p|div|li|tr|h[1-6]|section|article|header|footer|td|th|br|dd|dt|blockquote)>|<br\s*\/?>/gi, "\n")
     .replace(/<[^>]*>/g, " ")
     .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
-    .replace(/&#0?39;/g, "'");
+    .replace(/&#0?39;/g, "'")
+    // The ampersand goes last, so that "&amp;lt;" reads as the text "&lt;" and is not decoded a second time.
+    .replace(/&amp;/g, "&");
   return [...new Set(text.split("\n").map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => l.length > 1))].slice(0, 2000).map((l) => l.slice(0, 400));
 }
 
