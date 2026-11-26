@@ -286,7 +286,8 @@ export function listBriefings(org: Org, jobList: Job[]) {
       sender,
       // Abilities switching it on would give the sender.
       grants: lacks,
-      on: job ? { job: job.id, enabled: job.enabled, nextRunAt: job.nextRunAt, lastRunAt: job.lastRunAt, lastTaskId: job.lastTaskId ?? null } : null,
+      on: job ? { job: job.id, enabled: job.enabled, schedule: job.schedule, nextRunAt: job.nextRunAt, lastRunAt: job.lastRunAt, lastTaskId: job.lastTaskId ?? null } : null,
+      schedule: def.schedule,
     };
   });
 }

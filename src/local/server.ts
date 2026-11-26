@@ -2089,6 +2089,22 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
       return { job: job.id, sender: sender.title, ...ran };
     }));
   }
+  if (route === "PATCH jobs" && parts[1] === "briefings" && parts[2]) {
+    return send(res, 200, await attempt(async () => {
+      const def = briefingOf(parts[2]);
+      if (!def) throw new Error("There is no such briefing.");
+      const org = orgs.active();
+      const job = (await jobs.list()).find((j) => j.briefing === def.id && (!j.org || j.org === org.id));
+      if (!job) throw new Error(`${def.name} is not switched on.`);
+      const topic = cleanTopic(def, body.topic);
+      if (def.ask?.required && !topic) throw new Error(`${def.name} needs an answer: ${def.ask.label.replace(/\?$/, "").toLowerCase()}.`);
+      // The time it arrives can be changed with it; an agent's instructions follow the new answer from the next run.
+      if (body.schedule !== undefined && String(body.schedule).trim() !== job.schedule) await jobs.edit(job.id, { schedule: body.schedule });
+      await jobs.update(job.id, { topic, ...(def.kind === "ai" ? { prompt: briefingPrompt(def, topic) } : {}) });
+      audit({ ...requestActor(req), kind: "schedule", action: `Changed the briefing “${def.name}”` });
+      return { ok: true };
+    }));
+  }
   if (route === "DELETE jobs" && parts[1] === "briefings" && parts[2]) {
     return send(res, 200, await attempt(async () => {
       const org = orgs.active();
