@@ -74,7 +74,7 @@ import { decide, listProposals } from "./proposals.ts";
 import { exportOrg, importOrg } from "./portable.ts";
 import { fileReport, parseDeck, workspace, writeDeck } from "./workspace.ts";
 import { PRIORITIES, work } from "./work.ts";
-import { PLANNED_BRIEFINGS, briefingOf, briefingPrompt, digests, forgetDigest, listBriefings, runDigest, senderFor } from "./briefings.ts";
+import { PLANNED_BRIEFINGS, briefingOf, briefingPrompt, cleanTopic, digests, forgetDigest, listBriefings, missingService, runDigest, senderFor } from "./briefings.ts";
 import { goals } from "./goals.ts";
 import { findTemplate, loadTemplates } from "./templates.ts";
 import { chainBudget, chainCost, chainOf, chainSize, journal, questStore, quests, rootOf, whyOf } from "./quests.ts";
@@ -265,12 +265,12 @@ async function runJob(job: Job): Promise<{ conversationId?: string; taskId?: str
   const briefing = briefingOf(job.briefing);
   // A briefing built from the organization's own tasks uses no AI model: it is put together and kept for the Inbox.
   if (briefing?.kind === "free") {
-    runDigest(briefing, org ?? orgs.active());
+    runDigest(briefing, org ?? orgs.active(), new Date(), job.topic ?? "");
     return {};
   }
   if (briefing && job.owner && org && org.members.some((m) => m.bot === job.owner)) {
     // The agent's report is the briefing: it goes to the Inbox as an update, with nothing for the owner to review.
-    const item = work.create(org, { title: `${briefing.name} · ${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}`, description: briefingPrompt(briefing, job.topic ?? ""), owner: job.owner, createdBy: "owner", review: false });
+    const item = work.create(org, { title: `${briefing.name} · ${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}`, description: briefingPrompt(briefing, job.topic ?? ""), owner: job.owner, createdBy: "owner", review: briefing.review === true });
     await jobs.update(job.id, { lastTaskId: item.id, lastConversationId: null });
     work.kick();
     return { taskId: item.id };
@@ -2072,7 +2072,10 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
       if ((await jobs.list()).some((j) => j.briefing === def.id && (!j.org || j.org === org.id))) throw new Error(`${def.name} is already switched on.`);
       const sender = senderFor(def, org);
       if (!sender) throw new Error("A briefing is sent by someone on your team. Set up your team first, under Team.");
-      const topic = String(body.topic ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+      const topic = cleanTopic(def, body.topic);
+      if (def.ask?.required && !topic) throw new Error(`${def.name} needs an answer first: ${def.ask.label.replace(/\?$/, "").toLowerCase()}.`);
+      const missing = missingService(def);
+      if (missing.length) throw new Error(`${def.name} reads from ${missing.length === 1 ? missing[0] : `one of ${missing.join(", ")}`}, and none is connected yet. Connect one under More › Connections.`);
       if (def.kind === "ai" && String(getConfig().model).startsWith("anthropic/") && !publicConfig().hasApiKey) throw new Error("This briefing is researched with your AI model, and none is connected yet. Connect one under More › Connections › AI models.");
       // What the sender lacks for it (searching the web) is switched on with it, and said so on the screen first.
       const lacks = def.powers.filter((p) => !((loadCrew().bots.find((b) => b.id === sender.bot)?.powers ?? []) as string[]).includes(p));

@@ -11,24 +11,32 @@ Routines let work happen by itself at set times: a morning news digest every wee
 
 ## Briefings
 
-A briefing is a routine that is already written: a report an agent sends to your Inbox. **Start a briefing**, at the top of this page, lists them.
+A briefing is a routine that is already written: a report an agent sends to your Inbox. **Start a briefing**, at the top of this page, lists 34 of them in seven groups. Click a group's name to open it.
 
-- **Morning news** (weekdays at 8:00): the stories that matter for your business, two lines each, with links.
-- **Competitor watch** (Mondays): what changed at the competitors you name.
-- **Rules and deadlines** (Mondays): tax dates, filings and rule changes for your kind of business, from official pages. It is a reminder, not legal or tax advice.
-- **Monday plan** and **Friday wrap-up**: what is under way, waiting on you, up next and finished. These two are built from your own tasks, so they use no AI model and cost nothing.
+- **Your own work** (free): Monday plan, Friday wrap-up, End-of-day wrap, Weekly goals check. Built from your tasks and goals.
+- **The outside world** (needs only web search): Morning news, Competitor watch, Rules and deadlines, Supplier price watch, Review replies, Blog post idea, Learning digest.
+- **Money**: Overdue invoices, Bills due this week, Weekly cash check, Subscription watch and Month-end pack read Xero. Yesterday's sales reads Square, Shopify or WooCommerce.
+- **Customers**: Inbox triage (Gmail or Outlook), Unanswered customers (Zendesk or Freshdesk), New leads (HubSpot, Pipedrive or Typeform), Follow-up reminders (HubSpot or Pipedrive), Quiet customers (Shopify, Square or WooCommerce).
+- **Marketing**: Newsletter draft and Social posts for the week (from what Talqava knows of your business), Campaign results (Mailchimp or Brevo).
+- **Running the business**: Meeting prep, Tomorrow's day and Travel check (Google Calendar), Stock running low (Shopify, WooCommerce or Square), Open issues digest (GitLab, Jira, ClickUp, Asana, Trello or Todoist), Files tidy-up (free).
+- **People and renewals** (free): Renewals coming up and Birthdays and anniversaries work from a list you type; Policy review reminder looks at your Workspace pages.
+
+**Three kinds.**
+- **Free** briefings are put together by Talqava from what it already holds (your tasks, goals, files, or a list you typed). They use no AI model and cost nothing. Renewals, birthdays, the files tidy-up and the policy reminder write to you only when there is something to say.
+- **Researched** briefings are done by an agent with your AI model, usually for a few cents each time. They report; they change nothing.
+- **Drafting** briefings (Overdue invoices, Inbox triage, Review replies, Quiet customers, Newsletter draft, Social posts) write drafts for you. They never send, post or change anything. They arrive under **Waiting on you**, for you to read, accept or send back.
 
 **Switch one on**
-1. Press **Switch on** on its card.
-2. Answer its one question if it has one (for the news: what to watch). Leave it empty to follow your mission.
-3. Read the short list: when it arrives, who sends it, what it costs, and that it changes nothing. Press **Switch on**.
-4. The first one arrives straight away, in your Inbox under **Updates**.
+1. Press **Switch on** on its card. A card that says **Needs Xero** (or another service) shows **Connect … first** instead; connect the service, then come back.
+2. Answer its one question if it has one. For the news you can leave it empty to follow your mission. For renewals and birthdays, type one on each line: a name, a comma, then the date (for example `Shop insurance, 2027-03-01`).
+3. Read the short list: when it arrives, where, who sends it, what it reads, what it costs, and that it changes nothing. Press **Switch on**.
+4. The first one arrives straight away.
 
-A briefing is sent by the position whose job it suits, for example your Research Analyst for the news. If that agent could not search the web, switching the briefing on gives it that ability, and the list says so first. The three researched briefings use your AI model each time, usually a few cents.
+A briefing is sent by the position whose job it suits, for example your Bookkeeper for overdue invoices. If that agent could not search the web or use your connected services, switching the briefing on gives it that ability, and the list says so first.
 
-**Pause, change or switch one off.** On its card: **Pause**, **Send one now**, or **Switch off**. In the Inbox, an open briefing has **Pause** and **Change** at its top. A briefing also shows in the list of routines below, where you can change its time.
+**Pause, change or switch one off.** On its card: **Pause**, **Send one now**, or **Switch off**. In the Inbox, an open briefing has **Pause** and **Change** at its top. A briefing also shows in the list of routines below, where you can change its time. To change a list or an answer, switch the briefing off and on again.
 
-A new Monday plan or Friday wrap-up replaces the last one of its kind. More briefings are planned for when a service is connected: overdue invoices, yesterday's sales, inbox triage, unanswered customers and meeting prep.
+**What to keep in mind.** Rules and deadlines and the Month-end pack are reminders and summaries, not legal, tax or accounting advice: confirm with your accountant. A briefing that reads a service can only report what that service holds.
 
 ## Key ideas
 
