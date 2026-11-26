@@ -98,15 +98,15 @@ test("with an approved list, only approved connected services keep their tools",
 test("a daily limit for the whole organization: the rest of today caps each run, and once reached nothing starts", async () => {
   const { recordSpend, spentToday } = await import("../../src/local/spend.ts");
   const rules = { ...G.NO_GUARDRAILS, maxDaySpend: 10 };
-  assert.equal(G.guard(spec(), "the Bookkeeper", rules).budget.spend, 5, "the agent's lower budget stays");
+  assert.equal(G.guard(spec(), "the Bookkeeper", rules).budget!.spend, 5, "the agent's lower budget stays");
   recordSpend("task-a", "bookkeeper", 7);
   recordSpend("task-a", "bookkeeper", 7.5);
   assert.equal(spentToday(), 7.5, "a task's cost is counted once as it grows");
-  assert.equal(G.guard(spec(), "the Bookkeeper", rules).budget.spend, 2.5, "only what is left of today may be spent");
+  assert.equal(G.guard(spec(), "the Bookkeeper", rules).budget!.spend, 2.5, "only what is left of today may be spent");
   recordSpend("task-b", "sales", 3);
   assert.throws(() => G.guard(spec(), "the Bookkeeper", rules), /spending limit for today \(\$10\) is reached/);
-  assert.equal(G.guard(spec(), "the Bookkeeper", { ...rules, maxDaySpend: 50 }).budget.spend, 5, "raising the limit lets work start again");
-  assert.equal(G.guard(spec(), "the Bookkeeper", G.NO_GUARDRAILS).budget.spend, 5);
+  assert.equal(G.guard(spec(), "the Bookkeeper", { ...rules, maxDaySpend: 50 }).budget!.spend, 5, "raising the limit lets work start again");
+  assert.equal(G.guard(spec(), "the Bookkeeper", G.NO_GUARDRAILS).budget!.spend, 5);
   assert.ok(G.describeGuardrails(rules).some((w) => /at most \$10 a day/.test(w)));
 });
 
