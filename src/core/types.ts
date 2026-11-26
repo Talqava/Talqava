@@ -97,6 +97,9 @@ export interface Job {
   org?: string | null;
   /** The task the last run made, when an agent does it. */
   lastTaskId?: string | null;
+  /** Set when this is a ready-made briefing: which one, and the owner's one answer for it. */
+  briefing?: string;
+  topic?: string;
 }
 
 export interface Secret {

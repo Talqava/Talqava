@@ -1878,7 +1878,7 @@ async function loadPageSuggestions() {
 async function loadMail() {
   loadPageSuggestions();
   try {
-    [state.mail, state.workItems, state.serviceProblems, state.checkIn] = await Promise.all([api("GET", "inbox"), api("GET", "work").then((w) => w.items).catch(() => state.workItems ?? []), api("GET", "gateway/problems").catch(() => state.serviceProblems ?? []), api("GET", "work/checkin").catch(() => state.checkIn ?? null)]);
+    [state.mail, state.workItems, state.serviceProblems, state.checkIn, state.briefings] = await Promise.all([api("GET", "inbox"), api("GET", "work").then((w) => w.items).catch(() => state.workItems ?? []), api("GET", "gateway/problems").catch(() => state.serviceProblems ?? []), api("GET", "work/checkin").catch(() => state.checkIn ?? null), api("GET", "jobs/briefings").catch(() => state.briefings ?? null)]);
   } catch {
     state.mail ??= { messages: {}, names: {} };
   }
@@ -1927,6 +1927,12 @@ function mailMessages() {
     const g = state.checkIn.groups;
     const n = (k) => g.reduce((sum, x) => sum + x[k].length, 0);
     out.push({ id: `checkin:${at.slice(0, 10)}`, kind: "checkin", bot: null, subject: "Daily check-in from your leads", snippet: `${n("moved")} moved, ${n("stuck")} stuck or waiting, ${n("next")} up next, across ${g.length} group${g.length === 1 ? "" : "s"}.`, at, activityAt: at, label: n("stuck") ? "needs" : "done" });
+  }
+  // A briefing built from your own tasks (the Monday plan, the Friday wrap-up): the latest of each kind.
+  for (const d of state.briefings?.digests ?? []) {
+    const def = (state.briefings.briefings ?? []).find((b) => b.id === d.id);
+    const bot = state.crew?.bots.find((b) => b.id === def?.sender?.bot) ?? null;
+    out.push({ id: `digest:${d.id}:${d.at.slice(0, 10)}`, kind: "digest", digest: d, briefing: def ?? null, bot, subject: `${d.name} · ${new Date(d.at).toLocaleDateString(undefined, { weekday: "long" })}`, snippet: d.text.split("\n")[0], at: d.at, activityAt: d.at, label: "done" });
   }
   // A change an agent suggested to a workspace page waits in the inbox too.
   for (const sg of state.pageSuggestions ?? []) {
@@ -2000,6 +2006,13 @@ async function mailMark(ids, set) {
   }
   renderInbox();
   syncInboxCount();
+}
+
+/** The briefing a message came from, if any: one built from the tasks, or the task a briefing's last run made. */
+function briefingFor(m) {
+  if (m.kind === "digest") return m.briefing;
+  if (m.kind !== "task" || !m.q) return null;
+  return (state.briefings?.briefings ?? []).find((b) => b.on?.lastTaskId && (state.workItems ?? []).some((w) => w.id === b.on.lastTaskId && w.quest === m.q.id)) ?? null;
 }
 
 /** The Inbox's three lists. A message is in exactly one: it waits on the owner, it is news, or it is put away. */
@@ -2155,12 +2168,16 @@ function renderInbox() {
   if (isUnread(open) && wide) mailMark([open.id], { read: true });
   const parts = readMail(open);
   const put = markOf(open).archived;
+  const brief = briefingFor(open);
   fill(
     ui.mailRead,
     h(
       "div",
       { class: "inboxreadtools" },
       h("button", { class: "plain small inboxback", onclick: () => ((ui.mailOpen = null), renderInbox()) }, "← Back"),
+      brief ? h("span", { class: "briefmark", title: `${brief.name}: ${brief.when}` }, "Briefing") : null,
+      brief?.on?.enabled ? h("button", { class: "plain link small", title: "Stop sending it until you switch it back on, under Tasks › Routines", onclick: () => attempt(async () => (await api("PATCH", `jobs/${brief.on.job}`, { enabled: false }), toast(`${brief.name} is paused. Switch it back on under Tasks › Routines.`), await loadMail(), renderInbox())) }, "Pause") : null,
+      brief ? h("button", { class: "plain link small", onclick: () => go("jobs") }, "Change") : null,
       h("span", { class: "grow" }),
       put
         ? h("button", { class: "small", title: "Move it back to Updates", onclick: () => mailMark([open.id], { archived: false }) }, "Move back")
@@ -2306,6 +2323,10 @@ function readMail(m) {
       h("div", { class: "row" }, h("button", { class: "primary", onclick: () => answerProposal(m.org, p, "approve", body).then(after) }, "Approve"), h("button", { onclick: () => answerProposal(m.org, p, "decline", body).then(after) }, "Decline"), h("button", { class: "plain", onclick: () => go("team") }, "See the chart")),
     );
     return [tools, h("h2", { class: "readsubject" }, m.subject, h("span", { class: `mlabel ${m.label}` }, LABEL_WORDS[m.label])), from, body];
+  }
+  if (m.kind === "digest") {
+    fill(body, h("div", { class: "md" }, renderMarkdown(m.digest.text)), h("p", { class: "note small" }, "Built from your tasks as they stood when it was sent. It uses no AI model, so it costs nothing."));
+    return [tools, h("h2", { class: "readsubject" }, m.subject), from, body];
   }
   if (m.kind === "checkin") {
     const row = (t) => h("li", {}, h("button", { class: "plain link", onclick: () => openTask(t.id) }, `#${t.number} ${t.title}`), h("span", { class: "note small" }, ` · ${t.owner}${t.why ? ` · ${t.why}` : ""}`));
@@ -6819,6 +6840,79 @@ function scheduleForm(col, job = null, done) {
   );
 }
 
+/** Routines › Start a briefing: ready-made reports for the Inbox, switched on with one press. */
+function briefingGallery(host, data, col) {
+  state.briefings = data;
+  const again = () => jobsView();
+  const card = (b) => {
+    const on = b.on;
+    const act = (fn, done) => attempt(async () => (await fn(), done && toast(done), again()), col);
+    return h(
+      "article",
+      { class: `briefcard ${on?.enabled ? "on" : ""}` },
+      h("div", { class: "brieftop" }, h("b", { class: "grow" }, b.name), on ? h("span", { class: `briefstate ${on.enabled ? "on" : ""}` }, on.enabled ? "On" : "Paused") : null),
+      h("p", { class: "briefabout" }, b.about),
+      h("p", { class: "note small" }, `${b.when} · ${b.kind === "free" ? "Free: built from your own tasks" : "Researched with your AI model, usually a few cents each time"}${on && b.sender ? ` · sent by the ${b.sender.title}` : ""}`),
+      on && b.ask?.value ? h("p", { class: "note small" }, `Watching: ${b.ask.value}`) : null,
+      h(
+        "div",
+        { class: "row wrap brieffoot" },
+        on
+          ? [
+              on.enabled ? h("button", { class: "small", onclick: () => act(() => api("PATCH", `jobs/${on.job}`, { enabled: false }), `${b.name} is paused.`) }, "Pause") : h("button", { class: "small primary", onclick: () => act(() => api("PATCH", `jobs/${on.job}`, { enabled: true }), `${b.name} is on again.`) }, "Switch back on"),
+              h("button", { class: "small", title: "Send one now", onclick: () => act(() => api("POST", `jobs/${on.job}/run`, {}), "One is on its way to your Inbox.") }, "Send one now"),
+              h("button", { class: "plain link small", onclick: () => confirm(`Switch ${b.name} off for good? You can switch it on again later.`) && act(() => api("DELETE", `jobs/briefings/${b.id}`), `${b.name} is switched off.`) }, "Switch off"),
+            ]
+          : h("button", { class: "small primary", onclick: () => briefingOn(b).then((ok) => ok && again()) }, "Switch on"),
+      ),
+    );
+  };
+  const groups = [...new Set(data.briefings.map((b) => b.group))];
+  fill(
+    host,
+    h("h2", {}, "Start a briefing"),
+    h("p", { class: "note" }, "Ready-made reports your team sends to your Inbox. Switch one on with one press; pause it any time."),
+    groups.map((g) => [h("div", { class: "label" }, g), h("div", { class: "briefgrid" }, data.briefings.filter((b) => b.group === g).map(card))]),
+    data.planned?.length ? h("p", { class: "note small" }, `Planned, once their service is connected: ${data.planned.join("; ")}.`) : null,
+    h("h2", { class: "briefown" }, "Your own routines"),
+  );
+}
+
+/** Switching a briefing on: at most one question, and what an owner wants to know before saying yes. */
+async function briefingOn(b) {
+  if (!b.sender) return (toast("A briefing is sent by someone on your team. Set up your team first, under Team."), false);
+  const org = activeOrg();
+  const topic = b.ask ? h("input", { id: "briefing-topic", value: b.ask.value || "", placeholder: b.ask.placeholder, maxlength: 300, "aria-label": b.ask.label }) : null;
+  const fact = (label, value) => h("div", { class: "brieffact" }, h("span", {}, label), h("b", {}, value));
+  const body = h(
+    "div",
+    { class: "composeform briefdialog" },
+    h("p", { class: "note" }, b.about),
+    topic ? h("label", {}, b.ask.label, topic, h("span", { class: "note small" }, org.mission ? "Leave it empty to follow your mission: it watches your own industry and market." : "Say it in a few words.")) : null,
+    h(
+      "div",
+      { class: "brieffacts" },
+      fact("Arrives", b.when),
+      fact("Where", "Your Inbox, under Updates"),
+      fact("Sent by", `Your ${b.sender.title}`),
+      fact("Costs", b.kind === "free" ? "Nothing: it is built from your own tasks" : "A few cents each time, from your AI model"),
+      fact("Can it change anything?", b.kind === "free" ? "No. It only reads your tasks." : "No. It searches the web and writes to you."),
+      b.grants?.length ? fact("Also", `Switches on web search for your ${b.sender.title}`) : null,
+    ),
+    h("p", { class: "note small" }, "The first one arrives now, so you can see it."),
+  );
+  const got = await libDialog(b.name, body, [["Switch on", () => ({ topic: topic?.value.trim() ?? "" }), true]]);
+  if (!got) return false;
+  try {
+    const r = await api("POST", `jobs/briefings/${b.id}/on`, { topic: got.topic });
+    toast(r.problem ? `${b.name} is on, but the first one could not start: ${r.problem}` : `${b.name} is on. The first one is on its way to your Inbox.`);
+    return true;
+  } catch (err) {
+    toast(err.message);
+    return false;
+  }
+}
+
 async function jobsView() {
   const list = h("div", { class: "joblist" });
   const col = page(
@@ -6829,6 +6923,9 @@ async function jobsView() {
     h("h3", {}, "New routine"),
   );
   col.append(scheduleForm(col, null, () => jobsView()));
+  const gallery = h("section", { class: "briefgallery" });
+  col.insertBefore(gallery, col.querySelector(".banner"));
+  api("GET", "jobs/briefings").then((data) => state.view === "jobs" && briefingGallery(gallery, data, col)).catch(() => {});
   const jobs = await attempt(() => api("GET", "jobs"), col);
   if (!jobs) return;
   if (!jobs.length) list.append(h("p", { class: "note" }, "No routines yet. Add one below."));
