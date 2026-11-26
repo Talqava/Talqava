@@ -94,16 +94,16 @@ A post can be given **categories**, **tags** and a **featured image**. Agents ch
 
 To ask for one post or one change by hand, give a task in your own words, such as "Write a post about our winter opening hours for the blog" or "Update the About page on our website with our new address".
 
-### Connect a built-in service (Shopify, WooCommerce, HubSpot, Mailchimp, Slack, Asana, Trello, Calendly, Typeform, Zendesk, GitLab, Xero)
+### Connect a built-in service (Shopify, WooCommerce, HubSpot, Mailchimp, Slack, Asana, Trello, Calendly, Typeform, Zendesk, GitLab, Xero, Pipedrive, Todoist, Jira)
 
 These services are built into Talqava and all work the same way.
 
 1. Open **Integrations** and choose the service, for example **WooCommerce**.
 2. Read **What agents can do**: what they can read, what they can change, and what they can delete (deleting always asks you first).
 3. Sign in:
-   - **Asana, HubSpot, Typeform, Trello, Zendesk, GitLab and Xero** sign in through your browser. The page shows **Sign in to** the service first. The service asks for an app registered with it; you register your own once, following the numbered steps on the page, then press the button and approve in the browser. The tab says **Connected**. For Trello you copy only its public API key; there is no token to copy.
+   - **Asana, HubSpot, Typeform, Trello, Zendesk, GitLab, Xero and Todoist** sign in through your browser. The page shows **Sign in to** the service first. The service asks for an app registered with it; you register your own once, following the numbered steps on the page, then press the button and approve in the browser. The tab says **Connected**. For Trello you copy only its public API key; there is no token to copy.
    - If you would rather paste a key, open **Use a key instead** on the same page.
-   - **Shopify, WooCommerce, Mailchimp, Slack and Calendly** connect with a key for now: follow the numbered steps, paste it, and press **Check and connect**. Each of these services either does not allow a browser sign-in that returns to an app on your own computer, or needs an app that Talqava's maker must register with them first.
+   - **Shopify, WooCommerce, Mailchimp, Slack, Calendly, Pipedrive and Jira** connect with a key for now: follow the numbered steps, paste it, and press **Check and connect**. Each of these services either does not allow a browser sign-in that returns to an app on your own computer, or needs an app that Talqava's maker must register with them first.
    
    Talqava checks the sign-in with the service before saving it.
 4. Choose **What agents may do with this account**:
@@ -125,6 +125,9 @@ What each one does:
 - **Zendesk**: see and search support tickets and read their conversations; add internal notes, change a ticket's status or priority, and open a ticket. A reply to the customer always asks you first, because Zendesk sends it to them. It signs in through your browser: a Zendesk administrator adds an OAuth client of the kind **Public** once (the page lists the steps), and you type your subdomain and its Identifier. A new ticket can start a task.
 - **GitLab**: see your projects, issues and merge requests and read their comments; open an issue, comment, close or reopen an issue, and change its title or labels. Agents do not see or change code. It works with gitlab.com or your company's own GitLab: you add an application under your GitLab profile once (the page lists the steps), then type your GitLab address and paste its Application ID. No secret is needed.
 - **Xero**: see sales invoices and bills, contacts, the chart of accounts, profit and loss and the balance sheet; add a contact; and draft an invoice or bill. A draft is never approved or sent from Talqava: you review and approve it in Xero. You add an app of the kind **Auth Code with PKCE** in Xero's developer pages once (the page lists the steps) and paste its Client ID; it has no secret. Xero lets a new app connect up to five organisations and make 1,000 requests a day for each.
+- **Pipedrive**: see and search deals, people and organizations; add them; move a deal to another stage or mark it won or lost; add notes; plan a call, meeting or task. It connects with your personal API token and your company domain (the first part of yourcompany.pipedrive.com).
+- **Todoist**: see your projects and open to-dos (also with a Todoist filter such as *today | overdue*); add, change, comment on and tick off to-dos. Deleting a to-do always asks you first. Sign in through your browser with an app you make in Todoist's App Management Console, or paste your API token.
+- **Jira**: see projects, find and read issues with their comments; open an issue, comment, move it to another step, change its summary or labels, or assign it to yourself. It connects with your site name, your Atlassian email and an API token of the plain kind (not the kind with scopes). Atlassian's tokens expire after at most a year; make a new one then and connect again.
 
 Talqava checks every few hours that each key still works. If a service stops accepting its key, the account shows **Needs attention**, and your Inbox gets a note saying which connection and why; make a new key and connect again, and the account keeps its settings.
 

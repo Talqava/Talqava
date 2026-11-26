@@ -87,12 +87,57 @@ before(async () => {
         if (p === "/forms/frm001") return json(200, { title: "Catering request", fields: [{ id: "q1", title: "Your name" }, { id: "q2", title: "What do you need?" }, { id: "q3", title: "Which breads?" }] });
         if (p === "/forms/frm001/responses") return json(200, { total_items: 1, items: [{ submitted_at: "2026-11-25T14:03:00Z", answers: [{ field: { id: "q1" }, type: "text", text: "Sam" }, { field: { id: "q2" }, type: "choice", choice: { label: "Lunch for 20" } }, { field: { id: "q3" }, type: "choices", choices: { labels: ["Rye", "Sourdough"] } }] }] });
       }
+      if (svc === "pipedrive") {
+        if (req.headers["x-api-token"] !== "pd-token-0123456789abcdef") return json(401, { success: false, error: "Invalid API token", error_info: "Please check developers.pipedrive.com" });
+        const deal = { id: 7, title: "Bread for Corner Café", value: 1200, currency: "EUR", status: "open", stage_id: 2, person_id: 31, org_id: 5, update_time: "2026-11-25T10:00:00Z" };
+        if (p === "/v1/users/me") return json(200, { success: true, data: { id: 1, name: "Ada Baker", company_name: "Bakery Ltd" } });
+        if (p === "/v2/deals" && req.method === "GET") return json(200, { success: true, data: [deal], additional_data: { next_cursor: null } });
+        if (p === "/v2/deals" && req.method === "POST") return json(201, { success: true, data: { ...deal, ...body, id: 8 } });
+        if (p === "/v2/deals/7") return json(200, { success: true, data: req.method === "PATCH" ? { ...deal, ...body } : deal });
+        if (p === "/v2/deals/search") return json(200, { success: true, data: { items: [{ result_score: 1, item: { id: 7, title: deal.title, value: 1200, currency: "EUR", status: "open", stage: { id: 2, name: "Proposal" } } }] } });
+        if (p === "/v2/persons/search") return json(200, { success: true, data: { items: [{ item: { id: 31, name: "Sam Customer", emails: ["sam@corner.example"], organization: { name: "Corner Café" } } }] } });
+        if (p === "/v2/persons") return json(201, { success: true, data: { id: 32, name: body.name } });
+        if (p === "/v2/organizations/search") return json(200, { success: true, data: { items: [{ item: { id: 5, name: "Corner Café" } }] } });
+        if (p === "/v2/organizations") return json(201, { success: true, data: { id: 6, name: body.name } });
+        if (p === "/v1/notes" && req.method === "GET") return json(200, { success: true, data: [{ add_time: "2026-11-24 09:00:00", content: "<p>Wants <b>weekly</b> delivery</p>" }] });
+        if (p === "/v1/notes") return json(201, { success: true, data: { id: 90 } });
+        if (p === "/v2/activities") return json(201, { success: true, data: { id: 70, subject: body.subject } });
+        if (p === "/v2/pipelines") return json(200, { success: true, data: [{ id: 1, name: "Sales" }] });
+        if (p === "/v2/stages") return json(200, { success: true, data: [{ id: 1, name: "Lead", pipeline_id: 1 }, { id: 2, name: "Proposal", pipeline_id: 1 }] });
+      }
+      if (svc === "todoist") {
+        if (auth !== "Bearer td-good") return json(401, { error: "Invalid token", error_tag: "UNAUTHORIZED", http_code: 401 });
+        const task = { id: "6XGgmFVcrG5RRjVr", content: "Order flour", description: "Two sacks", project_id: "6Jf8VQXxpwv56VQ7", labels: ["shop"], priority: 4, due: { date: "2026-11-30", is_recurring: true }, checked: false, added_at: "2026-11-25T08:00:00Z" };
+        if (p === "/user") return json(200, { id: "1234567", full_name: "Ada Baker", email: "ada@example.com" });
+        if (p === "/projects") return json(200, { results: [{ id: "6Jf8VQXxpwv56VQ7", name: "Inbox", inbox_project: true }, { id: "6Jf8VQXxpwv56VQ8", name: "Bakery" }], next_cursor: null });
+        if (p === "/tasks" && req.method === "GET") return json(200, { results: [task], next_cursor: null });
+        if (p === "/tasks/filter") return json(200, { results: [task], next_cursor: null });
+        if (p === "/tasks" && req.method === "POST") return json(200, { ...task, id: "7XGgmFVcrG5RRjVr", content: body.content, priority: body.priority ?? 1, labels: body.labels ?? [], due: body.due_date ? { date: body.due_date } : body.due_string ? { date: "2026-11-27T09:00:00" } : null });
+        if (p === "/tasks/6XGgmFVcrG5RRjVr") return req.method === "DELETE" ? (res.writeHead(204), res.end()) : json(200, req.method === "POST" ? { ...task, ...(body.content ? { content: body.content } : {}), priority: body.priority ?? task.priority } : task);
+        if (p === "/tasks/6XGgmFVcrG5RRjVr/close" || p === "/tasks/6XGgmFVcrG5RRjVr/reopen") return (res.writeHead(204), res.end());
+        if (p === "/comments") return json(200, { id: "c1", content: body.content });
+        return json(404, { error: "Task not found", error_tag: "NOT_FOUND", http_code: 404 });
+      }
+      if (svc === "jira") {
+        if (auth !== `Basic ${Buffer.from("ada@example.com:jira-good").toString("base64")}`) return json(401, { errorMessages: ["Client must be authenticated to access this resource."] });
+        const para = (t: string) => ({ type: "paragraph", content: [{ type: "text", text: t }] });
+        const issue = { key: "SHOP-12", fields: { summary: "Checkout fails", status: { name: "To Do" }, issuetype: { name: "Bug" }, priority: { name: "High" }, assignee: { displayName: "Ada Baker" }, labels: ["web"], updated: "2026-11-25T10:00:00.000+0000", reporter: { displayName: "Sam" }, description: { version: 1, type: "doc", content: [para("Card is refused."), { type: "bulletList", content: [{ type: "listItem", content: [para("Safari")] }] }] } } };
+        if (p === "/myself") return json(200, { accountId: "acc-1", displayName: "Ada Baker" });
+        if (p === "/project/search") return json(200, { values: [{ key: "SHOP", name: "Web shop" }], isLast: true });
+        if (p === "/search/jql") return json(200, { issues: [issue], isLast: true });
+        if (p === "/issue" && req.method === "POST") return body.fields.issuetype.name === "Epic" ? json(400, { errorMessages: [], errors: { issuetype: "Specify a valid issue type" } }) : json(201, { id: "10013", key: "SHOP-13" });
+        if (p === "/issue/SHOP-12" && req.method === "GET") return json(200, issue);
+        if (p === "/issue/SHOP-12" || p === "/issue/SHOP-12/assignee") return (res.writeHead(204), res.end());
+        if (p === "/issue/SHOP-12/comment") return req.method === "POST" ? json(201, { id: "1" }) : json(200, { comments: [{ created: "2026-11-25T09:00:00.000+0000", author: { displayName: "Sam" }, body: { type: "doc", content: [para("Still happening.")] } }] });
+        if (p === "/issue/SHOP-12/transitions") return req.method === "POST" ? (res.writeHead(204), res.end()) : json(200, { transitions: [{ id: "21", name: "Start work", to: { name: "In Progress" } }, { id: "31", name: "Done", to: { name: "Done" } }] });
+        return json(404, { errorMessages: ["Issue does not exist or you do not have permission to see it."], errors: {} });
+      }
       json(404, { message: "No route" });
     });
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  for (const id of ["SHOPIFY", "HUBSPOT", "MAILCHIMP", "TRELLO", "CALENDLY", "TYPEFORM"]) process.env[`TALQAVA_${id}_API`] = `${url}/${id.toLowerCase()}`;
+  for (const id of ["SHOPIFY", "HUBSPOT", "MAILCHIMP", "TRELLO", "CALENDLY", "TYPEFORM", "PIPEDRIVE", "TODOIST", "JIRA"]) process.env[`TALQAVA_${id}_API`] = `${url}/${id.toLowerCase()}`;
   K = await import("../../src/local/connector-kit.ts");
   await import("../../src/local/services/index.ts");
 });
@@ -176,4 +221,116 @@ test("Shopify: an app's ID and secret become a day-long token, orders and produc
   assert.equal(await K.pollWatches((h) => started.push(h)), 1);
   assert.match(started[0].text, /\[1002\] #1002/);
   K.removeWatch(w.id);
+});
+
+test("Pipedrive: deals, people, organizations, notes and activities with a personal token", async () => {
+  await assert.rejects(K.connectService("pipedrive", { values: { domain: "bakery", api_token: "short" } }), /does not look like a Pipedrive API token/);
+  await assert.rejects(K.connectService("pipedrive", { values: { domain: "evil.example.com/x", api_token: "pd-token-0123456789abcdef" } }), /company domain/);
+  await assert.rejects(K.connectService("pipedrive", { values: { domain: "bakery", api_token: "pd-token-wrong-0123456789" } }), /Pipedrive refused that: Invalid API token/);
+  const c = await K.connectService("pipedrive", { values: { domain: "https://Bakery.pipedrive.com/", api_token: "pd-token-0123456789abcdef" }, rule: "auto" });
+  assert.equal(c.label, "Ada Baker (Bakery Ltd)");
+
+  assert.equal(await run("pipedrive__list_deals"), "[7] Bread for Corner Café · 1,200 EUR · open · stage 2 · updated 2026-11-25");
+  assert.match(seen.at(-1)!.path, /status=open&sort_by=update_time&sort_direction=desc&limit=25/);
+  assert.equal(await run("pipedrive__search_deals", { words: "bread" }), "[7] Bread for Corner Café · 1,200 EUR · open · stage Proposal");
+  await assert.rejects(run("pipedrive__search_deals", { words: "b" }), /two letters/);
+  assert.match(await run("pipedrive__get_deal", { deal: "7" }), /person 31 · organization 5\n\n2026-11-24 · Wants weekly delivery/);
+  assert.match(await run("pipedrive__create_deal", { title: "Rolls for the school", value: 300, currency: "eur", person: 31 }), /^Added deal \[8\] Rolls for the school · 300 EUR/);
+  assert.deepEqual(seen.at(-1)!.body, { title: "Rolls for the school", value: 300, currency: "EUR", person_id: 31 });
+  assert.match(await run("pipedrive__update_deal", { deal: 7, status: "lost", lost_reason: "Price" }), /· lost ·/);
+  assert.deepEqual([seen.at(-1)!.method, seen.at(-1)!.body], ["PATCH", { status: "lost", lost_reason: "Price" }]);
+  await assert.rejects(run("pipedrive__update_deal", { deal: 7 }), /Say what to change/);
+  assert.equal(await run("pipedrive__find_people", { words: "sam" }), "[31] Sam Customer · sam@corner.example · Corner Café");
+  await run("pipedrive__create_person", { name: "Lee", email: "lee@example.com", organization: 5 });
+  assert.deepEqual(seen.at(-1)!.body, { name: "Lee", emails: [{ value: "lee@example.com", primary: true, label: "work" }], org_id: 5 });
+  assert.equal(await run("pipedrive__find_organizations", { words: "corner" }), "[5] Corner Café");
+  assert.match(await run("pipedrive__create_organization", { name: "Mill & Sons" }), /\[6\] Mill & Sons/);
+  assert.equal(await run("pipedrive__add_note", { note: "Call <b>back</b>\nMonday", deal: 7 }), "Added the note to deal 7.");
+  assert.deepEqual(seen.at(-1)!.body, { content: "Call &lt;b&gt;back&lt;/b&gt;<br>Monday", deal_id: 7 }, "a note is plain text, never markup of its own");
+  await assert.rejects(run("pipedrive__add_note", { note: "x", deal: 7, person: 31 }), /one deal, one person or one organization/);
+  assert.equal(await run("pipedrive__add_activity", { subject: "Call Sam", type: "call", due_date: "2026-11-30", deal: 7 }), "Planned “Call Sam” for 2026-11-30 [70].");
+  await assert.rejects(run("pipedrive__add_activity", { subject: "x", due_date: "soon" }), /date like/);
+  assert.equal(await run("pipedrive__list_stages"), "Sales\n  [1] Lead\n  [2] Proposal");
+  const trigger = K.services().find((s) => s.id === "pipedrive")!.triggers![0];
+  const conn = { values: { domain: "bakery", api_token: "pd-token-0123456789abcdef" } } as never;
+  assert.deepEqual(await trigger.list(conn, ""), ["7"]);
+  assert.equal((await trigger.describe(conn, "7", "")).title, "Deal: Bread for Corner Café");
+});
+
+test("Todoist: to-dos with the personal token, or a browser sign-in with the owner's own app", async () => {
+  const t = K.listServices().find((s) => s.id === "todoist")!;
+  assert.ok(t.browser && t.fields.length === 1, "the browser first, the token second");
+  const to = new URL(K.startBrowserSignIn("todoist", { clientId: "tapp", clientSecret: "shh" }, "http://localhost:8787/api/oauth/callback").url);
+  assert.deepEqual([to.origin + to.pathname, to.searchParams.get("scope"), to.searchParams.get("code_challenge")], ["https://app.todoist.com/oauth/authorize", "data:read_write", null]);
+  assert.throws(() => K.startBrowserSignIn("todoist", { clientId: "tapp" }, "http://localhost:8787/api/oauth/callback"), /client secret/);
+
+  await assert.rejects(K.connectService("todoist", { values: { token: "bad" } }), /Todoist refused that: Invalid token/);
+  assert.equal((await K.connectService("todoist", { values: { token: "td-good" }, rule: "auto" })).label, "Ada Baker (ada@example.com)");
+  assert.equal(await run("todoist__list_projects"), "[6Jf8VQXxpwv56VQ7] Inbox (Inbox)\n[6Jf8VQXxpwv56VQ8] Bakery");
+  assert.equal(await run("todoist__list_tasks", { project: "6Jf8VQXxpwv56VQ7" }), "[6XGgmFVcrG5RRjVr] Order flour · due 2026-11-30 (repeats) · urgent · shop");
+  await run("todoist__list_tasks", { filter: "today | overdue" });
+  assert.match(seen.at(-1)!.path, /^\/todoist\/tasks\/filter\?query=today\+%7C\+overdue&limit=100$/);
+  await assert.rejects(run("todoist__list_tasks", { project: "../user" }), /project's id/);
+  assert.match(await run("todoist__get_task", { task: "6XGgmFVcrG5RRjVr" }), /added 2026-11-25\n\nTwo sacks/);
+
+  assert.match(await run("todoist__add_task", { name: "Call the mill", due: "2026-12-01", urgency: "urgent", labels: "shop, calls" }), /^Added \[7XGgmFVcrG5RRjVr\] Call the mill · due 2026-12-01 · urgent · shop, calls$/);
+  assert.deepEqual(seen.at(-1)!.body, { content: "Call the mill", due_date: "2026-12-01", priority: 4, labels: ["shop", "calls"] });
+  await run("todoist__add_task", { name: "Open up", due: "tomorrow at 9" });
+  assert.deepEqual(seen.at(-1)!.body, { content: "Open up", due_string: "tomorrow at 9" }, "a due day in words is passed on as words");
+  await assert.rejects(run("todoist__add_task", { name: "x", urgency: "p1" }), /choose one of: normal/);
+  await run("todoist__update_task", { task: "6XGgmFVcrG5RRjVr", urgency: "normal" });
+  assert.deepEqual([seen.at(-1)!.method, seen.at(-1)!.body], ["POST", { priority: 1 }]);
+  await assert.rejects(run("todoist__update_task", { task: "6XGgmFVcrG5RRjVr" }), /Say what to change/);
+  assert.equal(await run("todoist__complete_task", { task: "6XGgmFVcrG5RRjVr" }), "Ticked off to-do 6XGgmFVcrG5RRjVr.");
+  assert.equal(await run("todoist__reopen_task", { task: "6XGgmFVcrG5RRjVr" }), "Opened to-do 6XGgmFVcrG5RRjVr again.");
+  await run("todoist__comment_on_task", { task: "6XGgmFVcrG5RRjVr", comment: "Ordered." });
+  assert.deepEqual(seen.at(-1)!.body, { task_id: "6XGgmFVcrG5RRjVr", content: "Ordered." });
+  // Deleting asks the owner even when changes need no asking.
+  assert.equal(asks("todoist__delete_task"), true);
+  assert.equal(asks("todoist__complete_task"), false);
+  assert.equal(K.toolActionKind("todoist__delete_task"), "delete");
+});
+
+test("Jira: issues with an email and API token; text goes in and comes out of Atlassian's document format", async () => {
+  await assert.rejects(K.connectService("jira", { values: { site: "bakery", email: "not-an-email", token: "x" } }), /email you sign in/);
+  await assert.rejects(K.connectService("jira", { values: { site: "evil.example.com/x", email: "ada@example.com", token: "jira-good" } }), /Jira site/);
+  await assert.rejects(K.connectService("jira", { values: { site: "bakery", email: "ada@example.com", token: "wrong" } }), /Jira refused that/);
+  const c = await K.connectService("jira", { values: { site: "https://Bakery.atlassian.net/jira", email: "ada@example.com", token: "jira-good" }, rule: "auto" });
+  assert.equal(c.label, "Ada Baker (bakery.atlassian.net)");
+
+  assert.equal(await run("jira__list_projects"), "SHOP · Web shop");
+  const row = "SHOP-12 · Checkout fails · To Do · Bug · High · for Ada Baker · web · updated 2026-11-25";
+  assert.equal(await run("jira__find_issues", { project: "shop", words: 'pay" OR project = SECRET', mine: true, open_only: true }), row);
+  assert.deepEqual(seen.at(-1)!.body, { jql: 'project = "SHOP" AND text ~ "pay OR project = SECRET" AND assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC', maxResults: 25, fields: ["summary", "status", "assignee", "priority", "issuetype", "updated", "labels"] });
+  await assert.rejects(run("jira__find_issues", {}), /Narrow the search/);
+  await assert.rejects(run("jira__find_issues", { project: "SHOP OR 1=1" }), /project's key/);
+
+  const one = await run("jira__get_issue", { issue: "shop-12" });
+  assert.match(one, /Opened by Sam\nCan be moved to: Start work, Done\n\nCard is refused\.\nSafari\n\n2026-11-25 09:00 · Sam\nStill happening\./);
+  await assert.rejects(run("jira__get_issue", { issue: "../myself" }), /issue's key/);
+
+  assert.equal(await run("jira__create_issue", { project: "SHOP", summary: "Slow search", description: "First line\nsecond line\n\nNew paragraph", labels: "web, needs triage" }), "Opened SHOP-13: “Slow search”. https://bakery.atlassian.net/browse/SHOP-13");
+  assert.deepEqual(seen.at(-1)!.body.fields, {
+    project: { key: "SHOP" },
+    issuetype: { name: "Task" },
+    summary: "Slow search",
+    description: { version: 1, type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "First line" }, { type: "hardBreak" }, { type: "text", text: "second line" }] }, { type: "paragraph", content: [{ type: "text", text: "New paragraph" }] }] },
+    labels: ["web", "needs-triage"],
+  });
+  await assert.rejects(run("jira__create_issue", { project: "SHOP", summary: "x", type: "Epic" }), /Jira answered 400: issuetype: Specify a valid issue type/);
+  await run("jira__comment_on_issue", { issue: "SHOP-12", comment: "Fixed." });
+  assert.deepEqual(seen.at(-1)!.body, { body: { version: 1, type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Fixed." }] }] } });
+
+  assert.equal(await run("jira__move_issue", { issue: "SHOP-12", to: "in progress" }), "Moved SHOP-12 to In Progress.");
+  assert.deepEqual(seen.at(-1)!.body, { transition: { id: "21" } });
+  await assert.rejects(run("jira__move_issue", { issue: "SHOP-12", to: "Shipped" }), /cannot be moved to “Shipped”.*Start work, Done/);
+  assert.equal(await run("jira__update_issue", { issue: "SHOP-12", add_labels: "urgent", remove_labels: "web", assign_to_me: true }), "Updated SHOP-12; it is now assigned to you.");
+  assert.deepEqual(seen.at(-2)!.body, { update: { labels: [{ add: "urgent" }, { remove: "web" }] } });
+  assert.deepEqual([seen.at(-1)!.path, seen.at(-1)!.body], ["/jira/issue/SHOP-12/assignee", { accountId: "acc-1" }]);
+  await assert.rejects(run("jira__update_issue", { issue: "SHOP-12" }), /Say what to change/);
+
+  const trigger = K.services().find((s) => s.id === "jira")!.triggers![0];
+  const conn = { values: { site: "bakery", email: "ada@example.com", token: "jira-good" } } as never;
+  assert.deepEqual(await trigger.list(conn, "shop"), ["SHOP-12"]);
+  assert.equal((await trigger.describe(conn, "SHOP-12", "shop")).title, "Issue SHOP-12: Checkout fails");
 });
