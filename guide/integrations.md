@@ -102,6 +102,7 @@ These services are built into Talqava and all work the same way.
 2. Read **What agents can do**: what they can read, what they can change, and what they can delete (deleting always asks you first).
 3. Sign in:
    - **Asana, HubSpot, Typeform, Trello, Zendesk, GitLab, Xero, Todoist and ClickUp** sign in through your browser. The page shows **Sign in to** the service first. The service asks for an app registered with it; you register your own once, following the numbered steps on the page, then press the button and approve in the browser. The tab says **Connected**. For Trello you copy only its public API key; there is no token to copy.
+   - Where Talqava has its own app registered with a service, there are no steps: press the button, sign in and approve. For some of these the page says the sign-in passes through Talqava's website (auth.talqava.com). That website completes the sign-in with the service and keeps nothing; your sign-in is stored only on your computer. You can still register and use your own app instead.
    - If you would rather paste a key, open **Use a key instead** on the same page.
    - **Shopify, WooCommerce, Mailchimp, Slack, Calendly, Pipedrive, Jira, Freshdesk, Brevo, Telegram, Klaviyo and Square** connect with a key for now: follow the numbered steps, paste it, and press **Check and connect**. Each of these services either does not allow a browser sign-in that returns to an app on your own computer, or needs an app that Talqava's maker must register with them first.
    
