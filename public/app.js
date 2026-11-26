@@ -7723,6 +7723,42 @@ function attachmentsPart(page, id, col) {
     }, col);
   const words = (f) => attempt(async () => alert((await api("GET", `workspace/pages/${id}/attachments/${f.id}/words`)).words), col);
   const remove = (f) => confirm(`Remove “${f.name}” from this ${page.kind === "note" ? "note" : "document"}? The file is deleted.`) && attempt(async () => (await api("DELETE", `workspace/pages/${id}/attachments/${f.id}`), openPage(id)), col);
+  // A voice memo: recorded here with this computer's microphone and kept with the note. It is sent nowhere.
+  const recordNote = h("p", { class: "note small", hidden: true, role: "status" });
+  let recorder = null;
+  const recordButton = h("button", { class: "small", onclick: () => (recorder ? recorder.stop() : record()) }, "Record a voice memo");
+  const record = () =>
+    attempt(async () => {
+      if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw new Error("This computer or browser cannot record sound here.");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {
+        throw new Error("The microphone could not be used. Allow Talqava to use the microphone (on a Mac: System Settings › Privacy & Security › Microphone), then try again.");
+      });
+      const parts = [];
+      const started = Date.now();
+      recorder = new MediaRecorder(stream, { audioBitsPerSecond: 64000 });
+      const tick = setInterval(() => {
+        const s = Math.floor((Date.now() - started) / 1000);
+        recordNote.textContent = `Recording… ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}. Press Stop when you are done (20 minutes at most).`;
+        if (s >= 1200) recorder?.stop();
+      }, 500);
+      recorder.ondataavailable = (e) => e.data.size && parts.push(e.data);
+      recorder.onstop = () => {
+        clearInterval(tick);
+        stream.getTracks().forEach((t) => t.stop());
+        const type = (recorder.mimeType || "audio/webm").split(";")[0];
+        recorder = null;
+        recordButton.textContent = "Record a voice memo";
+        recordNote.hidden = true;
+        const ending = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
+        const now = new Date();
+        const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}.${String(now.getMinutes()).padStart(2, "0")}`;
+        if (parts.length) add([new File(parts, `Voice memo ${stamp}.${ending}`, { type })]);
+      };
+      recorder.start(1000);
+      recordButton.textContent = "Stop recording";
+      recordNote.hidden = false;
+      recordNote.textContent = "Recording…";
+    }, col);
   const zone = h(
     "div",
     {
@@ -7735,7 +7771,7 @@ function attachmentsPart(page, id, col) {
       h(
         "div",
         { class: "attached" },
-        f.picture ? h("a", { href: at(f), target: "_blank", rel: "noopener" }, h("img", { class: "fthumb", src: at(f), alt: f.name, loading: "lazy" })) : null,
+        f.picture ? h("button", { class: "plain", title: "Show it larger", onclick: (e) => e.currentTarget.closest(".attached").querySelector(".attachbig").toggleAttribute("hidden") }, h("img", { class: "fthumb", src: at(f), alt: f.name, loading: "lazy" })) : null,
         h("div", { class: "grow" }, h("a", { href: at(f, "?download=1"), download: f.name }, f.name), h("div", { class: "note small" }, size(f.size), f.words ? ` · ${f.words} words found` : "")),
         h(
           "div",
@@ -7744,11 +7780,14 @@ function attachmentsPart(page, id, col) {
           f.words ? h("button", { class: "plain link", onclick: () => words(f) }, "Show words") : null,
           h("button", { class: "plain link", onclick: () => remove(f) }, "Remove"),
         ),
+        f.picture ? h("img", { class: "attachbig", hidden: true, src: at(f), alt: f.name, loading: "lazy" }) : null,
+        /^(webm|m4a|mp3|wav|ogg|mp4)$/.test(f.type) && /^voice memo/i.test(f.name) ? h("audio", { class: "attachbig", controls: true, preload: "none", src: at(f) }) : null,
       ),
     ),
-    h("button", { class: "small", onclick: () => picker.click() }, "Attach a photo or file"),
+    h("div", { class: "row wrap" }, h("button", { class: "small", onclick: () => picker.click() }, "Attach a photo or file"), recordButton),
+    recordNote,
     picker,
-    h("p", { class: "note small" }, "Or drop files here. Up to 15 MB each. Attachments stay with you: agents are not given them."),
+    h("p", { class: "note small" }, "Or drop files here. Up to 15 MB each. Attachments stay with you: agents are not given them. A voice memo is kept as sound; it is not written out or sent anywhere."),
   );
   return [h("div", { class: "label" }, `Attachments${files.length ? ` · ${files.length}` : ""}`), zone];
 }

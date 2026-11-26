@@ -118,8 +118,15 @@ To have an agent draft slides, use **Or ask an agent to draft them** on the Slid
 ### Attach a photo or file to a note or document
 
 1. Open the note. In the panel, under **Attachments**, press **Attach a photo or file**, or drop files onto that box. Each file can be up to 15 MB.
-2. A picture shows as a small preview. Click a file's name to download it. **Remove** deletes it.
+2. A picture shows as a small preview; click it to see it larger. Click a file's name to download it. **Remove** deletes it.
 3. To find a note by the words in a photo (a receipt, a whiteboard, a business card), press **Read the words** beside the picture and confirm. The picture is sent to your team's AI model once, which writes out the words it sees. From then on, searching Notes for any of those words finds the note. **Show words** shows what was found.
+
+### Record a voice memo in a note
+
+1. Open the note. Under **Attachments**, press **Record a voice memo**. The first time, your computer asks whether Talqava may use the microphone; allow it.
+2. Speak, then press **Stop recording** (20 minutes at most). The memo is attached to the note with the date and time in its name, and a player to listen to it.
+
+A voice memo is kept as sound on this computer. Talqava does not write it out as text yet, and it is not sent to any AI service. If recording does not start on a Mac, open **System Settings › Privacy & Security › Microphone** and switch Talqava on.
 
 Reading the words needs a Claude model as your team's model, and the note's sensitivity level must be one your rules let that AI service receive. Attachments stay with you: agents are not given them, even on a note you share.
 

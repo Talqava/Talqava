@@ -1693,7 +1693,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
             throw new HttpError(404, (err as Error).message);
           }
         })();
-        const VIEW: Record<string, string> = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", txt: "text/plain; charset=utf-8", md: "text/plain; charset=utf-8", csv: "text/plain; charset=utf-8" };
+        const VIEW: Record<string, string> = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", txt: "text/plain; charset=utf-8", md: "text/plain; charset=utf-8", csv: "text/plain; charset=utf-8", webm: "audio/webm", m4a: "audio/mp4", mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg" };
         const type = VIEW[file.type] ?? "application/octet-stream";
         // Anything that could run code is downloaded, never shown; what is shown is kept in a sandbox.
         res.writeHead(200, {
@@ -1702,7 +1702,8 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
           "content-disposition": `${type === "application/octet-stream" || url.searchParams.get("download") === "1" ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
           "cache-control": "no-store",
           "x-content-type-options": "nosniff",
-          "content-security-policy": file.type === "pdf" ? "frame-ancestors 'self'" : "sandbox; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; frame-ancestors 'self'",
+          "content-security-policy": file.type === "pdf" ? "frame-ancestors 'self'" : "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'self'",
+          "accept-ranges": "none",
         });
         return res.end(data);
       }
