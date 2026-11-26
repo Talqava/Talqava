@@ -59,6 +59,14 @@ export const woocommerce: ServiceDef = {
     }
     return { label: url.host + (clean.endsWith(url.host) ? "" : url.pathname.replace(/\/+$/, "")), values: { url: clean, via } };
   },
+  triggers: [
+    {
+      name: "new_order",
+      summary: "A new order comes in",
+      list: async (c) => (await woo<any[]>(c, `/orders${query({ per_page: 25, orderby: "date", order: "desc" })}`)).map((o) => String(o.id)),
+      describe: async (c, id) => ({ title: `Order ${id}`, text: await woocommerce.actions.find((a) => a.name === "get_order")!.run(c as Connection, { id }) }),
+    },
+  ],
   actions: [
     {
       name: "list_orders",

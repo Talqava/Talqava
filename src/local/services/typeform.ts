@@ -20,6 +20,14 @@ const answerText = (a: any): string => {
   return plain(v.label ?? v.other ?? JSON.stringify(v), 1000);
 };
 
+/** Responses in words: each with when it was sent and every question beside its answer. */
+function answersText(form: { fields?: any[] }, items: any[]): string {
+  const titles = new Map<string, string>();
+  const walk = (fields: any[] = []) => fields.forEach((f) => (titles.set(f.id, plain(f.title, 200)), walk(f.properties?.fields)));
+  walk(form.fields);
+  return items.map((it) => `Sent ${String(it.submitted_at ?? "").slice(0, 16).replace("T", " ")}\n${(it.answers ?? []).map((a: any) => `- ${titles.get(a.field?.id) ?? "Question"}: ${answerText(a)}`).join("\n")}`).join("\n\n");
+}
+
 export const typeform: ServiceDef = {
   id: "typeform",
   name: "Typeform",
@@ -46,6 +54,18 @@ export const typeform: ServiceDef = {
     }
     throw last;
   },
+  triggers: [
+    {
+      name: "new_answer",
+      summary: "Someone sends in a form",
+      param: { label: "Which form (its number, from the form's address)", placeholder: "abc123", required: true },
+      list: async (c, form) => (await api<{ items: any[] }>(c, `/forms/${formId(form)}/responses${query({ page_size: 25 })}`)).items.map((it) => String(it.response_id ?? it.token)),
+      async describe(c, id, form) {
+        const [def, r] = await Promise.all([api<{ title: string; fields?: any[] }>(c, `/forms/${formId(form)}`), api<{ items: any[] }>(c, `/forms/${formId(form)}/responses${query({ included_response_ids: id })}`)]);
+        return { title: `${plain(def.title, 100)}: a new answer`, text: answersText(def, r.items) };
+      },
+    },
+  ],
   actions: [
     {
       name: "list_forms",
@@ -72,11 +92,8 @@ export const typeform: ServiceDef = {
           api<{ title: string; fields?: any[] }>(c, `/forms/${id}`),
           api<{ total_items: number; items: any[] }>(c, `/forms/${id}/responses${query({ page_size: count(input.limit, 20, 100), since: input.since ? day(input.since) : undefined, until: input.until ? day(input.until, true) : undefined, query: input.words })}`),
         ]);
-        const titles = new Map<string, string>();
-        const walk = (fields: any[] = []) => fields.forEach((f) => (titles.set(f.id, plain(f.title, 200)), walk(f.properties?.fields)));
-        walk(form.fields);
         if (!r.items.length) return `No responses to “${plain(form.title, 160)}” in that period.`;
-        return `${plain(form.title, 160)}: ${r.total_items} response${r.total_items === 1 ? "" : "s"} in all, showing ${r.items.length}.\n\n${r.items.map((it) => `Sent ${String(it.submitted_at ?? "").slice(0, 16).replace("T", " ")}\n${(it.answers ?? []).map((a: any) => `- ${titles.get(a.field?.id) ?? "Question"}: ${answerText(a)}`).join("\n")}`).join("\n\n")}`;
+        return `${plain(form.title, 160)}: ${r.total_items} response${r.total_items === 1 ? "" : "s"} in all, showing ${r.items.length}.\n\n${answersText(form, r.items)}`;
       },
     },
   ],

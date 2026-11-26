@@ -3906,6 +3906,70 @@ async function servicePage(col, again, id) {
     KINDS.filter(([k]) => svc.actions.some((a) => a.kind === k)).map(([k, words]) => h("div", {}, h("div", { class: "label" }, words), h("ul", {}, svc.actions.filter((a) => a.kind === k).map((a) => h("li", {}, a.summary))))),
     h("p", { class: "note small" }, "Only agents with the “connected services” power can use it. You choose below whether they only read, ask before each change, or change things without asking."),
   );
+  const org = activeOrg();
+  const patch = (c, change, done = "Saved.") => act(() => api("PATCH", `integrations/services/connections/${c.id}`, change), done);
+  // Which agents may use the account: everyone with the power, or only the ones ticked.
+  const whoMay = (c) => {
+    if (!org?.members?.length) return null;
+    const chosen = new Set(c.agents ?? []);
+    const boxes = org.members.map((m) => h("label", { class: "check" }, h("input", { type: "checkbox", checked: chosen.has(m.bot), onchange: (e) => (e.target.checked ? chosen.add(m.bot) : chosen.delete(m.bot), patch(c, { agents: [...chosen] })) }), " ", m.title));
+    return h("details", { class: "onthis", open: chosen.size > 0 }, h("summary", {}, h("b", {}, "Which agents may use it"), h("span", { class: "note small" }, chosen.size ? `${chosen.size} chosen` : "Every agent with the “connected services” power")), h("div", { class: "body" }, h("p", { class: "note small" }, "Tick agents to limit this account to them. With none ticked, every agent with the power may use it."), h("div", { class: "checks" }, boxes)));
+  };
+  // Single actions the owner can switch off for the account.
+  const actionSwitches = (c) => {
+    const off = new Set(c.off ?? []);
+    const boxes = svc.actions.map((a) => h("label", { class: "check" }, h("input", { type: "checkbox", checked: !off.has(a.name), onchange: (e) => (e.target.checked ? off.delete(a.name) : off.add(a.name), patch(c, { off: [...off] })) }), " ", a.summary));
+    return h("details", { class: "onthis", open: off.size > 0 }, h("summary", {}, h("b", {}, "Which actions are on"), h("span", { class: "note small" }, off.size ? `${off.size} switched off` : "All of them")), h("div", { class: "body" }, h("div", { class: "checks" }, boxes)));
+  };
+  // Events: when something happens on the account, an agent gets a task.
+  const eventsBox = (c) => {
+    if (!svc.triggers.length) return null;
+    const mine = svc.watches.filter((w) => w.connection === c.id);
+    const name = (bot) => org?.members?.find((m) => m.bot === bot)?.title ?? "an agent no longer on the chart";
+    const rows = mine.map((w) => {
+      const t = svc.triggers.find((x) => x.name === w.trigger);
+      return h(
+        "div",
+        { class: "reviewline" },
+        h("div", { class: "grow" }, h("b", {}, `${t?.summary ?? w.trigger}${w.param ? ` (${w.param})` : ""}`), h("div", { class: "note small" }, `${name(w.bot)}: ${w.instructions}`), w.last?.problem ? h("div", { class: "note small bad" }, `Last look failed: ${w.last.problem}`) : w.last ? h("div", { class: "note small" }, `Last looked ${new Date(w.last.at).toLocaleString()}`) : null),
+        h("button", { class: "small", onclick: () => act(() => api("PATCH", `integrations/services/watches/${w.id}`, { on: !w.on }), w.on ? "Paused." : "Watching again.") }, w.on ? "Pause" : "Resume"),
+        h("button", { class: "small danger", onclick: () => confirm("Stop starting tasks for this?") && act(() => api("DELETE", `integrations/services/watches/${w.id}`), "Removed.") }, "Remove"),
+      );
+    });
+    if (!org?.members?.length) return h("details", { class: "onthis" }, h("summary", {}, h("b", {}, "When something happens")), h("div", { class: "body" }, h("p", { class: "note small" }, "Add agents under Organization to have one handle new orders, emails or answers as they arrive.")));
+    const trig = h("select", { "aria-label": "Event" }, svc.triggers.map((t) => h("option", { value: t.name }, t.summary)));
+    const param = h("input", { "aria-label": "Which one" });
+    const paramRow = h("label", {}, "", param);
+    const showParam = () => {
+      const t = svc.triggers.find((x) => x.name === trig.value);
+      paramRow.hidden = !t?.param;
+      paramRow.firstChild.textContent = t?.param?.label ?? "";
+      param.placeholder = t?.param?.placeholder ?? "";
+    };
+    trig.addEventListener("change", showParam);
+    showParam();
+    const who = h("select", { "aria-label": "Agent" }, org.members.map((m) => h("option", { value: m.bot }, m.title)));
+    const what = h("textarea", { rows: 2, placeholder: "What the agent should do each time, e.g. Check the order is complete, add it to the Orders sheet, and draft a thank-you email.", "aria-label": "What the agent should do" });
+    return h(
+      "details",
+      { class: "onthis", open: mine.length > 0 },
+      h("summary", {}, h("b", {}, "When something happens"), h("span", { class: "note small" }, mine.length ? `${mine.length} set up` : "Start a task when something new arrives")),
+      h(
+        "div",
+        { class: "body" },
+        rows,
+        h(
+          "form",
+          { class: "form", onsubmit: (e) => (e.preventDefault(), act(() => api("POST", "integrations/services/watches", { connection: c.id, trigger: trig.value, param: param.value, bot: who.value, instructions: what.value }), "Set up. Talqava looks every five minutes; only things that happen from now on start a task.")) },
+          h("div", { class: "row wrap" }, h("span", {}, "When"), trig, h("span", {}, "give a task to"), who),
+          paramRow,
+          what,
+          h("p", { class: "note small" }, "Each task costs what the AI model charges, and at most five start at a time. What the service sends is treated as information, never as instructions to the agent."),
+          h("div", {}, h("button", { class: "primary" }, "Start watching")),
+        ),
+      ),
+    );
+  };
   const card = (c) => {
     const rule = h(
       "select",
@@ -3918,6 +3982,9 @@ async function servicePage(col, again, id) {
       h("div", { class: "row" }, h("div", { class: "grow" }, h("b", {}, c.label), h("div", { class: "note small" }, `Connected ${new Date(c.addedAt).toLocaleDateString()}`)), h("span", { class: `chip ${c.problem ? "bad" : "on"}` }, c.problem ? "Needs attention" : "Connected")),
       c.problem ? h("div", { class: "banner error" }, `${c.problem} Make a new key and connect again below; the account keeps its settings.`) : null,
       h("label", {}, "What agents may do with this account", rule),
+      whoMay(c),
+      actionSwitches(c),
+      eventsBox(c),
       h("p", { class: "note small" }, c.checkedAt ? `Last checked ${new Date(c.checkedAt).toLocaleString()}. Talqava checks every few hours that the key still works. ` : "", h("button", { type: "button", class: "plain link", onclick: () => act(() => api("POST", "integrations/services/check"), "Checked.") }, "Check now")),
       h("div", { class: "row" }, h("button", { class: "plain danger", onclick: () => confirm(`Disconnect ${svc.name} (${c.label})? Agents can no longer use it, and its key is forgotten. Nothing in ${svc.name} is changed.`) && act(() => api("DELETE", `integrations/services/connections/${c.id}`), "Disconnected.") }, "Disconnect")),
     );

@@ -12,6 +12,7 @@ let K: typeof import("../../src/local/connector-kit.ts");
 let server: http.Server;
 let url = "";
 const seen: { method: string; path: string; auth: string; body: any }[] = [];
+const orders: any[] = [{ id: 70, number: "70", status: "processing", date_created: "2026-11-25T10:00:00", total: "19.50", currency: "USD", billing: { first_name: "Sam", last_name: "Lee" } }];
 const tokens = { life: 3600, n: 1, revoked: false };
 const state = { asanaDown: false, tasks: [{ gid: "11", name: "Order flour", completed: false, due_on: "2026-12-01" }] as any[], slackPosts: [] as any[], products: new Map<number, any>([[5, { id: 5, name: "Rye loaf", status: "publish", sku: "RYE", price: "6.50", regular_price: "6.50", sale_price: "", stock_quantity: 4 }]]), dropHeader: false };
 
@@ -60,7 +61,9 @@ before(async () => {
         if (!(byAddress || (auth === good && !state.dropHeader))) return json(401, { code: "woocommerce_rest_cannot_view", message: "Sorry, you cannot list resources." });
         const p = u.pathname.slice("/wp-json/wc/v3".length);
         if (p === "/data/currencies/current") return json(200, { code: "USD" });
-        if (p === "/orders") return json(200, [{ id: 70, number: "70", status: "processing", date_created: "2026-11-25T10:00:00", total: "19.50", currency: "USD", billing: { first_name: "Sam", last_name: "Lee" } }]);
+        if (p === "/orders") return json(200, [...orders].reverse());
+        const one = /^\/orders\/(\d+)(\/notes)?$/.exec(p);
+        if (one) return json(200, one[2] ? [] : orders.find((o) => o.id === Number(one[1])));
         if (p === "/products/5" && req.method === "PUT") return (Object.assign(state.products.get(5), body, body.regular_price ? { price: body.regular_price } : {}), json(200, state.products.get(5)));
         if (p === "/products") return json(200, [...state.products.values()]);
         return json(404, { message: "No route" });
@@ -213,4 +216,46 @@ test("a browser sign-in: the code is exchanged once, the account is checked, and
   await assert.rejects(run("standin__whoami"), /no longer accepted\. Sign in again/);
   assert.match(K.connectionProblems()[0].problem, /Sign in again/);
   K.removeConnection(c.id);
+});
+
+test("an account can be limited to chosen agents, single actions switched off, and an event starts a task once", async () => {
+  state.dropHeader = false;
+  const c = await K.connectService("woocommerce", { values: { url, key: "ck_good", secret: "cs_good" }, rule: "auto" });
+  // Agents: with none chosen everyone with the power may use it; with some chosen, only they (and the owner's assistant).
+  assert.ok(K.serviceTools("baker").some((t) => t.name === "woocommerce__list_orders"));
+  K.updateConnection(c.id, { agents: ["cashier"] });
+  assert.equal(K.serviceTools("baker").length, 0);
+  assert.deepEqual(K.serviceNotes("baker"), []);
+  assert.ok(K.serviceTools("cashier").some((t) => t.name === "woocommerce__list_orders"));
+  assert.ok(K.serviceTools().some((t) => t.name === "woocommerce__list_orders"), "the owner's own assistant always may");
+  K.updateConnection(c.id, { agents: [] });
+  // Actions: one switched off is not offered; names that are not actions are ignored.
+  K.updateConnection(c.id, { off: ["update_product", "made_up"] });
+  assert.equal(K.serviceTools().some((t) => t.name === "woocommerce__update_product"), false);
+  assert.ok(K.serviceTools().some((t) => t.name === "woocommerce__update_order_status"));
+  assert.throws(() => K.updateConnection(c.id, {}), /Choose what agents may do/);
+
+  // Events: what is already there starts nothing; a new order starts one task, once.
+  await assert.rejects(K.addWatch({ connection: c.id, trigger: "new_order", bot: "cashier", org: "o1", instructions: "" }), /what the agent should do/);
+  await assert.rejects(K.addWatch({ connection: c.id, trigger: "nothing", bot: "cashier", org: "o1", instructions: "x" }), /no such event/);
+  const w = await K.addWatch({ connection: c.id, trigger: "new_order", bot: "cashier", org: "o1", instructions: "Check the order and thank the customer." });
+  assert.equal("seen" in w, false);
+  const started: any[] = [];
+  assert.equal(await K.pollWatches((h) => started.push(h)), 0, "the order that was already there is not news");
+  orders.push({ id: 71, number: "71", status: "processing", date_created: "2026-11-26T09:00:00", total: "8.00", currency: "USD", billing: { first_name: "Kim", last_name: "Roe", email: "kim@example.com" }, line_items: [{ quantity: 2, name: "Rye loaf", total: "8.00" }] });
+  assert.equal(await K.pollWatches((h) => started.push(h)), 1);
+  assert.equal(started[0].title, "Order 71");
+  assert.equal(started[0].service, "WooCommerce");
+  assert.equal(started[0].event, "A new order comes in");
+  assert.match(started[0].text, /\[71\] #71 · processing[\s\S]*2 × Rye loaf/);
+  assert.equal(started[0].watch.instructions, "Check the order and thank the customer.");
+  assert.equal(await K.pollWatches((h) => started.push(h)), 0, "the same order never starts a second task");
+  K.setWatch(w.id, { on: false });
+  orders.push({ id: 72, number: "72", status: "pending", total: "1.00", billing: {} });
+  assert.equal(await K.pollWatches((h) => started.push(h)), 0, "a paused watch starts nothing");
+  const shown = K.listServices().find((s) => s.id === "woocommerce")!;
+  assert.deepEqual(shown.triggers.map((t) => t.summary), ["A new order comes in"]);
+  assert.equal(shown.watches.length, 1);
+  K.removeConnection(c.id);
+  assert.equal(K.watches().length, 0, "disconnecting removes its events");
 });

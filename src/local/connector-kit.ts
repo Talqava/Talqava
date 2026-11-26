@@ -44,6 +44,40 @@ export interface Connection {
   /** Set when the last check found the connection no longer works: why, in plain words. */
   problem?: string;
   checkedAt?: string;
+  /** The agents that may use this account, by their ids. Empty or missing: every agent with the connected services power. */
+  agents?: string[];
+  /** Actions the owner switched off for this account, by name. */
+  off?: string[];
+}
+
+/** Something that can happen in a service and start a task: a new order, a new email, a new form answer. */
+export interface TriggerDef {
+  name: string;
+  /** For the owner: "A new order comes in". */
+  summary: string;
+  /** One thing the owner may have to say, such as which form. */
+  param?: { label: string; placeholder?: string; required?: boolean };
+  /** The newest things, as ids. Anything not seen before counts as new. */
+  list(connection: Connection, param: string): Promise<string[]>;
+  /** One of them in words, for the agent that will handle it. */
+  describe(connection: Connection, id: string, param: string): Promise<{ title: string; text: string }>;
+}
+
+/** A standing instruction: when this happens on that account, this agent gets a task. */
+export interface Watch {
+  id: string;
+  connection: string;
+  trigger: string;
+  param: string;
+  /** The agent that gets the task, and the organization it belongs to. */
+  bot: string;
+  org: string;
+  /** What the agent should do each time, in the owner's words. */
+  instructions: string;
+  on: boolean;
+  seen: string[];
+  addedAt: string;
+  last?: { at: string; started: number; problem?: string };
 }
 
 export interface ActionDef {
@@ -90,6 +124,7 @@ export interface ServiceDef {
   /** Checks the sign-in with the service. Returns the account's name, and any values worked out from the answer. */
   check(values: Record<string, string>): Promise<{ label: string; values?: Record<string, string> }>;
   actions: ActionDef[];
+  triggers?: TriggerDef[];
 }
 
 const registry: ServiceDef[] = [];
@@ -129,6 +164,8 @@ export function listServices() {
     docs: d.docs,
     fields: d.fields,
     browser: d.browser ? { secret: d.browser.secret, appSteps: d.browser.appSteps, scopes: d.browser.scopes } : null,
+    triggers: (d.triggers ?? []).map((t) => ({ name: t.name, summary: t.summary, param: t.param ?? null })),
+    watches: watches().filter((w) => all.some((c) => c.id === w.connection && c.service === d.id)).map(({ seen: _s, ...w }) => w),
     actions: d.actions.map((a) => ({ name: a.name, kind: a.kind, summary: a.alwaysAsk ? `${a.summary} (always asks you first)` : a.summary })),
     connections: all.filter((c) => c.service === d.id).map(view),
   }));
@@ -165,14 +202,29 @@ export async function connectService(id: string, input: { values?: unknown; rule
 }
 
 /** Changes what agents may do through a connection. */
-export function updateConnection(connectionId: string, input: { rule?: unknown }): PublicConnection {
+export function updateConnection(connectionId: string, input: { rule?: unknown; agents?: unknown; off?: unknown }): PublicConnection {
   const all = saved();
   const c = all.find((x) => x.id === connectionId);
   if (!c) throw new Error("There is no such connection.");
-  if (!CHANGE_RULES.includes(input.rule as ChangeRule)) throw new Error("Choose what agents may do.");
-  c.rule = input.rule as ChangeRule;
+  const def = serviceOf(c.service);
+  const names = (v: unknown, most: number) => [...new Set((Array.isArray(v) ? v : []).map((x) => String(x).slice(0, 100)).filter(Boolean))].slice(0, most);
+  const said: string[] = [];
+  if (input.rule !== undefined) {
+    if (!CHANGE_RULES.includes(input.rule as ChangeRule)) throw new Error("Choose what agents may do.");
+    c.rule = input.rule as ChangeRule;
+    said.push(CHANGE_WORDS[c.rule]);
+  }
+  if (input.agents !== undefined) {
+    c.agents = names(input.agents, 200);
+    said.push(c.agents.length ? `only ${c.agents.length} chosen agent${c.agents.length === 1 ? "" : "s"} may use it` : "every agent with the power may use it");
+  }
+  if (input.off !== undefined) {
+    c.off = names(input.off, 100).filter((n) => def.actions.some((a) => a.name === n));
+    said.push(c.off.length ? `switched off: ${c.off.map((n) => def.actions.find((a) => a.name === n)!.summary.toLowerCase()).join("; ")}` : "every action is on");
+  }
+  if (!said.length) throw new Error("Choose what agents may do.");
   store(all);
-  audit({ actor: "owner", actorName: "You", kind: "integration", action: `Changed what agents may do with ${serviceOf(c.service).name}`, detail: `${c.label}: ${CHANGE_WORDS[c.rule]}` });
+  audit({ actor: "owner", actorName: "You", kind: "integration", action: `Changed what agents may do with ${def.name}`, detail: `${c.label}: ${said.join("; ")}` });
   return view(c);
 }
 
@@ -182,6 +234,7 @@ export function removeConnection(connectionId: string): { ok: true } {
   const c = all.find((x) => x.id === connectionId);
   if (!c) throw new Error("There is no such connection.");
   store(all.filter((x) => x.id !== connectionId));
+  saveConfig({ watches: watches().filter((w) => w.connection !== connectionId) });
   audit({ actor: "owner", actorName: "You", kind: "integration", action: `Disconnected ${serviceOf(c.service).name}`, detail: c.label });
   return { ok: true };
 }
@@ -222,8 +275,10 @@ export function connectionProblems(): { id: string; name: string; problem: strin
     .map((c) => ({ id: `connection:${c.id}`, name: `${serviceOf(c.service).name} (${c.label})`, problem: c.problem!, integration: `service:${c.service}` }));
 }
 
-const which = (service: string, account: unknown): Connection => {
-  const mine = saved().filter((c) => c.service === service);
+/** Whether an agent may use a connection. The owner's own assistant (no agent id) always may. */
+const allowed = (c: Connection, agent?: string) => !agent || !c.agents?.length || c.agents.includes(agent);
+const which = (service: string, account: unknown, agent?: string): Connection => {
+  const mine = saved().filter((c) => c.service === service && allowed(c, agent));
   if (!mine.length) throw new Error(`${serviceOf(service).name} is not connected. The owner connects it under Integrations.`);
   const want = String(account ?? "").trim().toLowerCase();
   const found = want ? mine.find((c) => c.id === want || c.label.toLowerCase() === want) : mine.length === 1 ? mine[0] : undefined;
@@ -232,8 +287,8 @@ const which = (service: string, account: unknown): Connection => {
 };
 
 /** The tools agents get: one per action of each connected service, asking first where the owner's rule says so. */
-export function serviceTools(): Tool[] {
-  const all = saved();
+export function serviceTools(agent?: string): Tool[] {
+  const all = saved().filter((c) => allowed(c, agent));
   const tools: Tool[] = [];
   for (const def of registry) {
     const mine = all.filter((c) => c.service === def.id);
@@ -242,6 +297,8 @@ export function serviceTools(): Tool[] {
     for (const action of def.actions) {
       // Where every account is read-only, tools that change things are not offered at all.
       if (action.kind !== "read" && mine.every((c) => c.rule === "read")) continue;
+      // An action the owner switched off on every account is not offered either.
+      if (mine.every((c) => c.off?.includes(action.name))) continue;
       tools.push(
         defineTool<Record<string, any>>({
           name: `${def.id}__${action.name}`,
@@ -252,13 +309,14 @@ export function serviceTools(): Tool[] {
             if (action.kind === "read") return false;
             if (action.kind === "destructive" || action.alwaysAsk) return true;
             try {
-              return which(def.id, input.account).rule !== "auto";
+              return which(def.id, input.account, agent).rule !== "auto";
             } catch {
               return true;
             }
           },
           async run(input) {
-            const connection = await fresh(which(def.id, input.account));
+            const connection = await fresh(which(def.id, input.account, agent));
+            if (connection.off?.includes(action.name)) throw new Error(`On ${def.name} (${connection.label}) the owner switched this off: ${action.summary.toLowerCase()}. Say in your report what you would have done.`);
             if (action.kind !== "read" && connection.rule === "read") throw new Error(`On ${def.name} (${connection.label}) the owner lets agents read only. Say in your report what you would change, and leave it to them.`);
             let out: string;
             try {
@@ -281,8 +339,8 @@ export function serviceTools(): Tool[] {
 }
 
 /** A line for the agent's instructions naming the connected services, so it knows the tools are there. */
-export function serviceNotes(): string[] {
-  const all = saved();
+export function serviceNotes(agent?: string): string[] {
+  const all = saved().filter((c) => allowed(c, agent));
   return registry.filter((d) => all.some((c) => c.service === d.id)).map((d) => `${d.name} is connected (${all.filter((c) => c.service === d.id).map((c) => c.label).join(", ")}): its tools start with ${d.id}__.`);
 }
 
@@ -448,4 +506,96 @@ async function fresh(c: Connection): Promise<Connection> {
   })().finally(() => renewing.delete(c.id));
   renewing.set(c.id, work);
   return work;
+}
+
+
+// ---------- events that start tasks ----------
+// A desktop app has no public address for a service to call, so Talqava looks instead: every few minutes it asks each
+// watched account for its newest things and starts a task for whatever it has not seen before.
+export const watches = (): Watch[] => getConfig().watches ?? [];
+const triggerOf = (c: Connection, name: string): TriggerDef => {
+  const t = serviceOf(c.service).triggers?.find((x) => x.name === name);
+  if (!t) throw new Error("That service has no such event.");
+  return t;
+};
+
+/** Starts watching. What is already there is noted first, so only things that happen from now on start a task. */
+export async function addWatch(input: { connection?: unknown; trigger?: unknown; param?: unknown; bot?: unknown; org?: unknown; instructions?: unknown }): Promise<Omit<Watch, "seen">> {
+  const c = saved().find((x) => x.id === String(input.connection ?? ""));
+  if (!c) throw new Error("There is no such connection.");
+  const trigger = triggerOf(c, String(input.trigger ?? ""));
+  const param = String(input.param ?? "").trim().slice(0, 300);
+  if (trigger.param?.required && !param) throw new Error(`Fill in: ${trigger.param.label}.`);
+  const bot = String(input.bot ?? "").trim();
+  const org = String(input.org ?? "").trim();
+  if (!bot || !org) throw new Error("Choose the agent that handles it.");
+  const instructions = String(input.instructions ?? "").trim().slice(0, 4000);
+  if (!instructions) throw new Error("Say what the agent should do each time.");
+  if (watches().length >= 50) throw new Error("There are already 50 of these. Remove one first.");
+  const seen = (await trigger.list(await fresh(c), param)).slice(0, 500);
+  const watch: Watch = { id: crypto.randomBytes(5).toString("hex"), connection: c.id, trigger: trigger.name, param, bot, org, instructions, on: true, seen, addedAt: new Date().toISOString() };
+  saveConfig({ watches: [...watches(), watch] });
+  audit({ actor: "owner", actorName: "You", kind: "integration", action: `Set up a task for when something happens in ${serviceOf(c.service).name}`, detail: `${c.label}: ${trigger.summary}` });
+  const { seen: _s, ...shown } = watch;
+  return shown;
+}
+export function setWatch(id: string, input: { on?: unknown }): { ok: true } {
+  const all = watches();
+  const w = all.find((x) => x.id === id);
+  if (!w) throw new Error("There is no such event.");
+  w.on = input.on === true;
+  saveConfig({ watches: all });
+  return { ok: true };
+}
+export function removeWatch(id: string): { ok: true } {
+  if (!watches().some((x) => x.id === id)) throw new Error("There is no such event.");
+  saveConfig({ watches: watches().filter((x) => x.id !== id) });
+  return { ok: true };
+}
+
+/** What a watch found, handed to whoever starts the task. `text` came from outside and is information, never instructions. */
+export interface Happening {
+  watch: Watch;
+  service: string;
+  account: string;
+  event: string;
+  title: string;
+  text: string;
+}
+let looking = false;
+/** Looks at every watched account once and hands each new thing to `start`. At most five tasks a watch each time. */
+export async function pollWatches(start: (h: Happening) => void): Promise<number> {
+  if (looking) return 0;
+  looking = true;
+  let started = 0;
+  try {
+    for (const w of watches().filter((x) => x.on)) {
+      const c = saved().find((x) => x.id === w.connection);
+      if (!c || c.problem) continue;
+      const result: Watch["last"] = { at: new Date().toISOString(), started: 0 };
+      let seen = w.seen;
+      try {
+        const def = serviceOf(c.service);
+        const trigger = triggerOf(c, w.trigger);
+        const live = await fresh(c);
+        const ids = await trigger.list(live, w.param);
+        const fresh_ = ids.filter((id) => !w.seen.includes(id));
+        // Oldest first, and no more than five at once: a sudden flood is spread over the next looks.
+        for (const id of fresh_.reverse().slice(0, 5)) {
+          const what = await trigger.describe(live, id, w.param);
+          start({ watch: w, service: def.name, account: c.label, event: trigger.summary, title: what.title.replace(/\s+/g, " ").slice(0, 140), text: what.text.slice(0, 20_000) });
+          seen = [id, ...seen];
+          result.started++;
+          started++;
+        }
+        seen = seen.slice(0, 500);
+      } catch (err) {
+        result.problem = (err as Error).message.slice(0, 300);
+      }
+      saveConfig({ watches: watches().map((x) => (x.id === w.id ? { ...x, seen, last: result } : x)) });
+    }
+  } finally {
+    looking = false;
+  }
+  return started;
 }

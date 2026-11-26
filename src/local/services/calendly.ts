@@ -28,6 +28,17 @@ export const calendly: ServiceDef = {
     const me = (await api<{ resource: { uri: string; name: string; email: string } }>({ values }, "/users/me")).resource;
     return { label: me.email ? `${me.name} (${me.email})` : me.name, values: { user: me.uri } };
   },
+  triggers: [
+    {
+      name: "new_booking",
+      summary: "Someone books a meeting",
+      list: async (c) => (await api<{ collection: any[] }>(c, `/scheduled_events${query({ user: c.values.user, status: "active", min_start_time: new Date().toISOString(), sort: "start_time:asc", count: 100 })}`)).collection.map((e) => String(e.uri).split("/").pop()!),
+      async describe(c, meeting) {
+        const text = await calendly.actions.find((a) => a.name === "get_meeting")!.run(c as Connection, { meeting });
+        return { title: `Booking: ${text.split(" · ")[0]}`, text };
+      },
+    },
+  ],
   actions: [
     {
       name: "list_meetings",

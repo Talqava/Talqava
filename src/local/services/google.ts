@@ -63,6 +63,18 @@ export const gmail: ServiceDef = {
   fields: [],
   browser: signIn("Gmail API", ["gmail.readonly", "gmail.compose"]),
   check: whoAmI,
+  triggers: [
+    {
+      name: "new_email",
+      summary: "A new email arrives",
+      param: { label: "Only emails matching (Gmail search words; leave empty for everything in the inbox)", placeholder: "from:orders@example.com" },
+      list: async (c, words) => ((await gmail_<{ messages?: { id: string }[] }>(c, `/messages${query({ q: words ? `in:inbox ${words.slice(0, 400)}` : "in:inbox", maxResults: 25 })}`)).messages ?? []).map((m) => m.id),
+      async describe(c, mail) {
+        const text = await gmail.actions.find((a) => a.name === "read")!.run(c as Connection, { email: mail });
+        return { title: `Email: ${/^Subject: (.*)$/m.exec(text)?.[1] ?? "(no subject)"}`, text: `Email number ${mail}\n${text}` };
+      },
+    },
+  ],
   actions: [
     {
       name: "search",

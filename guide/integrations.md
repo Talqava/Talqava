@@ -121,6 +121,25 @@ Talqava checks every few hours that each key still works. If a service stops acc
 
 You can connect more than one account of a service. To disconnect, press **Disconnect** on the account; its key is forgotten and nothing in the service is changed.
 
+### Choose which agents may use an account, and which actions are on
+
+On a connected account of a built-in service:
+
+- **Which agents may use it:** tick agents to limit the account to them. With none ticked, every agent with the "connected services" power may use it.
+- **Which actions are on:** untick an action to switch it off for that account, for example changing prices. Agents are then not offered it.
+
+### Start a task when something happens (a new order, email, booking or form answer)
+
+1. Open the service under **Integrations** and, on the connected account, open **When something happens**.
+2. Choose the event, the agent that should handle it, and say what the agent should do each time.
+3. Press **Start watching**.
+
+Talqava looks every five minutes. Only things that happen after you set it up start a task, each thing starts one task only, and at most five start at a time. The task shows up like any other and waits for your review. You can **Pause** or **Remove** it on the same card.
+
+Events today: a new order (WooCommerce), a new email (Gmail, Outlook), a new booking (Calendly) and a new form answer (Typeform).
+
+What the service sends, such as the words of an email, is given to the agent as information, never as instructions. Each task costs what the AI model charges, so watch a busy inbox with care; with Gmail you can limit it to emails matching search words.
+
 ### Connect Gmail, Google Calendar, Google Drive, Outlook or OneDrive
 
 These sign in through your browser instead of a pasted key. Google and Microsoft ask for an app registered with them; you register your own once (about ten minutes, free), and it stays yours. The service's page in Talqava lists the exact steps.
