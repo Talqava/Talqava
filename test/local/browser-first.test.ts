@@ -11,7 +11,8 @@ import type { AddressInfo } from "node:net";
 process.env.TALQAVA_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "talqava-browser-first-"));
 let K: typeof import("../../src/local/connector-kit.ts");
 let server: http.Server;
-const seen: { path: string; auth: string; body: Record<string, string> | null }[] = [];
+const seen: { path: string; auth: string; body: Record<string, string> | null; query: string; json: any }[] = [];
+let zendeskRole = "agent";
 const redirect = "http://localhost:8787/api/oauth/callback";
 
 before(async () => {
@@ -22,7 +23,7 @@ before(async () => {
       const u = new URL(req.url!, "http://x");
       const body = String(req.headers["content-type"] ?? "").startsWith("application/x-www-form-urlencoded") ? Object.fromEntries(new URLSearchParams(raw)) : null;
       const auth = String(req.headers.authorization ?? "");
-      seen.push({ path: u.pathname, auth, body });
+      seen.push({ path: u.pathname, auth, body, query: u.search, json: raw.startsWith("{") ? JSON.parse(raw) : null });
       const json = (status: number, v: unknown) => (res.writeHead(status, { "content-type": "application/json" }), res.end(JSON.stringify(v)));
       if (u.pathname.endsWith("/token")) {
         if (body?.grant_type === "refresh_token") return json(200, { access_token: "second", refresh_token: "rt2", expires_in: 1800 });
@@ -34,12 +35,20 @@ before(async () => {
       if (u.pathname === "/asana/workspaces") return json(200, { data: [{ gid: "11", name: "Bakery" }] });
       if (u.pathname.startsWith("/hubspot/account-info/")) return json(200, { portalId: 4242 });
       if (u.pathname === "/typeform/forms") return json(200, { total_items: 3, items: [] });
+      if (u.pathname === "/zendesk/users/me") return json(200, { user: zendeskRole === "none" ? { id: null, name: "Anonymous user", role: "end-user" } : { id: 7, name: "Ada Baker", email: "ada@example.com", role: "agent" } });
+      const ticket = { id: 41, subject: "Late <b>delivery</b>", status: "open", priority: "high", updated_at: "2026-11-25T10:00:00Z", description: "Where is my bread?", tags: ["delivery"] };
+      if (u.pathname === "/zendesk/tickets" && req.method === "GET") return json(200, { tickets: [ticket] });
+      if (u.pathname === "/zendesk/tickets" && req.method === "POST") return json(201, { ticket: { ...ticket, id: 42, subject: JSON.parse(raw).ticket.subject } });
+      if (u.pathname === "/zendesk/search") return json(200, { results: [{ ...ticket, result_type: "ticket" }, { id: 9, result_type: "user" }], count: 2 });
+      if (u.pathname === "/zendesk/tickets/41" && req.method === "GET") return json(200, { ticket });
+      if (u.pathname === "/zendesk/tickets/41" && req.method === "PUT") return json(200, { ticket: { ...ticket, ...JSON.parse(raw).ticket, comment: undefined } });
+      if (u.pathname === "/zendesk/tickets/41/comments") return json(200, { comments: [{ author_id: 3, public: true, plain_body: "Where is my bread?", created_at: "2026-11-25T09:00:00Z" }, { author_id: 7, public: false, plain_body: "Driver was late.", created_at: "2026-11-25T09:30:00Z" }], users: [{ id: 3, name: "Sam Customer" }, { id: 7, name: "Ada Baker" }] });
       json(404, {});
     });
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  for (const id of ["ASANA", "HUBSPOT", "TYPEFORM", "TRELLO"]) (process.env[`TALQAVA_${id}_API`] = `${url}/${id.toLowerCase()}`), (process.env[`TALQAVA_${id}_TOKEN_API`] = `${url}/${id.toLowerCase()}/token`);
+  for (const id of ["ASANA", "HUBSPOT", "TYPEFORM", "TRELLO", "ZENDESK"]) (process.env[`TALQAVA_${id}_API`] = `${url}/${id.toLowerCase()}`), (process.env[`TALQAVA_${id}_TOKEN_API`] = `${url}/${id.toLowerCase()}/token`);
   K = await import("../../src/local/connector-kit.ts");
   await import("../../src/local/services/index.ts");
 });
@@ -119,4 +128,39 @@ test("with an app registered by Talqava's maker, signing in asks for nothing; a 
     delete process.env.TALQAVA_TRELLO_CLIENT_ID;
     delete process.env.TALQAVA_ASANA_CLIENT_ID;
   }
+});
+
+test("Zendesk signs in at the account's own address with PKCE and no secret, and works with tickets", async () => {
+  const z = K.listServices().find((s) => s.id === "zendesk")!;
+  assert.deepEqual([z.fields.length, z.browser!.ask.map((f) => f.key), z.browser!.idLabel], [0, ["subdomain"], "Identifier"]);
+  assert.throws(() => K.startBrowserSignIn("zendesk", { clientId: "talqava" }, redirect), /Zendesk subdomain/);
+  assert.throws(() => K.startBrowserSignIn("zendesk", { clientId: "talqava", values: { subdomain: "evil.example.com/x" } }, redirect), /Zendesk subdomain/, "the subdomain cannot point the sign-in somewhere else");
+  zendeskRole = "none";
+  const first = new URL(K.startBrowserSignIn("zendesk", { clientId: "talqava", values: { subdomain: "Bakery" } }, redirect).url);
+  assert.equal(first.origin + first.pathname, "https://bakery.zendesk.com/oauth/authorizations/new");
+  assert.deepEqual([first.searchParams.get("scope"), first.searchParams.get("code_challenge_method")], ["read write", "S256"]);
+  await assert.rejects(K.finishBrowserSignIn(first.searchParams.get("state"), "ok"), /not an agent or administrator/);
+  zendeskRole = "agent";
+  const to = new URL(K.startBrowserSignIn("zendesk", { clientId: "talqava", values: { subdomain: "bakery" } }, redirect).url);
+  assert.equal((await K.finishBrowserSignIn(to.searchParams.get("state"), "ok")).label, "Ada Baker (bakery.zendesk.com)");
+  const exchange = seen.filter((s) => s.path === "/zendesk/token" && s.body?.grant_type === "authorization_code").at(-1)!.body!;
+  assert.deepEqual([exchange.client_id, exchange.client_secret, Boolean(exchange.code_verifier)], ["talqava", undefined, true]);
+  const run = (name: string, input: Record<string, unknown> = {}) => tool(`zendesk__${name}`).run(input, {} as never) as Promise<string>;
+  assert.equal(await run("list_tickets"), "[41] Late delivery · open · high · updated 2026-11-25");
+  assert.match(seen.at(-1)!.query, /sort=-updated_at/);
+  assert.equal(await run("search_tickets", { words: 'bread status:closed "x"', status: "open" }), "[41] Late delivery · open · high · updated 2026-11-25\n(2 in all)");
+  assert.equal(new URLSearchParams(seen.at(-1)!.query).get("query"), "type:ticket status:open bread status closed x", "words cannot become search operators");
+  const read = await run("get_ticket", { ticket: "#41" });
+  assert.match(read, /Sam Customer · visible to the customer\nWhere is my bread\?/);
+  assert.match(read, /Ada Baker · internal note\nDriver was late\./);
+  assert.match(await run("add_note", { ticket: 41, note: "Refund offered." }), /internal note to ticket 41/);
+  assert.deepEqual(seen.at(-1)!.json, { ticket: { comment: { body: "Refund offered.", public: false } } });
+  assert.match(await run("reply_to_customer", { ticket: 41, reply: "Sorry! It is on its way.", status: "pending" }), /Replied to the customer on ticket 41.*Status: pending/);
+  assert.deepEqual(seen.at(-1)!.json, { ticket: { comment: { body: "Sorry! It is on its way.", public: true }, status: "pending" } });
+  assert.equal(tool("zendesk__reply_to_customer").needsApproval!({} as never), true, "a reply to a customer always asks first");
+  await assert.rejects(run("update_ticket", { ticket: 41, status: "closed" }), /choose one of: open, pending, hold, solved/);
+  assert.match(await run("update_ticket", { ticket: 41, priority: "low" }), /low/);
+  await assert.rejects(run("create_ticket", { subject: "Order", message: "Two loaves", customer_email: "nope" }), /does not look right/);
+  assert.match(await run("create_ticket", { subject: "Order", message: "Two loaves", customer_email: "Sam@Example.com" }), /Opened ticket 42: “Order” for sam@example.com/);
+  await assert.rejects(run("get_ticket", { ticket: "41/../users" }), /ticket's number/);
 });

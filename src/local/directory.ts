@@ -79,7 +79,6 @@ export const COMING_SERVICES: ComingService[] = [
   { name: "HubSpot", category: "Sales and customer records", about: "Find and update contacts, companies and deals." },
   { name: "Salesforce", category: "Sales and customer records", about: "Find and update leads, accounts and opportunities." },
   { name: "Pipedrive", category: "Sales and customer records", about: "Find and update deals and contacts." },
-  { name: "Zendesk", category: "Customer support", about: "Read, answer and update support tickets." },
   { name: "Freshdesk", category: "Customer support", about: "Read, answer and update support tickets." },
   { name: "Help Scout", category: "Customer support", about: "Read and answer customer conversations." },
   { name: "Shopify", category: "Payments and online shop", about: "See orders, products and customers, and update products." },

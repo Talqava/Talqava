@@ -94,14 +94,14 @@ A post can be given **categories**, **tags** and a **featured image**. Agents ch
 
 To ask for one post or one change by hand, give a task in your own words, such as "Write a post about our winter opening hours for the blog" or "Update the About page on our website with our new address".
 
-### Connect a built-in service (Shopify, WooCommerce, HubSpot, Mailchimp, Slack, Asana, Trello, Calendly, Typeform)
+### Connect a built-in service (Shopify, WooCommerce, HubSpot, Mailchimp, Slack, Asana, Trello, Calendly, Typeform, Zendesk)
 
 These services are built into Talqava and all work the same way.
 
 1. Open **Integrations** and choose the service, for example **WooCommerce**.
 2. Read **What agents can do**: what they can read, what they can change, and what they can delete (deleting always asks you first).
 3. Sign in:
-   - **Asana, HubSpot, Typeform and Trello** sign in through your browser. The page shows **Sign in to** the service first. The service asks for an app registered with it; you register your own once, following the numbered steps on the page, then press the button and approve in the browser. The tab says **Connected**. For Trello you copy only its public API key; there is no token to copy.
+   - **Asana, HubSpot, Typeform, Trello and Zendesk** sign in through your browser. The page shows **Sign in to** the service first. The service asks for an app registered with it; you register your own once, following the numbered steps on the page, then press the button and approve in the browser. The tab says **Connected**. For Trello you copy only its public API key; there is no token to copy.
    - If you would rather paste a key, open **Use a key instead** on the same page.
    - **Shopify, WooCommerce, Mailchimp, Slack and Calendly** connect with a key for now: follow the numbered steps, paste it, and press **Check and connect**. Each of these services either does not allow a browser sign-in that returns to an app on your own computer, or needs an app that Talqava's maker must register with them first.
    
@@ -122,6 +122,7 @@ What each one does:
 - **Trello**: see boards, lists and cards; add, change, move and archive cards; comment.
 - **Calendly**: see booked meetings, who booked them and their answers, and your booking links. Reading only.
 - **Typeform**: see forms and the answers people sent. Reading only.
+- **Zendesk**: see and search support tickets and read their conversations; add internal notes, change a ticket's status or priority, and open a ticket. A reply to the customer always asks you first, because Zendesk sends it to them. It signs in through your browser: a Zendesk administrator adds an OAuth client of the kind **Public** once (the page lists the steps), and you type your subdomain and its Identifier. A new ticket can start a task.
 
 Talqava checks every few hours that each key still works. If a service stops accepting its key, the account shows **Needs attention**, and your Inbox gets a note saying which connection and why; make a new key and connect again, and the account keeps its settings.
 

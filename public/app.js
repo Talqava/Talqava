@@ -3996,12 +3996,14 @@ async function servicePage(col, again, id) {
   // A service that signs in through the browser: the owner registers their own app once, then approves in the browser.
   const browserForm = () => {
     const idLabel = svc.browser.idLabel;
+    const asks = svc.browser.ask.map((f) => ({ f, node: h("input", { autocomplete: "off", placeholder: f.placeholder ?? f.label, "aria-label": f.label }) }));
+    const askRows = asks.map((x) => h("label", {}, x.f.label, x.node, x.f.help ? h("span", { class: "note small" }, x.f.help) : null));
     const oneClick = svc.browser.oneClick;
     const clientId = h("input", { autocomplete: "off", placeholder: idLabel, "aria-label": idLabel, value: ui.signIn?.id === id ? ui.signIn.clientId : "" });
     const clientSecret = h("input", { type: "password", autocomplete: "off", placeholder: svc.browser.secret === "optional" ? "Client secret (if your app has one)" : "Client secret", "aria-label": "Client secret" });
     const status = h("p", { class: "note", role: "status" }, ui.signIn?.id === id ? `Waiting for you to approve in the browser… This page updates when ${svc.name} is connected.` : "");
     const start = async () => {
-      const { url } = await api("POST", `integrations/services/${svc.id}/sign-in`, { clientId: clientId.value, clientSecret: clientSecret.value });
+      const { url } = await api("POST", `integrations/services/${svc.id}/sign-in`, { clientId: clientId.value, clientSecret: clientSecret.value, values: Object.fromEntries(asks.map((x) => [x.f.key, x.node.value])) });
       window.open(url, "_blank", "noopener");
       ui.signIn = { id, clientId: clientId.value, had: svc.connections.length, since: Date.now() };
       again();
@@ -4011,10 +4013,11 @@ async function servicePage(col, again, id) {
       { class: "card form", onsubmit: (e) => (e.preventDefault(), attempt(start, col)) },
       h("b", {}, svc.connections.length ? "Connect another account" : `Connect ${svc.name}`),
       oneClick
-        ? h("p", { class: "note small" }, `Press the button, sign in to ${svc.name} in your browser and approve. Nothing to copy or paste.`)
+        ? [h("p", { class: "note small" }, `Press the button, sign in to ${svc.name} in your browser and approve. Nothing to copy or paste.`), askRows]
         : [
             h("p", { class: "note small" }, `${svc.name} signs in through your browser. It asks for an app registered with ${svc.name}; you register your own once, which takes about ten minutes, and it stays yours.`),
             h("ol", {}, svc.browser.appSteps.map((step) => h("li", {}, step.split(/(\{redirect\}|\{origin\})/).map((part) => (part === "{redirect}" ? h("code", {}, d.redirect) : part === "{origin}" ? h("code", {}, new URL(d.redirect).origin) : part))))),
+            askRows,
             h("label", {}, idLabel, clientId),
             svc.browser.secret === "never" ? null : h("label", {}, "Client secret", clientSecret),
           ],

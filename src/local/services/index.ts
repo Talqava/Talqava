@@ -10,7 +10,8 @@ import { shopify } from "./shopify.ts";
 import { slackService } from "./slack.ts";
 import { trello } from "./trello.ts";
 import { typeform } from "./typeform.ts";
+import { zendesk } from "./zendesk.ts";
 import { woocommerce } from "./woocommerce.ts";
 
-export const SERVICES: ServiceDef[] = [gmail, googleCalendar, googleDrive, outlook, onedrive, shopify, woocommerce, hubspot, mailchimp, slackService, asana, trello, calendly, typeform];
+export const SERVICES: ServiceDef[] = [gmail, googleCalendar, googleDrive, outlook, onedrive, shopify, woocommerce, hubspot, mailchimp, slackService, asana, trello, calendly, typeform, zendesk];
 registerServices(...SERVICES);
