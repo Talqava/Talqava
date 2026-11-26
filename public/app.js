@@ -2096,6 +2096,15 @@ function renderInbox() {
       const node = h("section", { class: `inboxcard ${ui.mailOpen === m.id ? "open" : ""}`, id: `inbox-${m.id.replace(/[^\w-]/g, "_")}`, style: m.bot ? botStyle(m.bot) : "" });
       const act = (fn) => attempt(async () => (await fn(), await refresh()), node);
       const put = () => mailMark([m.id], { archived: true, read: true });
+      const approvalOf = m.kind === "need" && m.need.kind === "approval" ? m.need.approval : null;
+      // Deleting a step that waits for a yes answers "Don't allow" first, so the agent is not left waiting on a card nobody can see.
+      const remove = () =>
+        attempt(async () => {
+          if (approvalOf) await api("POST", `conversations/${m.q.id}/approvals/${approvalOf.id}`, { decision: "deny" }).catch(() => {});
+          await mailMark([m.id], { deleted: true });
+          toast(approvalOf ? "Deleted, and the step was not allowed. The task is kept." : m.q ? "Deleted. The task is kept, and still shows under Tasks." : "Deleted from the Inbox.", { label: "Undo", run: () => mailMark([m.id], { deleted: false }) });
+          if (approvalOf) await refresh();
+        }, node);
       const meta = [who(m), m.q && m.kind === "need" ? `for “${m.q.title}”` : ""].filter(Boolean).join(" · ");
       let title = m.subject.replace(/^(Approval needed|Plan to approve|Needs your answer before starting|To review|Ready for your review|Did not pass its check|Could not finish|Stopped at its budget|Suggested change|Table change|Proposal|Reminder): /, "");
       let body;
@@ -2114,8 +2123,14 @@ function renderInbox() {
         node,
         h("div", { class: "inboxcardtop" }, m.bot ? keycap(m.bot, 28, "", m.bot.type) : h("span", { class: "sysavatar", "aria-hidden": "true" }, "T"), h("div", { class: "grow" }, h("span", { class: `inboxkind ${m.label}` }, waitingKind(m)), h("b", {}, title), h("span", { class: "note small" }, meta)), h("span", { class: "note small inboxwhen" }, shortWhen(m.at))),
         h("div", { class: "inboxcardbody" }, body, reply),
-        // A problem with nothing left to decide can be put away.
-        m.label === "failed" || m.kind === "task" ? h("div", { class: "inboxcardfoot" }, h("span", { class: "grow" }), h("button", { class: "plain link small", title: "Move it to Archive. The task and its work are kept.", onclick: put }, "Archive")) : null,
+        h(
+          "div",
+          { class: "inboxcardfoot" },
+          h("span", { class: "grow" }),
+          // A problem with nothing left to decide can be archived.
+          m.label === "failed" || m.kind === "task" ? h("button", { class: "plain link small", title: "Move it to Archive. The task and its work are kept.", onclick: put }, "Archive") : null,
+          h("button", { class: "plain link small", title: approvalOf ? "Answers Don't allow, then removes this card. The task is kept." : m.q ? "Removes this card from the Inbox. The task is kept, and still shows under Tasks." : "Removes this card from the Inbox.", onclick: remove }, "Delete"),
+        ),
       );
       return node;
     };
