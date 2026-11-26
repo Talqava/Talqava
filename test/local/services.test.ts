@@ -14,6 +14,7 @@ const seen: { method: string; path: string; auth: string; body: any }[] = [];
 const contacts = new Map<string, any>([["1", { id: "1", properties: { firstname: "Sam", lastname: "Lee", email: "sam@example.com" }, createdAt: "2026-11-01T00:00:00Z", updatedAt: "2026-11-20T00:00:00Z" }]]);
 const cards = new Map<string, any>([["card0001", { id: "card0001", name: "Bake rye", due: "2026-12-01T09:00:00.000Z", dueComplete: false, closed: false, idList: "list0001", desc: "Two loaves", shortUrl: "https://trello.com/c/x" }]]);
 const members = new Map<string, any>();
+const shop = { tokens: 0, orders: [{ id: "gid://shopify/Order/1001", name: "#1001", createdAt: "2026-11-25T10:00:00Z", displayFinancialStatus: "PAID", displayFulfillmentStatus: "UNFULFILLED", email: "sam@example.com", totalPriceSet: { shopMoney: { amount: "19.50", currencyCode: "USD" } } }] as any[] };
 
 before(async () => {
   server = http.createServer((req, res) => {
@@ -21,12 +22,23 @@ before(async () => {
     req.on("data", (c) => (raw += c));
     req.on("end", () => {
       const u = new URL(req.url!, "http://x");
-      const body = raw ? JSON.parse(raw) : null;
+      const body = String(req.headers["content-type"] ?? "").startsWith("application/x-www-form-urlencoded") ? Object.fromEntries(new URLSearchParams(raw)) : raw ? JSON.parse(raw) : null;
       const auth = String(req.headers.authorization ?? "");
       seen.push({ method: req.method!, path: u.pathname + u.search, auth, body });
       const json = (status: number, v: unknown) => (res.writeHead(status, { "content-type": "application/json" }), res.end(JSON.stringify(v)));
       const [, svc, ...rest] = u.pathname.split("/");
       const p = `/${rest.join("/")}`;
+      if (svc === "shopify") {
+        if (p === "/admin/oauth/access_token") return (shop.tokens++, body.client_secret === "shh" && body.grant_type === "client_credentials" ? json(200, { access_token: `shpat-${shop.tokens}`, expires_in: 86399 }) : json(400, { error: "invalid_client" }));
+        if (!/^shpat-\d+$/.test(String(req.headers["x-shopify-access-token"] ?? ""))) return json(401, { errors: "Invalid API key or access token" });
+        const q = String(body.query);
+        if (q.includes("shop {")) return json(200, { data: { shop: { name: "Ada's Bakery", myshopifyDomain: "adas-bakery.myshopify.com" } } });
+        if (q.includes("productUpdate")) return body.variables.product.title === "" ? json(200, { data: { productUpdate: { product: null, userErrors: [{ field: ["title"], message: "Title can't be blank" }] } } }) : json(200, { data: { productUpdate: { product: { id: body.variables.product.id, title: body.variables.product.title ?? "Rye loaf", status: body.variables.product.status ?? "ACTIVE", totalInventory: 4 }, userErrors: [] } } });
+        if (q.includes("orders(first: 25")) return json(200, { data: { orders: { nodes: shop.orders.map((o) => ({ id: o.id })) } } });
+        if (q.includes("order(id:")) return json(200, { data: { order: { ...shop.orders.find((o) => o.id === body.variables.id), lineItems: { nodes: [{ title: "Rye loaf", quantity: 2, sku: "RYE" }] } } } });
+        if (q.includes("orders(")) return json(200, { data: { orders: { nodes: shop.orders } } });
+        if (q.includes("customers(")) return json(200, { errors: [{ message: "Access denied for customers field. Required access: `read_customers` access scope." }] });
+      }
       if (svc === "hubspot") {
         if (auth !== "Bearer pat-good") return json(401, { message: "Authentication credentials not found." });
         if (p === "/account-info/2026-09/details") return json(200, { portalId: 4242 });
@@ -80,7 +92,7 @@ before(async () => {
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  for (const id of ["HUBSPOT", "MAILCHIMP", "TRELLO", "CALENDLY", "TYPEFORM"]) process.env[`TALQAVA_${id}_API`] = `${url}/${id.toLowerCase()}`;
+  for (const id of ["SHOPIFY", "HUBSPOT", "MAILCHIMP", "TRELLO", "CALENDLY", "TYPEFORM"]) process.env[`TALQAVA_${id}_API`] = `${url}/${id.toLowerCase()}`;
   K = await import("../../src/local/connector-kit.ts");
   await import("../../src/local/services/index.ts");
 });
@@ -141,4 +153,27 @@ test("Typeform: forms and the answers people sent, with each question's words", 
   assert.equal((await K.connectService("typeform", { values: { token: "tfp_good" } })).label, "1 form");
   assert.equal(await run("typeform__list_forms"), "[frm001] Catering request · changed 2026-11-20 · https://ada.typeform.com/to/frm001");
   assert.equal(await run("typeform__read_answers", { form: "frm001" }), "Catering request: 1 response in all, showing 1.\n\nSent 2026-11-25 14:03\n- Your name: Sam\n- What do you need?: Lunch for 20\n- Which breads?: Rye, Sourdough");
+});
+
+test("Shopify: an app's ID and secret become a day-long token, orders and products are read, and mistakes are explained", async () => {
+  await assert.rejects(K.connectService("shopify", { values: { shop: "not a shop!", client_id: "id", client_secret: "shh" } }), /first part of its myshopify\.com address/);
+  await assert.rejects(K.connectService("shopify", { values: { shop: "adas-bakery", client_id: "id", client_secret: "wrong" } }), /client ID or secret is not accepted/);
+  const c = await K.connectService("shopify", { values: { shop: "https://Adas-Bakery.myshopify.com/admin", client_id: "id", client_secret: "shh" } });
+  assert.equal(c.label, "Ada's Bakery (adas-bakery.myshopify.com)");
+  const before = shop.tokens;
+  assert.equal(await run("shopify__list_orders", { words: "financial_status:paid" }), "[1001] #1001 · 2026-11-25 · paid / unfulfilled · 19.50 USD · sam@example.com");
+  assert.deepEqual(seen.at(-1)!.body.variables, { n: 20, q: "financial_status:paid" });
+  assert.equal(await run("shopify__get_order", { order: "1001" }), "[1001] #1001 · 2026-11-25 · paid / unfulfilled · 19.50 USD · sam@example.com\nItems:\n- 2 × Rye loaf (SKU RYE)");
+  assert.equal(shop.tokens, before, "the token is fetched once and kept, not asked for on every call");
+  await assert.rejects(run("shopify__get_order", { order: "1001) { id } evil" }), /number in brackets/);
+  assert.match(await run("shopify__update_product", { product: "55", title: "Dark rye", status: "DRAFT" }), /Updated: \[55\] Dark rye · draft · 4 in stock/);
+  assert.deepEqual(seen.at(-1)!.body.variables.product, { id: "gid://shopify/Product/55", title: "Dark rye", status: "DRAFT" });
+  await assert.rejects(run("shopify__find_customers", { words: "sam" }), /the app lacks a permission.*read_customers.*add the scope/s);
+  // A new order starts a task through a watch.
+  const w = await K.addWatch({ connection: c.id, trigger: "new_order", bot: "cashier", org: "o1", instructions: "Thank the customer." });
+  shop.orders.unshift({ ...shop.orders[0], id: "gid://shopify/Order/1002", name: "#1002" });
+  const started: any[] = [];
+  assert.equal(await K.pollWatches((h) => started.push(h)), 1);
+  assert.match(started[0].text, /\[1002\] #1002/);
+  K.removeWatch(w.id);
 });

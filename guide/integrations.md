@@ -94,7 +94,7 @@ A post can be given **categories**, **tags** and a **featured image**. Agents ch
 
 To ask for one post or one change by hand, give a task in your own words, such as "Write a post about our winter opening hours for the blog" or "Update the About page on our website with our new address".
 
-### Connect a built-in service (WooCommerce, HubSpot, Mailchimp, Slack, Asana, Trello, Calendly, Typeform)
+### Connect a built-in service (Shopify, WooCommerce, HubSpot, Mailchimp, Slack, Asana, Trello, Calendly, Typeform)
 
 These services are built into Talqava and all work the same way.
 
@@ -109,6 +109,7 @@ These services are built into Talqava and all work the same way.
 What each one does:
 
 - **WooCommerce**: see orders, products and customers of the shop on your WordPress site; change a product's price, stock or text; move an order to another status; add a note to an order. A note marked for the customer is emailed to them.
+- **Shopify**: see orders, products and customers, and change a product's title, status or tags. Shopify no longer gives a shop a simple key: you make a small app in Shopify's Dev Dashboard, install it on your shop, and paste its Client ID and Client secret; the page lists the steps. Talqava renews its access each day by itself.
 - **Slack**: read the channels the bot has been invited to, and post messages and replies. You make the bot in your own Slack workspace; the page lists the permissions to give it.
 - **Asana**: see projects and tasks, add tasks, change them or mark them done, and comment.
 - **HubSpot**: find and read contacts, companies and deals; add and change them. It connects with a HubSpot service key.
@@ -136,7 +137,7 @@ On a connected account of a built-in service:
 
 Talqava looks every five minutes. Only things that happen after you set it up start a task, each thing starts one task only, and at most five start at a time. The task shows up like any other and waits for your review. You can **Pause** or **Remove** it on the same card.
 
-Events today: a new order (WooCommerce), a new email (Gmail, Outlook), a new booking (Calendly) and a new form answer (Typeform).
+Events today: a new order (Shopify, WooCommerce), a new email (Gmail, Outlook), a new booking (Calendly) and a new form answer (Typeform).
 
 What the service sends, such as the words of an email, is given to the agent as information, never as instructions. Each task costs what the AI model charges, so watch a busy inbox with care; with Gmail you can limit it to emails matching search words.
 
