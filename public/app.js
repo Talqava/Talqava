@@ -3484,6 +3484,9 @@ async function libraryView() {
         h("p", { class: "note small" }, "Decides which AI services may receive it (set under Security). A Restricted document is hidden from every agent not named on it."),
       ),
       h("div", { class: "pfacts" }, fact("Where", d.path.includes("/") ? libParent(d.path) : "Library"), fact("Size", sizeWords(d.size)), fact("Changed", d.modified ? new Date(d.modified).toLocaleString() : "—"), fact("Read for agents", d.readable ? `${d.passages} part${d.passages === 1 ? "" : "s"}` : "Name only"), d.problem ? h("p", { class: "note small" }, d.problem) : null),
+      /^(png|jpe?g|webp|gif)$/i.test(d.type)
+        ? h("div", {}, h("button", { class: "small", onclick: () => confirm(`Read the words in “${d.name}”?\n\nThe picture is sent to your team's AI model, which writes out the words it sees. They are then kept with the picture, so you and your agents can find it by them. It costs about as much as a short question.`) && act(() => api("POST", `library/${d.id}/read-picture`), (r) => (r.words ? `Done: ${r.words} words were found and can now be searched.` : "No words were found in this picture.")) }, d.readable ? "Read the words again" : "Read the words in this picture"))
+        : null,
       h("div", { class: "row wrap" }, h("button", { class: "plain small", onclick: () => rename(target) }, "Rename"), h("button", { class: "plain small", onclick: () => moveTo([target]) }, "Move"), h("button", { class: "plain small danger", onclick: () => remove([target]) }, "Delete")),
     );
   };

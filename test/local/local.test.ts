@@ -1368,6 +1368,39 @@ test("before starting, an agent checks it has what the task needs, asks the owne
 });
 
 
+test("the words in a picture in the Library are written out when the owner asks, and it can then be found by them", { timeout: 30_000 }, async () => {
+  const { orgs } = await import("../../src/local/orgs.ts");
+  const { library, libraryFolder, syncLibrary } = await import("../../src/local/library.ts");
+  const org0 = orgs.create("Picture Co", "", "custom");
+  const org = () => orgs.active();
+  try {
+    const root = libraryFolder(org0.id);
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(path.join(root, "receipt.JPG"), Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 1, 2, 3]));
+    fs.writeFileSync(path.join(root, "notes.txt"), "Plain notes.");
+    await syncLibrary(org());
+    const doc = () => library.list(org()).find((d) => d.name === "receipt.JPG")!;
+    assert.equal(doc().readable, false);
+    assert.match(doc().problem, /Read the words in this picture/);
+    assert.equal(library.search(org(), null, "sourdough").length, 0);
+    // The picture goes to whatever "sees" it as it is, with its kind; what comes back is kept as the picture's text.
+    const got: { size: number; kind: string }[] = [];
+    const result = await library.readPicture(org(), doc().id, async (picture, kind) => (got.push({ size: picture.length, kind }), "Bakery Lane\nSourdough loaf  4.50\nTotal 4.50"));
+    assert.deepEqual(got, [{ size: 8, kind: "image/jpeg" }]);
+    assert.deepEqual(result, { name: "receipt.JPG", words: 7 });
+    assert.equal(doc().readable, true);
+    assert.equal(library.search(org(), null, "sourdough")[0].name, "receipt.JPG");
+    // A picture with no words is still kept and found by its name; other files cannot be read this way.
+    await library.readPicture(org(), doc().id, async () => "NONE");
+    assert.equal(doc().readable, false);
+    assert.equal(library.search(org(), null, "sourdough").length, 0);
+    assert.equal(library.search(org(), null, "receipt")[0].name, "receipt.JPG");
+    await assert.rejects(library.readPicture(org(), library.list(org()).find((d) => d.name === "notes.txt")!.id, async () => "x"), /Only pictures/);
+  } finally {
+    orgs.remove(org0.id);
+  }
+});
+
 test("an agent that lacks an ability the task needs says so, and one press switches it on and starts the task", { timeout: 30_000 }, async () => {
   const quests = await import("../../src/local/quests.ts");
   const crew = await import("../../src/local/crew.ts");
