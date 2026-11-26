@@ -57,7 +57,7 @@ import { disableScim, enableScim, handleScim, scimAuthorized, scimSettings } fro
 import { changes, type WaitingChange } from "./twoadmins.ts";
 import { RETENTION_CHOICES, findPerson, retention, retentionFrom, sweep } from "./retention.ts";
 import { REVIEW_EVERY_DAYS, alerts, feedStatus, reviews, setFeed, startAuditFeed } from "./auditfeed.ts";
-import { LEVELS, LEVEL_WORDS, RECOMMENDED, WHERE, WHERE_WORDS, describePolicy, higherLevel, policy, policyFrom } from "./sensitivity.ts";
+import { LEVELS, LEVEL_WORDS, RECOMMENDED, REGIONS, REGION_WORDS, WHERE, WHERE_WORDS, describePolicy, notApprovedWhy, higherLevel, policy, policyFrom } from "./sensitivity.ts";
 import { ROLES, ROLE_WORDS, mayDo, people } from "./people.ts";
 import type { Person } from "./people.ts";
 import { projects } from "./projects.ts";
@@ -1037,7 +1037,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
   if (route === "GET security-center") return send(res, 200, parts[1] === "report" ? { name: `talqava-security-report-${new Date().toISOString().slice(0, 10)}.md`, text: securityReport() } : securityOverview());
   if (route === "GET sensitivity") {
     const cfg = getConfig();
-    return send(res, 200, { policy: policy(cfg), levels: LEVELS.map((id) => ({ id, ...LEVEL_WORDS[id] })), where: WHERE.map((id) => ({ id, words: WHERE_WORDS[id] })), recommended: RECOMMENDED, services: cfg.providers.filter((p) => p.kind === "anthropic" ? Boolean(cfg.apiKey) : true).map((p) => ({ id: p.id, name: p.name, local: isLocalRef(`${p.id}/x`) })), words: describePolicy(policy(cfg)) });
+    return send(res, 200, { policy: policy(cfg), levels: LEVELS.map((id) => ({ id, ...LEVEL_WORDS[id] })), where: WHERE.map((id) => ({ id, words: WHERE_WORDS[id] })), recommended: RECOMMENDED, services: cfg.providers.filter((p) => p.kind === "anthropic" ? Boolean(cfg.apiKey) : true).map((p) => ({ id: p.id, name: p.name, local: isLocalRef(`${p.id}/x`), why: notApprovedWhy(p.id, policy(cfg)) })), regions: REGIONS.map((id) => ({ id, words: REGION_WORDS[id] })), words: describePolicy(policy(cfg)) });
   }
   if (route === "GET guardrails") {
     // The connected services there are to approve: catalogue and hand-added connectors, built-in services, WordPress.

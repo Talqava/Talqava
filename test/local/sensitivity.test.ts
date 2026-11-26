@@ -35,7 +35,7 @@ test("each level goes only where the owner allows: any service, approved ones, t
   assert.deepEqual([...S.levelsForRun("anthropic/claude-opus-5-5")], ["public"]);
   store.saveConfig({ backups: [] });
   // What the owner types is checked.
-  assert.deepEqual(S.policyFrom({ services: { internal: "everywhere", restricted: "local" }, approved: ["a", "a", 5], memory: "top-secret" }), { services: { public: "any", internal: "any", confidential: "any", restricted: "local" }, approved: ["a", "5"], memory: "internal", leave: { public: true, internal: true, confidential: true, restricted: true } });
+  assert.deepEqual(S.policyFrom({ services: { internal: "everywhere", restricted: "local" }, approved: ["a", "a", 5], memory: "top-secret" }), { services: { public: "any", internal: "any", confidential: "any", restricted: "local" }, approved: ["a", "5"], memory: "internal", leave: { public: true, internal: true, confidential: true, restricted: true }, terms: {}, regions: [] });
   assert.equal(S.describePolicy().length, 4);
 });
 
@@ -169,4 +169,27 @@ test("reading a page in a task is what marks the task", () => {
   assert.throws(() => S.withLevels(null, () => S.leaving("a web address"), "anthropic/claude-opus-5-5", read), /Confidential/);
   workspace.get(org, page.id);
   assert.equal(S.heldBack(), null, "the owner reading a page marks nothing");
+});
+
+test("a ticked AI service counts as approved only if it does not train on what it is sent and processes data where the owner allows", () => {
+  const base = { services: { public: "any", internal: "any", confidential: "approved", restricted: "approved" }, approved: ["anthropic", "openrouter"], backups: [] };
+  store.saveConfig({ sensitivity: base, backups: [], moveUp: false });
+  assert.ok(S.levelsForRun("anthropic/claude-opus-5-5").has("confidential"), "with nothing recorded, a ticked service is approved as before");
+  store.saveConfig({ sensitivity: { ...base, terms: { openrouter: { trains: "yes" }, anthropic: { trains: "no", region: "us" }, "bad id!": { trains: "no" } } } });
+  assert.deepEqual(Object.keys(S.policy().terms).sort(), ["anthropic", "openrouter"]);
+  assert.ok(!S.levelsForRun("openrouter/some-model").has("confidential"));
+  assert.equal(S.notApprovedWhy("openrouter", S.policy()), "it trains on what it is sent");
+  assert.ok(S.levelsForRun("anthropic/claude-opus-5-5").has("confidential"));
+  // Only the EU is allowed: the service recorded as US no longer counts, and one with no place recorded does not either.
+  store.saveConfig({ sensitivity: S.policyFrom({ regions: ["eu", "nowhere"] }, S.policy()) });
+  assert.deepEqual(S.policy().regions, ["eu"]);
+  assert.ok(!S.levelsForRun("anthropic/claude-opus-5-5").has("confidential"));
+  assert.match(S.notApprovedWhy("anthropic", S.policy())!, /United States, which is not one of the places you allow/);
+  assert.ok(S.describePolicy().some((w) => /must process data in: European Union/.test(w)));
+  store.saveConfig({ sensitivity: S.policyFrom({ terms: { anthropic: { region: "eu" } } }, S.policy()) });
+  assert.deepEqual(S.policy().terms.anthropic, { region: "eu", trains: "no" }, "changing one answer keeps the other");
+  assert.ok(S.levelsForRun("anthropic/claude-opus-5-5").has("confidential"));
+  assert.equal(S.notApprovedWhy("anthropic", S.policy()), null);
+  store.saveConfig({ sensitivity: S.policyFrom({ terms: { anthropic: { region: null } } }, S.policy()) });
+  assert.equal(S.notApprovedWhy("anthropic", S.policy()), "you have not said where it processes data");
 });

@@ -107,6 +107,8 @@ A page made inside a sensitive page starts at the same level. Tables follow thei
 1. Open **Security** and find **Sensitive information**.
 2. For each level, choose where it may be sent. **Use the recommended settings** sets Confidential to approved services only and Restricted to models on this computer only.
 3. Under **Approved AI services**, tick the services you trust. Check each service's terms first: that it does not train on your data, and where it processes it.
+4. For each ticked service, record what you found: **Where it processes data** and **Does it train on what you send?** A service you record as training on what it is sent no longer counts as approved.
+5. Under **Where data may be processed**, tick the places you allow, or leave all unticked for anywhere. With some ticked, an approved service counts only when its recorded place is one of them; the page says so beside any service that does not count. These are your own record of each service's terms; Talqava cannot check them.
 
 ### Stop sensitive information leaving through a connected service
 
