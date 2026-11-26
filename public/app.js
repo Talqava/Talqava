@@ -9490,7 +9490,29 @@ function sensitivitySection(canEdit) {
         { class: "card form" },
         h("b", {}, "Approved AI services"),
         h("p", { class: "note small" }, "Tick the services you trust with levels set to “Only approved AI services”. Before you tick one, check its terms: that it does not train on your data, and where it processes it. Models on this computer always count."),
-        outside.length ? outside.map((x) => h("label", { class: "power" }, h("input", { type: "checkbox", disabled: !canEdit, checked: d.policy.approved.includes(x.id), onchange: (e) => save({ approved: e.target.checked ? [...d.policy.approved, x.id] : d.policy.approved.filter((a) => a !== x.id) }) }), x.name)) : h("p", { class: "note small" }, "No AI service outside this computer is connected."),
+        outside.length
+          ? outside.map((x) => {
+              const on = d.policy.approved.includes(x.id);
+              const t = d.policy.terms[x.id] ?? { trains: "unknown" };
+              return h(
+                "div",
+                { class: "termsrow" },
+                h("label", { class: "power" }, h("input", { type: "checkbox", disabled: !canEdit, checked: on, onchange: (e) => save({ approved: e.target.checked ? [...d.policy.approved, x.id] : d.policy.approved.filter((a) => a !== x.id) }) }), x.name),
+                on
+                  ? h(
+                      "div",
+                      { class: "row wrap" },
+                      h("label", { class: "grow" }, "Where it processes data", h("select", { "aria-label": `Where ${x.name} processes data`, disabled: !canEdit, onchange: (e) => save({ terms: { [x.id]: { region: e.target.value || null } } }) }, h("option", { value: "", selected: !t.region }, "Not recorded"), d.regions.map((r) => h("option", { value: r.id, selected: t.region === r.id }, r.words)))),
+                      h("label", { class: "grow" }, "Does it train on what you send?", h("select", { "aria-label": `Whether ${x.name} trains on what you send`, disabled: !canEdit, onchange: (e) => save({ terms: { [x.id]: { trains: e.target.value } } }) }, [["unknown", "Not recorded"], ["no", "No"], ["yes", "Yes"]].map(([v, w]) => h("option", { value: v, selected: t.trains === v }, w)))),
+                    )
+                  : null,
+                x.why ? h("div", { class: "banner" }, `${x.name} does not count as approved right now: ${x.why}.`) : null,
+              );
+            })
+          : h("p", { class: "note small" }, "No AI service outside this computer is connected."),
+        h("div", { class: "label" }, "Where data may be processed"),
+        h("div", { class: "checks" }, d.regions.map((r) => h("label", { class: "check" }, h("input", { type: "checkbox", disabled: !canEdit, checked: d.policy.regions.includes(r.id), onchange: (e) => save({ regions: e.target.checked ? [...d.policy.regions, r.id] : d.policy.regions.filter((a) => a !== r.id) }) }), " ", r.words))),
+        h("p", { class: "note small" }, "With none ticked, anywhere is allowed. With some ticked, an approved service counts only when the place you recorded for it is one of them. These are your own record of each service's terms; Talqava cannot check them. A service you recorded as training on what it is sent never counts as approved."),
         canEdit ? h("div", { class: "row wrap" }, h("button", { onclick: () => confirm("Use the recommended settings?\n\nPublic and Internal: any connected AI service.\nConfidential: only approved services and models on this computer.\nRestricted: only models on this computer.\n\nAgents on a service that is not approved will stop being given Confidential items.") && save({ services: d.recommended }) }, "Use the recommended settings")) : h("p", { class: "note small" }, "Only owners and administrators change these rules."),
       ),
       h("p", { class: "note small" }, "Untick “May leave” for a level, and a task that has read anything of that level sends nothing out for the rest of that task: no change in a connected service or on your website, no call that sends data to a web address, no typing into a web page, no connector. It still reads and works, and puts what it would have sent in its report. The rule follows the task because, once an agent has read a page, nothing can tell which words of an email came from it."),

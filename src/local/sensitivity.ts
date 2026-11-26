@@ -41,30 +41,71 @@ export interface Policy {
    * service, a website or a web address. False means it may not, for the rest of that task.
    */
   leave: Record<Level, boolean>;
+  /**
+   * What the owner found in each AI service's terms: where it processes data and whether it trains its models on
+   * what it is sent. Talqava cannot check these; they are the owner's own record, and they decide whether a ticked
+   * service really counts as approved.
+   */
+  terms: Record<string, ServiceTerms>;
+  /** Where data may be processed. Empty: anywhere. Otherwise an approved service must process it in one of these. */
+  regions: Region[];
+}
+export const REGIONS = ["us", "eu", "uk", "canada", "australia", "other"] as const;
+export type Region = (typeof REGIONS)[number];
+export const REGION_WORDS: Record<Region, string> = { us: "United States", eu: "European Union", uk: "United Kingdom", canada: "Canada", australia: "Australia", other: "Somewhere else" };
+export const TRAINS = ["unknown", "no", "yes"] as const;
+export interface ServiceTerms {
+  region?: Region;
+  trains: (typeof TRAINS)[number];
 }
 const MAY_LEAVE: Policy["leave"] = { public: true, internal: true, confidential: true, restricted: true };
-export const OPEN_POLICY: Policy = { services: { public: "any", internal: "any", confidential: "any", restricted: "any" }, approved: [], memory: "internal", leave: MAY_LEAVE };
+export const OPEN_POLICY: Policy = { services: { public: "any", internal: "any", confidential: "any", restricted: "any" }, approved: [], memory: "internal", leave: MAY_LEAVE, terms: {}, regions: [] };
 /** A sensible starting point, offered as one button. */
 export const RECOMMENDED: Policy["services"] = { public: "any", internal: "any", confidential: "approved", restricted: "local" };
 
 export const levelOf = (v: unknown): Level => (LEVELS.includes(v as Level) ? (v as Level) : "internal");
 
 export function policyFrom(input: unknown, before: Policy = OPEN_POLICY): Policy {
-  const p = (input ?? {}) as { services?: Record<string, unknown>; approved?: unknown; memory?: unknown; leave?: Record<string, unknown> };
+  const p = (input ?? {}) as { services?: Record<string, unknown>; approved?: unknown; memory?: unknown; leave?: Record<string, unknown>; terms?: Record<string, { region?: unknown; trains?: unknown }>; regions?: unknown };
+  const terms: Policy["terms"] = { ...(before.terms ?? {}) };
+  if (p.terms && typeof p.terms === "object")
+    for (const [id, t] of Object.entries(p.terms).slice(0, 100)) {
+      if (!/^[\w.-]{1,80}$/.test(id) || !t || typeof t !== "object") continue;
+      const was = terms[id] ?? { trains: "unknown" as const };
+      terms[id] = { region: t.region === undefined ? was.region : REGIONS.includes(t.region as Region) ? (t.region as Region) : undefined, trains: TRAINS.includes(t.trains as "no") ? (t.trains as "no") : was.trains };
+    }
+  const regions = p.regions === undefined ? (before.regions ?? []) : Array.isArray(p.regions) ? REGIONS.filter((r) => (p.regions as unknown[]).includes(r)) : [];
   const leave = { ...MAY_LEAVE, ...before.leave };
   // Public content may always leave: that is what the level means.
   for (const level of LEVELS) if (level !== "public" && typeof p.leave?.[level] === "boolean") leave[level] = p.leave[level] as boolean;
   const services = { ...before.services };
   for (const level of LEVELS) if (WHERE.includes(p.services?.[level] as Where)) services[level] = p.services![level] as Where;
-  return { services, approved: p.approved === undefined ? before.approved : Array.isArray(p.approved) ? [...new Set(p.approved.map(String))].slice(0, 100) : [], memory: LEVELS.includes(p.memory as Level) ? (p.memory as Level) : before.memory, leave };
+  return { services, approved: p.approved === undefined ? before.approved : Array.isArray(p.approved) ? [...new Set(p.approved.map(String))].slice(0, 100) : [], memory: LEVELS.includes(p.memory as Level) ? (p.memory as Level) : before.memory, leave, terms, regions };
 }
 export const policy = (cfg: Config = getConfig()): Policy => policyFrom(cfg.sensitivity ?? {});
+
+/**
+ * Whether a ticked service counts as approved right now: not when the owner recorded that it trains on what it is
+ * sent, and, when data may only be processed in certain places, only when its recorded place is one of them.
+ */
+export function approvedNow(provider: string, p: Policy): boolean {
+  if (!p.approved.includes(provider)) return false;
+  const t = p.terms[provider];
+  if (t?.trains === "yes") return false;
+  return !p.regions.length || Boolean(t?.region && p.regions.includes(t.region));
+}
+/** Why a ticked service does not count as approved, in a few words; nothing when it does. */
+export function notApprovedWhy(provider: string, p: Policy): string | null {
+  if (!p.approved.includes(provider) || approvedNow(provider, p)) return null;
+  const t = p.terms[provider];
+  return t?.trains === "yes" ? "it trains on what it is sent" : t?.region ? `it processes data in ${REGION_WORDS[t.region]}, which is not one of the places you allow` : "you have not said where it processes data";
+}
 
 /** The levels one model may receive. */
 function levelsFor(ref: string, p: Policy): Set<Level> {
   const local = isLocalRef(ref);
   const provider = ref.includes("/") ? ref.slice(0, ref.indexOf("/")) : "anthropic";
-  const approved = local || p.approved.includes(provider);
+  const approved = local || approvedNow(provider, p);
   return new Set(LEVELS.filter((level) => ((w) => w === "any" || (w === "approved" && approved) || (w === "local" && local))(p.services[level])));
 }
 
@@ -163,7 +204,9 @@ export function mayReceive(level: Level): boolean {
 /** The policy in plain words. */
 export function describePolicy(p: Policy = policy()): string[] {
   const kept = LEVELS.filter((l) => !p.leave[l]).map((l) => LEVEL_WORDS[l].name);
-  return [...LEVELS.map((l) => `${LEVEL_WORDS[l].name}: ${((w) => w[0].toLowerCase() + w.slice(1))(WHERE_WORDS[p.services[l]])}.`), ...(kept.length ? [`A task that has read ${kept.join(" or ")} information sends nothing out through a connected service, a website or a web address.`] : [])];
+  const where = p.regions.length ? [`Approved AI services must process data in: ${p.regions.map((r) => REGION_WORDS[r]).join(", ")}.`] : [];
+  const out = p.approved.map((id) => ((why) => (why ? `${id} is ticked but does not count as approved: ${why}.` : ""))(notApprovedWhy(id, p))).filter(Boolean);
+  return [...LEVELS.map((l) => `${LEVEL_WORDS[l].name}: ${((w) => w[0].toLowerCase() + w.slice(1))(WHERE_WORDS[p.services[l]])}.`), ...(kept.length ? [`A task that has read ${kept.join(" or ")} information sends nothing out through a connected service, a website or a web address.`] : []), ...where, ...out];
 }
 
 /** The same check, with a line in the audit log when it stops something. */
