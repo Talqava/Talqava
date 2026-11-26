@@ -86,6 +86,14 @@ export function saveBot(id: string, input: Record<string, unknown>): Bot {
   return bot;
 }
 
+/** Switches abilities on for a bot, keeping everything else about it. Returns the bot as it is now. */
+export function grantPowers(id: string, add: string[]): Bot {
+  const bot = loadCrew().bots.find((b) => b.id === id);
+  if (!bot) throw new Error("There is no such agent.");
+  const powers = [...new Set([...bot.powers, ...add])];
+  return saveBot(id, { name: bot.name, type: bot.type, title: bot.title, character: bot.character, instructions: bot.instructions, model: bot.model, powers, approvals: bot.approvals, lead: bot.lead, governance: bot.governance, budget: bot.budget, group: bot.group, monthly: bot.monthly });
+}
+
 /** Removes the user's own version of a bot; a starter of the same name comes back. */
 export function removeBot(id: string) {
   if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(id)) throw new Error("Bad bot name.");

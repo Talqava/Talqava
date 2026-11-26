@@ -97,7 +97,7 @@ Work handed between agents doesn't send you separate messages. Its progress show
 
 1. Open **Needs you**.
 2. **Plan to approve:** read the steps and the estimate, then press **Approve the plan**, or write what should change and press **Ask for changes**.
-3. **Needs your answer before starting:** read what the agent needs, write your answer and press **Send and start**.
+3. **Needs your answer before starting:** read what the agent needs, write your answer and press **Send and start**. When what is missing is an ability the agent does not have, such as searching the web, the message says so and shows **Allow and start**: one press switches that ability on for the agent (the same as ticking it on the agent's page under **Agents**) and starts the task. Running commands, changing files and using a browser are never offered this way; you give those on the agent's page.
 4. **To review:** read the report, then press **Accept**, or write what should change and press **Send back with this comment**.
 
 ## Tips

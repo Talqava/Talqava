@@ -36,6 +36,8 @@ export interface Quest {
   steps: number;
   resumedAt?: string;
   note?: string;
+  /** While it is asking before starting: abilities it lacks that the owner can switch on with one press. */
+  grant?: string[];
   /** For a core quest: what it is, what it was given, and how its result is checked. */
   template?: { id: string; name: string; check: QuestCheck; inputs: Record<string, string>; mustMention: string[]; tries: number; maxTries: number };
   /** The latest check of the result, and whether one is running now. */
@@ -432,7 +434,7 @@ export class QuestRunner {
       conversation.messages.push({ role: "user", content: text }, { role: "assistant", content: [{ type: "text", text: message, citations: null }] as never });
       conversations.save(conversation);
     }
-    this.#set(quest.id, { status: "asking", note: [...r.missing, ...r.questions].join(" · ").slice(0, 400) });
+    this.#set(quest.id, { status: "asking", note: [...r.missing, ...r.questions].join(" · ").slice(0, 400), ...(r.grant.length ? { grant: r.grant } : {}) });
     audit({ ...who, kind: "task", action: "Asked the owner for what the task needs before starting", detail: [...r.missing.map((m) => `Missing: ${m}`), ...r.questions.map((q) => `Question: ${q}`)].join(" | ") });
     return true;
   }
@@ -592,7 +594,7 @@ export class QuestRunner {
           this.#ending.delete(id);
           this.#stopping.delete(id);
           // A task that was waiting for the owner's answers starts now; its questions are no longer a note.
-          this.#set(id, quest.status === "asking" ? { status: "running", note: undefined } : { status: "running" });
+          this.#set(id, quest.status === "asking" ? { status: "running", note: undefined, grant: undefined } : { status: "running" });
         } else {
           const status = this.#stopping.has(id) ? "stopped" : (this.#ending.get(id) ?? "done");
           this.#ending.delete(id);

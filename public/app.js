@@ -2245,6 +2245,7 @@ function readMail(m) {
         body,
         h("div", { class: "md readreport" }, q.said ? renderMarkdown(q.said) : h("p", {}, q.note || "I need something from you before I start.")),
         answer,
+        q.grant?.length ? h("div", { class: "banner" }, h("b", {}, "One press fixes this. "), `Let the ${q.bot.title || q.bot.name} ${q.grant.map((g) => g.words).join(", and ")}. `, h("button", { class: "small primary", onclick: () => act(() => api("POST", `conversations/${q.id}/grant`), "Switched on. The task has started.") }, "Allow and start")) : null,
         h("div", { class: "row" }, h("button", { class: "primary", onclick: () => answer.value.trim() && act(() => api("POST", `conversations/${q.id}/messages`, { text: answer.value.trim() })) }, "Send and start"), h("button", { class: "plain", onclick: () => go("quest", q.id) }, "Open the task")),
       );
     } else if (n.kind === "taskreview") {
