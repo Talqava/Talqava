@@ -1630,7 +1630,9 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (route === "GET integrations" && parts[1] === "mcp") return send(res, 200, mcpIntegration());
     // Services built on the connector kit: one set of routes for all of them.
     if (parts[1] === "services") {
-      const redirect = `${req.headers["x-forwarded-proto"] === "https" ? "https" : "http"}://${req.headers.host}/api/oauth/callback`;
+      // The address a service sends the browser back to. On this computer it is always written with "localhost",
+      // which both Google and Microsoft accept for an app on the owner's own machine (Microsoft ignores its port).
+      const redirect = `${req.headers["x-forwarded-proto"] === "https" ? "https" : "http"}://${String(req.headers.host).replace(/^127\.0\.0\.1(?=:|$)/, "localhost")}/api/oauth/callback`;
       if (route === "GET integrations" && !parts[2]) return send(res, 200, { services: listServices(), rules: changeRules(), redirect });
       if (route === "POST integrations" && parts[2] && parts[3] === "sign-in") return send(res, 200, await attempt(async () => startBrowserSignIn(parts[2], body, redirect)));
       if (route === "POST integrations" && parts[2] && parts[3] === "connect") return send(res, 200, await attempt(() => connectService(parts[2], body)));

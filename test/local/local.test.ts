@@ -680,7 +680,8 @@ test("examples differ in size, copying never shrinks a chart, and Git reports it
   const dir = await listIntegrations();
   assert.ok(dir.integrations.every((i) => dir.categories.includes(i.category)), "every entry has a category that is shown");
   assert.equal(dir.integrations.find((i) => i.id === "connector:stripe")?.category, "Payments and online shop");
-  assert.equal(dir.integrations.find((i) => i.name === "Gmail")?.state, "coming");
+  assert.equal(dir.integrations.find((i) => i.name === "Gmail")?.state, "needs-setup", "Gmail is built in, signing in through the browser");
+  assert.equal(dir.integrations.find((i) => i.name === "Salesforce")?.state, "coming");
   assert.equal(new Set(dir.integrations.map((i) => i.name.toLowerCase())).size, dir.integrations.length, "no service is listed twice");
   assert.equal(new Set(dir.integrations.map((i) => i.id)).size, dir.integrations.length);
   for (const bad of ["", "not a url; rm -rf /", "file:///etc/passwd", "--upload-pack=touch /tmp/x", "https://example.com/../../x"]) await assert.rejects(cloneRepository(bad), /web address/);

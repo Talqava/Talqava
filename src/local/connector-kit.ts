@@ -54,6 +54,8 @@ export interface ActionDef {
   description: string;
   /** One short line for the owner, shown in the list of what agents can do. */
   summary: string;
+  /** For a change that reaches other people (sending an email): the owner is asked every time, whatever their rule. */
+  alwaysAsk?: boolean;
   properties: Record<string, unknown>;
   required?: string[];
   run(connection: Connection, input: Record<string, any>): Promise<string>;
@@ -127,7 +129,7 @@ export function listServices() {
     docs: d.docs,
     fields: d.fields,
     browser: d.browser ? { secret: d.browser.secret, appSteps: d.browser.appSteps, scopes: d.browser.scopes } : null,
-    actions: d.actions.map((a) => ({ name: a.name, kind: a.kind, summary: a.summary })),
+    actions: d.actions.map((a) => ({ name: a.name, kind: a.kind, summary: a.alwaysAsk ? `${a.summary} (always asks you first)` : a.summary })),
     connections: all.filter((c) => c.service === d.id).map(view),
   }));
 }
@@ -248,7 +250,7 @@ export function serviceTools(): Tool[] {
           required: action.required ?? [],
           needsApproval: (input) => {
             if (action.kind === "read") return false;
-            if (action.kind === "destructive") return true;
+            if (action.kind === "destructive" || action.alwaysAsk) return true;
             try {
               return which(def.id, input.account).rule !== "auto";
             } catch {
@@ -294,6 +296,10 @@ export interface CallOptions {
   body?: unknown;
   /** Sent as a form, for the few services that want one. */
   form?: Record<string, string>;
+  /** Sent as it is, with this content type. */
+  raw?: { type: string; data: string };
+  /** The answer is plain text (a file's contents), returned as a string and cut at this many characters. */
+  text?: number;
 }
 
 /** One call to a service. Follows no redirects (a key must only reach its own service) and explains refusals plainly. */
@@ -301,8 +307,8 @@ export async function call<T = any>(url: string, opts: CallOptions): Promise<T> 
   if (!/^https:\/\//.test(url) && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(url)) throw new Error(`${opts.name}'s address must start with https://.`);
   const res = await fetch(url, {
     method: opts.method ?? "GET",
-    headers: { accept: "application/json", ...(opts.body !== undefined ? { "content-type": "application/json" } : opts.form ? { "content-type": "application/x-www-form-urlencoded" } : {}), ...opts.headers },
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : opts.form ? new URLSearchParams(opts.form).toString() : undefined,
+    headers: { accept: "application/json", ...(opts.body !== undefined ? { "content-type": "application/json" } : opts.form ? { "content-type": "application/x-www-form-urlencoded" } : opts.raw ? { "content-type": opts.raw.type } : {}), ...opts.headers },
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : opts.form ? new URLSearchParams(opts.form).toString() : opts.raw?.data,
     signal: AbortSignal.timeout(30_000),
     redirect: "error",
   }).catch(() => {
@@ -313,7 +319,7 @@ export async function call<T = any>(url: string, opts: CallOptions): Promise<T> 
   try {
     data = text ? JSON.parse(text) : null;
   } catch {}
-  if (res.ok) return data as T;
+  if (res.ok) return (opts.text ? text.slice(0, opts.text) : data) as T;
   const said = String(data?.message ?? data?.error?.message ?? data?.detail ?? data?.error_description ?? (typeof data?.error === "string" ? data.error : "") ?? "")
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
