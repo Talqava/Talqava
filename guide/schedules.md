@@ -9,6 +9,27 @@ Routines let work happen by itself at set times: a morning news digest every wee
 - **Buttons on each card:** **Last run**, **Run now**, **Edit**, **Pause** or **Resume**, and **Delete**.
 - **New routine**, a form with **Name**, **When**, **Who does it** and **Instructions**, and an **Add routine** button.
 
+## Briefings
+
+A briefing is a routine that is already written: a report an agent sends to your Inbox. **Start a briefing**, at the top of this page, lists them.
+
+- **Morning news** (weekdays at 8:00): the stories that matter for your business, two lines each, with links.
+- **Competitor watch** (Mondays): what changed at the competitors you name.
+- **Rules and deadlines** (Mondays): tax dates, filings and rule changes for your kind of business, from official pages. It is a reminder, not legal or tax advice.
+- **Monday plan** and **Friday wrap-up**: what is under way, waiting on you, up next and finished. These two are built from your own tasks, so they use no AI model and cost nothing.
+
+**Switch one on**
+1. Press **Switch on** on its card.
+2. Answer its one question if it has one (for the news: what to watch). Leave it empty to follow your mission.
+3. Read the short list: when it arrives, who sends it, what it costs, and that it changes nothing. Press **Switch on**.
+4. The first one arrives straight away, in your Inbox under **Updates**.
+
+A briefing is sent by the position whose job it suits, for example your Research Analyst for the news. If that agent could not search the web, switching the briefing on gives it that ability, and the list says so first. The three researched briefings use your AI model each time, usually a few cents.
+
+**Pause, change or switch one off.** On its card: **Pause**, **Send one now**, or **Switch off**. In the Inbox, an open briefing has **Pause** and **Change** at its top. A briefing also shows in the list of routines below, where you can change its time.
+
+A new Monday plan or Friday wrap-up replaces the last one of its kind. More briefings are planned for when a service is connected: overdue invoices, yesterday's sales, inbox triage, unanswered customers and meeting prep.
+
 ## Key ideas
 
 **A routine is a name, a time, someone to do it, and instructions.**

@@ -1986,6 +1986,24 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .areatab.on { background: var(--raised); border-color: var(--line2, var(--line)); font-weight: 600; }
 .railfold { width: 100%; text-align: left; background: transparent; border: 0; cursor: pointer; font: inherit; }
 /* Home. */
+/* ---------- briefings: ready-made reports for the Inbox ---------- */
+.briefgallery { display: grid; gap: 10px; margin-bottom: 8px; }
+.briefgallery h2 { margin: 0; }
+.briefgallery .briefown { margin-top: 18px; }
+.briefgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.briefcard { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 14px; display: grid; gap: 6px; align-content: start; }
+.briefcard.on { border-color: var(--accent-ink, var(--accent)); background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
+.brieftop { display: flex; align-items: center; gap: 8px; }
+.brieftop b { font-size: 15px; }
+.briefstate { font: 600 10.5px var(--mono); border-radius: 999px; padding: 1px 8px; background: var(--line); color: var(--soft); }
+.briefstate.on { background: var(--accent); color: var(--on-accent, #04130a); }
+.briefabout, .briefcard .note { margin: 0; }
+.brieffoot { margin-top: 6px; gap: 8px; }
+.brieffacts { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; }
+.brieffact { display: flex; justify-content: space-between; gap: 14px; }
+.brieffact span { color: var(--muted); }
+.brieffact b { font-weight: 500; text-align: right; }
+.briefmark { font: 600 10.5px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-ink, var(--accent)); }
 /* ---------- the Inbox: three lists, decisions answered in place ---------- */
 .inbox2 { max-width: 1040px; width: 100%; margin: 0 auto; padding: 22px 24px 60px; display: grid; gap: 14px; align-content: start; }
 .inboxhead { display: grid; gap: 10px; }
@@ -2026,7 +2044,9 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .inboxrow.unread::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
 .inboxrow:hover, .inboxrow.open { background: color-mix(in srgb, var(--accent) 9%, transparent); border-color: var(--line); }
 .inboxread { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); min-width: 0; }
-.inboxread:empty { display: none; }
+/* The older mailbox styles hide .mailread until a message is open; here the pane is always shown beside the list. */
+.inbox2 .inboxread { display: block; }
+.inbox2 .inboxread:empty { display: none; }
 .inboxreadtools { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
 .inboxback { display: none; }
 .inboxcalm { display: grid; gap: 6px; justify-items: center; text-align: center; padding: 40px 12px 14px; }

@@ -110,6 +110,8 @@ export interface Config {
   planFirst?: "leads" | "all" | "never";
   /** The leads' daily check-in arrives in the Inbox each day (built from the tasks, at no cost). Default on. */
   checkIn?: boolean;
+  /** The latest briefing of each kind that is built from the organization's own tasks, for the Inbox. */
+  digests?: Record<string, { id: string; name: string; at: string; text: string }>;
   /** WordPress sites agents may write for (see wordpress.ts). Each password is an application password, sent only to its site. */
   wordpress?: { id: string; name: string; url: string; user: string; password: string; publish: string }[];
   /** Accounts connected through the connector kit (see connector-kit.ts). Each key is sent only to its own service. */
