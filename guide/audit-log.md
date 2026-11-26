@@ -30,7 +30,7 @@ Click a line to open it. You see the full detail (for example the exact command 
 
 ### See what one agent did this week
 
-1. Open **Audit log** in the left menu.
+1. Open **More** at the bottom of the menu, then the **Audit log** tab.
 2. Under **Who**, choose the agent.
 3. Leave **When** on **Last 7 days**.
 4. Click any line to see the detail.

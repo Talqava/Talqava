@@ -4,7 +4,7 @@ A project is one folder for a body of work, such as onboarding a client, a launc
 
 ## What you'll see
 
-- **Projects** in the menu, under **Work**.
+- **Tasks** in the menu, then the **Projects** tab.
 - **A card for each project**, grouped by **Active**, **Planning**, **Paused** and **Done** (Done folds away). A card shows the name, how it is doing (**On track**, **At risk** or **Off track**), its lead and goal, tasks done out of the total, how many chats it has, its due day, and how many things need you.
 - **Filters** above the cards: **Needs me**, **Any goal** and **Any lead**.
 - **+ New project** at the top right.

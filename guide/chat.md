@@ -30,7 +30,7 @@ A new chat opens with a greeting and a few ideas to start from.
 ## How to…
 
 **Start a chat**
-1. Click **Chat** in the left-hand menu, then **New chat**.
+1. Open **New** in the menu, type your question in the box and press Enter. To see the chat page with your earlier chats, press **Your earlier chats** at the bottom of that screen, then **New chat**.
 2. Type your message, or click one of the ideas.
 3. Press Enter or click **Send**. Shift+Enter adds a new line.
 

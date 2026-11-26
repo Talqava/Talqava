@@ -59,7 +59,7 @@ See [Integrations](integrations.md) for the details.
 
 ### Find an agent for a job
 
-1. Open **Marketplace** in the left menu.
+1. Open **Team** in the menu, then the **Marketplace** tab.
 2. Type what you need in the search box, for example "invoices" or "social posts". Or press a department button.
 3. Press **On my team** to see only the Marketplace agents you have already added.
 

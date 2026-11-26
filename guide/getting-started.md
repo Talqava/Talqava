@@ -60,53 +60,41 @@ That's it: you have run your first task. From here, add more agents, set budgets
 
 ## A tour of the menu
 
-The menu on the left follows one idea: **you give work, agents do it, you stay in control.** The first time you open Talqava, a short welcome says the same; **Show the welcome again** on Home brings it back.
+The menu on the left has five places and **More**. It follows one idea: **you ask, agents do the work, you stay in control.** The first time you open Talqava, a short welcome says the same; **Show the welcome again** at the bottom of the home screen brings it back.
+
+Each place holds a few pages, shown as tabs across the top. Talqava remembers the tab you last used in each place. When a guide says "open **Integrations**" or any other page, find its place in the list below, or type the page's name in the box at the top.
 
 In a narrow window or on a phone, the menu is behind the **☰** button at the top left, and pages with two columns stack into one.
 
 The box at the top finds anything: files by name or by the words inside, tasks, chats, agents, and any page of the app.
 
-**Home**: Where Talqava opens. What needs you, what is being worked on, quick ways to start something, and the files you were last working on.
-
-**Chat**: Talk to your main agent directly, like a messaging app. Good for quick questions, drafts and ideas.
+**New**: Where Talqava opens. One box: ask for anything in your own words and press Enter. Plain words go to your assistant as a chat. Start with **@** and an agent's name to give that agent a task. Under the box are three things to try, and links to make a document, sheet, presentation or note. Below that: what is waiting on you, what is being worked on, and what got done today. **Your earlier chats** at the bottom opens the chat page. See [Chat](chat.md).
 
 **Inbox**: Everything that needs you, in one place: plans to approve, questions, finished work to review, changes agents want to make, and reminders.
 
-### Work
+**Tasks**: The work. Its tabs:
+- **Tasks**: every task in your organization: queued, working, needing you, to review and done.
+- **Projects**: one folder for each body of work, with its tasks and chats.
+- **Routines**: repeating work your agents do on their own, such as a morning news digest every weekday.
 
-**Tasks**: Every task in your organization: queued, working, needing you, to review and done.
+**Team**: Who does the work. Its tabs:
+- **Agents**: your agents and what each is doing right now. Assign work and open any agent's page.
+- **Organization**: your org chart. Add positions, draw who reports to whom, group them into teams with leads, and set budgets.
+- **Marketplace**: ready-made agents, teams, company templates, playbooks, page packs, Office templates and connectors, free.
 
-**Projects**: One folder for each body of work, with its tasks and chats.
+**Files**: What you make and what your agents work from. Its tabs:
+- **Office**, **Documents**, **Sheets**, **Slides** and **Notes**: what you and your agents make together. See [Office](office.md).
+- **Workspace** (procedures, price lists and decisions as pages), **Library** (your files, in folders), **Memory** (what agents should always remember) and **Skills** (procedures agents wrote down for themselves).
 
-**Routines**: Repeating work your agents do on their own, such as a morning news digest every weekday.
+**Right now**: Under the five places, the menu lists up to five things in motion: an amber mark for what is waiting on you, green for what is being worked on. Click one to open it.
 
-### Team
+**More**, at the bottom. Its tabs:
+- **Integrations**: connect AI models, Git and GitHub, other services, and keys.
+- **Security**: who can open Talqava and what each person may do, which AI services may receive sensitive information, rules every agent must follow, alerts, and backups. See [Security](security.md).
+- **Audit log**: a full record of every operation, by you and by each agent, sealed so that changes to it show.
+- **Settings**: approvals, budgets, cost saving, privacy and how Talqava looks.
 
-**Agents**: Your agents and what each is doing right now. Assign work, clear what is waiting on you, and open any agent's page.
-
-**Organization**: Your org chart. Add positions, draw who reports to whom, group them into teams with leads, and set budgets.
-
-**Marketplace**: Ready-made agents, teams, company templates, playbooks, page packs, Office templates and connectors, free.
-
-### Make and know
-
-**Office**: What you and your agents make together. Its parts are tabs across the top: **Documents** (letters, proposals, reports), **Sheets** (budgets and forecasts that calculate), **Slides** (presentations) and **Notes** (quick, private notes). See [Office](office.md).
-
-**Knowledge**: What your agents work from. Its parts are tabs across the top: **Workspace** (procedures, price lists and decisions as pages), **Library** (your files, in folders), **Memory** (what agents should always remember) and **Skills** (procedures agents wrote down for themselves).
-
-### Admin
-
-Fold this group away with the small arrow when you do not need it.
-
-**Security**: Who can open Talqava and what each person may do, which AI services may receive sensitive information, rules every agent must follow, alerts, and backups. See [Security](security.md).
-
-**Audit log**: A full record of every operation, by you and by each agent, sealed so that changes to it show.
-
-**Integrations**: Connect AI models, Git and GitHub, connectors to other services, and keys.
-
-**Settings**: Approvals, budgets, cost saving, privacy and how Talqava looks.
-
-**User guide**: Opens these guides, at the page that explains the screen you are on.
+**Help**: Opens these guides, at the page that explains the screen you are on.
 
 ## Good habits from day one
 
@@ -123,6 +111,6 @@ Every word Talqava uses, in one place: [Words Talqava uses](glossary.md).
 
 ## Where to get help
 
-- Press **Guide** at the top right of any page for that page's guide, or open **User guide** in the menu.
+- Press **Guide** at the top right of any page for that page's guide, or open **Help** at the bottom of the menu.
 - Each page's guide has an **If something goes wrong** section with the common messages and fixes.
 - Visit talqava.com, or report a problem on the project's GitHub page (github.com/Talqava/Talqava/issues).
