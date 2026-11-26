@@ -49,7 +49,7 @@ import { PUBLISH_RULES, PUBLISH_WORDS, connectSite, dailyPostPrompt, listContent
 import { fromDocx, fromXlsx, toDocx, toPptx, fromPptx, toXlsx } from "./officefiles.ts";
 import { listOfficeTemplates, useOfficeTemplate } from "./office-templates.ts";
 import { pageTool } from "../core/tools/page.ts";
-import { describeGuardrails, guardrails, guardrailsFrom, noteStuck } from "./guardrails.ts";
+import { describeGuardrails, guardrails, guardrailsFrom, marketAllowed, noteStuck } from "./guardrails.ts";
 import { securityOverview, securityReport } from "./securitycenter.ts";
 import { backupStatus, makeBackup, nightlyBackup, restoreTo, setBackup, testRestore } from "./backup.ts";
 import { finishSso, setSso, sso, ssoPublic, startSso } from "./sso.ts";
@@ -305,6 +305,9 @@ function jobOwner(owner: unknown): string | null {
   if (!orgs.active().members.some((m) => m.bot === String(owner))) throw new HttpError(400, "Choose an agent from your organization chart, or the Talqava assistant.");
   return String(owner);
 }
+
+/** What the app is told when a Marketplace item is not on the approved list: the screen then offers to approve it. */
+const notApproved = (key: string) => ({ error: "This organization only adds Marketplace items that an owner or administrator approved, and this one is not approved yet.", approve: key });
 
 class HttpError extends Error {
   status: number;
@@ -1236,7 +1239,10 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
         }
       };
       if (req.method === "GET" && parts[3] === "preview") return send(res, 200, plainly(() => previewKit(org, parts[2])));
-      if (req.method === "POST" && parts[3] === "install") return send(res, 200, await attempt(async () => { return installKit(org.id, parts[2], jobs); }));
+      if (req.method === "POST" && parts[3] === "install") {
+        if (!marketAllowed(`kit:${parts[2]}`)) return send(res, 403, notApproved(`kit:${parts[2]}`));
+        return send(res, 200, await attempt(async () => { return installKit(org.id, parts[2], jobs); }));
+      }
       if (req.method === "POST" && parts[3] === "undo") return send(res, 200, await attempt(() => undoKit(org.id, parts[2], jobs)));
       if (req.method === "POST" && parts[3] === "run") return send(res, 200, await attempt(async () => runPlaybook(org.id, parts[2])));
     }
@@ -1248,6 +1254,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
     if (req.method === "POST" && parts[2] === "update") return send(res, 200, plainly(() => updateMarketBot(parts[1])));
     if (req.method === "POST" && parts[2] === "undo-update") return send(res, 200, plainly(() => undoMarketUpdate(parts[1])));
     if (req.method === "POST" && parts[1] === "teams" && parts[3] === "add") {
+      if (!marketAllowed(`team:${parts[2]}`)) return send(res, 403, notApproved(`team:${parts[2]}`));
       try {
         return send(res, 200, { added: addTeam(parts[2]).map((b) => b.id) });
       } catch (err) {
@@ -1255,6 +1262,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
       }
     }
     if (req.method === "POST" && parts[2] === "add") {
+      if (!marketAllowed(parts[1])) return send(res, 403, notApproved(parts[1]));
       try {
         const bot = addMarketBot(parts[1]);
         return send(res, 200, { ...bot, modelInfo: botModel(bot) });
@@ -1871,6 +1879,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
     if (route === "POST orgs" && sub === "suggest") return send(res, 200, await attempt(() => suggestPositions(orgId, body.mission, Number(body.limit) || 6)));
     if (route === "POST orgs" && sub === "accept") return send(res, 200, await attempt(() => acceptSuggestion(orgId, body)));
     // A ready-made team dropped where the owner put it: under a position, into a group, or under the owner.
+    if (route === "POST orgs" && sub === "pack" && !marketAllowed(`team:${String(body.team ?? "")}`)) return send(res, 403, notApproved(`team:${String(body.team ?? "")}`));
     if (route === "POST orgs" && sub === "pack") return send(res, 200, await attempt(() => addPack(orgId, String(body.team ?? ""), { under: body.under, group: body.group })));
     // Positions the agents proposed, and the owner's answer to one.
     if (route === "GET orgs" && sub === "proposals") return send(res, 200, listProposals(orgId));

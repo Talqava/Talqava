@@ -226,6 +226,12 @@ Agents get the tools of ticked services only. A service you connect later stays 
 1. Under **Agent guardrails**, set **When an agent wants to change something** to **Always ask a person first**.
 2. From then on, no agent runs changes without asking, even one you had set to run without asking, and "always allow" no longer skips the question.
 
+### Let only approved Marketplace items be added
+
+1. Under **Agent guardrails**, set **The Marketplace** to **Only items an owner or administrator approved**.
+2. To approve an item, open it in the **Marketplace** and press its add button. Talqava asks whether to approve it for the organization; an owner or administrator says yes, and it is added. Anyone else is told it is not approved.
+3. The approved items are listed under **Agent guardrails**, each with **Remove**. Agents, teams, templates and playbooks all follow this rule; agents already on your team stay.
+
 ### Cap what a task may spend or how long it may run
 
 1. Under **Agent guardrails**, type an amount in **Most one task may spend** or a number of minutes in **Longest one task may run**.

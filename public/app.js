@@ -86,6 +86,16 @@ async function api(method, path, body) {
     }
     return api(method, path, body);
   }
+  // A Marketplace item that is not approved yet: an owner or administrator can approve it on the spot and carry on.
+  if (res.status === 403 && data.approve && !api.approving && confirm(`${data.error}\n\nApprove it for this organization and add it now? Only owners and administrators can.`)) {
+    api.approving = true;
+    try {
+      await api("PUT", "settings", { guardrails: { approveListing: data.approve } });
+    } finally {
+      api.approving = false;
+    }
+    return api(method, path, body);
+  }
   if (!res.ok) throw Object.assign(new Error(data.error || `Request failed (${res.status}).`), { status: res.status });
   // Where two administrators must agree, a security change is set aside instead of made: say so, plainly.
   if (res.status === 202 && data.waiting) throw Object.assign(new Error(data.message), { waiting: true });
@@ -9575,6 +9585,14 @@ function guardrailsSection(canEdit) {
                 ? h("div", { class: "checks" }, data.connected.map((c) => h("label", { class: "check" }, h("input", { type: "checkbox", disabled: !canEdit, checked: g.services.includes(c.id), onchange: (e) => save({ services: e.target.checked ? [...g.services, c.id] : g.services.filter((x) => x !== c.id) }) }), " ", c.name)))
                 : h("p", { class: "note small" }, "No service is connected yet. Connect one under Integrations, then approve it here."),
               h("p", { class: "note small" }, "Agents get the tools of ticked services only. A service connected later is off until you tick it."),
+            ]
+          : null,
+        h("label", {}, "The Marketplace", choice("market", [["any", "Anything may be added"], ["approved", "Only items an owner or administrator approved"]])),
+        g.market === "approved"
+          ? [
+              h("div", { class: "label" }, `Approved Marketplace items · ${g.listings.length}`),
+              g.listings.length ? h("ul", { class: "refused" }, g.listings.map((id) => h("li", {}, id.replace(/^team:/, "Team: ").replace(/^kit:/, "Template or playbook: "), " ", canEdit ? h("button", { class: "plain link", onclick: () => save({ removeListing: id }) }, "Remove") : null))) : h("p", { class: "note small" }, "None yet."),
+              h("p", { class: "note small" }, "To approve one, open it in the Marketplace and press its add button: you are asked whether to approve it. Agents already on your team stay."),
             ]
           : null,
         h("label", {}, "Deleting in a connected service (a calendar event, a file)", choice("deletes", [["ask", "Always ask a person first"], ["never", "Never"]])),

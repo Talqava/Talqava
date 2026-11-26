@@ -81,7 +81,7 @@ test("what the owner types is checked: sites are tidied, unknown choices are ign
   assert.deepEqual(G.guardrailsFrom({ maxTaskSpend: "" }, before), { ...before, maxTaskSpend: undefined, maxMinutes: undefined, maxDaySpend: undefined, pauseAfter: undefined });
   assert.equal(G.siteAllowed("https://sub.a.com/x", ["a.com"]), true);
   assert.equal(G.siteAllowed("https://a.com.evil.io/x", ["a.com"]), false);
-  assert.equal(G.describeGuardrails({ ...G.NO_GUARDRAILS, web: "approved", sites: ["a.com"], commands: "never" }).length, 9);
+  assert.equal(G.describeGuardrails({ ...G.NO_GUARDRAILS, web: "approved", sites: ["a.com"], commands: "never" }).length, 10);
 });
 
 test("with an approved list, only approved connected services keep their tools", () => {
@@ -132,4 +132,19 @@ test("an agent whose work gets stuck often enough within an hour is to be paused
   assert.equal(G.noteStuck("sales", t0 + 2 * 3_600_000 + 1, rules), false, "trouble from over an hour ago no longer counts");
   assert.equal(G.guardrailsFrom({ pauseAfter: 1 }).pauseAfter, 2, "once is not a pattern");
   assert.equal(G.guardrailsFrom({ pauseAfter: "" }, rules).pauseAfter, undefined);
+});
+
+test("only approved Marketplace items: others are refused and written down, and an item is approved or taken off one at a time", () => {
+  assert.equal(G.marketAllowed("bookkeeper", G.NO_GUARDRAILS), true);
+  let rules = G.guardrailsFrom({ market: "approved" });
+  assert.equal(G.marketAllowed("bookkeeper", rules), false);
+  rules = G.guardrailsFrom({ approveListing: "Bookkeeper" }, rules);
+  rules = G.guardrailsFrom({ approveListing: "team:sales-team" }, rules);
+  rules = G.guardrailsFrom({ approveListing: "../../etc" }, rules);
+  assert.deepEqual(rules.listings, ["bookkeeper", "team:sales-team"]);
+  assert.deepEqual([G.marketAllowed("bookkeeper", rules), G.marketAllowed("team:sales-team", rules), G.marketAllowed("kit:bakery", rules)], [true, true, false]);
+  rules = G.guardrailsFrom({ removeListing: "bookkeeper" }, rules);
+  assert.deepEqual(rules.listings, ["team:sales-team"]);
+  assert.equal(G.guardrailsFrom({ maxMinutes: 5 }, rules).listings.length, 1, "other changes keep the list");
+  assert.ok(G.describeGuardrails(rules).some((w) => /Only approved Marketplace items may be added \(1 approved\)/.test(w)));
 });

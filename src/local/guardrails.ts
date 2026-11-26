@@ -44,9 +44,13 @@ export interface Guardrails {
   deletes: "ask" | "never";
   /** Pause an agent whose runs were stopped for being stuck this many times within an hour. Left out: never. */
   pauseAfter?: number;
+  /** The Marketplace: anything may be added, or only the items an owner or administrator approved. */
+  market: "any" | "approved";
+  /** The approved Marketplace items: an agent's id, "team:<id>" for a team, "kit:<id>" for a template or playbook. */
+  listings: string[];
 }
 
-export const NO_GUARDRAILS: Guardrails = { changes: "agent", commands: "allowed", connectors: "allowed", services: [], web: "any", sites: [], deletes: "ask" };
+export const NO_GUARDRAILS: Guardrails = { changes: "agent", commands: "allowed", connectors: "allowed", services: [], web: "any", sites: [], deletes: "ask", market: "any", listings: [] };
 
 /** The guardrails in force. */
 export const guardrails = (): Guardrails => guardrailsFrom(getConfig().guardrails ?? {});
@@ -74,6 +78,9 @@ export function guardrailsFrom(input: unknown, before: Guardrails = NO_GUARDRAIL
     maxMinutes: amount(g.maxMinutes, before.maxMinutes, 24 * 60),
     maxDaySpend: amount(g.maxDaySpend, before.maxDaySpend, 1_000_000),
     deletes: pick(g.deletes, ["ask", "never"] as const, before.deletes ?? "ask"),
+    market: pick(g.market, ["any", "approved"] as const, before.market ?? "any"),
+    // The whole list can be given, or one item approved (approveListing) or taken off (removeListing).
+    listings: [...new Set([...(g.listings === undefined ? (before.listings ?? []) : Array.isArray(g.listings) ? g.listings : []), ...(g.approveListing ? [g.approveListing] : [])].map((x) => String(x).trim().toLowerCase()).filter((x) => /^((team|kit):)?[a-z0-9][a-z0-9_-]{0,80}$/.test(x) && x !== String(g.removeListing ?? "").trim().toLowerCase()))].slice(0, 1000),
     pauseAfter: ((n) => (n === undefined ? undefined : Math.max(2, Math.round(n))))(amount(g.pauseAfter, before.pauseAfter, 50)),
   };
 }
@@ -187,6 +194,16 @@ export function guard(spec: RunSpec, who: string, g: Guardrails = guardrails()):
   };
 }
 
+/**
+ * Whether a Marketplace item may be added. When only approved items may, and this one is not approved, the refusal
+ * is written down and false is returned.
+ */
+export function marketAllowed(key: string, g: Guardrails = guardrails()): boolean {
+  if (g.market !== "approved" || g.listings.includes(key.toLowerCase())) return true;
+  audit({ actor: "system", actorName: "Guardrails", kind: "guardrail", ok: false, action: "Refused: a Marketplace item that is not approved was not added", detail: key });
+  return false;
+}
+
 /** The guardrails in plain words, for the Security page and reports. */
 export function describeGuardrails(g: Guardrails = guardrails()): string[] {
   return [
@@ -198,6 +215,7 @@ export function describeGuardrails(g: Guardrails = guardrails()): string[] {
     g.maxMinutes !== undefined ? `No task may run longer than ${g.maxMinutes} minutes.` : "No extra cap on how long a task may run.",
     g.maxDaySpend !== undefined ? `All tasks together may spend at most $${g.maxDaySpend} a day; after that nothing starts until the next day.` : "No limit on what all tasks together spend in a day.",
     g.deletes === "never" ? "Agents never delete anything in a connected service." : "Deleting in a connected service always asks a person first.",
+    g.market === "approved" ? `Only approved Marketplace items may be added (${g.listings.length} approved).` : "Anything in the Marketplace may be added.",
     g.pauseAfter !== undefined ? `An agent whose work is stopped for being stuck ${g.pauseAfter} times within an hour is paused, and it is recorded.` : "Agents are not paused automatically.",
   ];
 }
