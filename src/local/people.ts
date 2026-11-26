@@ -31,6 +31,10 @@ interface StoredPerson {
   lockedUntil?: string;
   createdAt: string;
   lastSignIn?: string;
+  /** Switched off by the company directory: the account is kept, but nobody can sign in with it. */
+  off?: boolean;
+  /** The company directory's own id for this person, when the directory added them. */
+  directoryId?: string;
 }
 interface StoredSession {
   hash: string;
@@ -56,6 +60,8 @@ export interface Person {
   groups: string[];
   secondStep: boolean;
   locked: boolean;
+  /** False when the company directory switched the account off. */
+  active: boolean;
   createdAt: string;
   lastSignIn: string | null;
 }
@@ -102,7 +108,7 @@ function load(): Store {
 }
 const save = () => writeJson(file(), load());
 
-const view = (p: StoredPerson): Person => ({ id: p.id, name: p.name, email: p.email, role: p.role, groups: p.groups, secondStep: Boolean(p.totp?.on), locked: Boolean(p.lockedUntil && p.lockedUntil > new Date().toISOString()), createdAt: p.createdAt, lastSignIn: p.lastSignIn ?? null });
+const view = (p: StoredPerson): Person => ({ id: p.id, name: p.name, email: p.email, role: p.role, groups: p.groups, secondStep: Boolean(p.totp?.on), locked: Boolean(p.lockedUntil && p.lockedUntil > new Date().toISOString()), active: !p.off, createdAt: p.createdAt, lastSignIn: p.lastSignIn ?? null });
 const stretch = (password: string, salt: string) => crypto.scryptSync(password, salt, 32).toString("hex");
 const hashToken = (token: string) => crypto.createHash("sha256").update(token).digest("hex");
 const cleanEmail = (e: unknown) => String(e ?? "").trim().toLowerCase().slice(0, 200);
@@ -310,6 +316,7 @@ export const people = {
     // The same work is done for an unknown email, so timing does not give away who has an account.
     const typed = stretch(String(input.password ?? "").slice(0, 200), p?.salt ?? "0000000000000000");
     if (!p) throw wrong();
+    if (p.off) throw new Error("This account has been switched off by your organization. Ask an administrator.");
     if (p.lockedUntil && p.lockedUntil > new Date().toISOString()) throw new Error(`Too many wrong passwords. Try again after ${new Date(p.lockedUntil).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}, or ask an administrator to set a new password.`);
     if (!crypto.timingSafeEqual(Buffer.from(typed), Buffer.from(p.key))) {
       p.failed++;
@@ -359,6 +366,7 @@ export const people = {
       s.people.push(p);
       added = true;
     }
+    if (p.off) throw new Error("This account has been switched off by your organization. Ask an administrator.");
     p.lastSignIn = new Date().toISOString();
     const token = crypto.randomBytes(32).toString("hex");
     s.sessions = s.sessions.filter((x) => !this.expired(x)).slice(-500);
@@ -378,12 +386,66 @@ export const people = {
     const session = s.sessions.find((x) => x.hash === hashToken(token));
     if (!session || this.expired(session)) return null;
     const p = s.people.find((x) => x.id === session.person);
-    if (!p) return null;
+    if (!p || p.off) return null;
     if (Date.now() - new Date(session.seenAt).getTime() > 60_000) {
       session.seenAt = new Date().toISOString();
       save();
     }
     return view(p);
+  },
+
+  // ---- the company directory (see scim.ts): it adds people, changes their names, and switches them off and on ----
+  /** A person as the directory knows them, by Talqava's id. */
+  fromDirectory(id: string): (Person & { directoryId: string }) | null {
+    const p = load().people.find((x) => x.id === id);
+    return p ? { ...view(p), directoryId: p.directoryId ?? "" } : null;
+  },
+  /** Adds a person on the directory's word. They sign in with the company account; the password set here is random and unknown. */
+  provision(input: { email: unknown; name: unknown; directoryId?: unknown; active?: boolean }, role: Role): Person {
+    const s = load();
+    const email = cleanEmail(input.email);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("The directory gave no email address for this person.");
+    if (s.people.some((p) => p.email === email)) throw Object.assign(new Error("Someone already signs in with that email address."), { exists: true });
+    const person: StoredPerson = { id: newId(), name: cleanName(input.name) || email, email, role: role === "owner" ? "member" : role, groups: [], salt: "", key: "", failed: 0, createdAt: new Date().toISOString(), directoryId: String(input.directoryId ?? "").slice(0, 200), ...(input.active === false ? { off: true } : {}) };
+    setKey(person, crypto.randomBytes(32).toString("hex"));
+    s.people.push(person);
+    save();
+    return view(person);
+  },
+  /** A change from the directory: a new name or email, or switched off or on. The owner is never changed this way. */
+  directoryUpdate(id: string, patch: { name?: unknown; email?: unknown; active?: boolean; directoryId?: unknown }): Person {
+    const s = load();
+    const p = s.people.find((x) => x.id === id);
+    if (!p) throw new Error("There is no such person.");
+    if (p.role === "owner") throw Object.assign(new Error("The owner's account is not managed by the directory."), { forbidden: true });
+    if (patch.name !== undefined) p.name = cleanName(patch.name) || p.name;
+    if (patch.email !== undefined) {
+      const email = cleanEmail(patch.email);
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("That is not an email address.");
+      if (s.people.some((x) => x.id !== id && x.email === email)) throw Object.assign(new Error("Someone already signs in with that email address."), { exists: true });
+      p.email = email;
+    }
+    if (patch.directoryId !== undefined) p.directoryId = String(patch.directoryId).slice(0, 200);
+    if (patch.active !== undefined) {
+      if (patch.active) delete p.off;
+      else {
+        p.off = true;
+        // Switched off takes effect at once: every session of theirs ends.
+        s.sessions = s.sessions.filter((x) => x.person !== id);
+      }
+    }
+    save();
+    return view(p);
+  },
+  /** Removes a person on the directory's word, and ends their sessions. Never the owner. */
+  directoryRemove(id: string): void {
+    const s = load();
+    const p = s.people.find((x) => x.id === id);
+    if (!p) throw new Error("There is no such person.");
+    if (p.role === "owner") throw Object.assign(new Error("The owner's account is not managed by the directory."), { forbidden: true });
+    s.people = s.people.filter((x) => x.id !== id);
+    s.sessions = s.sessions.filter((x) => x.person !== id);
+    save();
   },
 
   /** Whether a request from this address is allowed, when approved networks are set. */
