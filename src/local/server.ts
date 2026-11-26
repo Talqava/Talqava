@@ -61,11 +61,9 @@ import { LEVELS, LEVEL_WORDS, RECOMMENDED, REGIONS, REGION_WORDS, WHERE, WHERE_W
 import { ROLES, ROLE_WORDS, mayDo, people } from "./people.ts";
 import type { Person } from "./people.ts";
 import { projects } from "./projects.ts";
-import { connectCatalog, connectorLabel, disconnectCatalog, listCatalog } from "./connector-catalog.ts";
-import { addWatch, changeRules, checkConnections, connectionProblems, awaitsFragment, finishBrowserSignIn, finishFragmentSignIn, pollWatches, toolActionKind, removeWatch, setWatch, startBrowserSignIn, type Happening, connectService, listServices, removeConnection, updateConnection } from "./connector-kit.ts";
+import { addWatch, changeRules, checkConnections, forgetRemovedServices, connectionProblems, awaitsFragment, finishBrowserSignIn, finishFragmentSignIn, pollWatches, toolActionKind, removeWatch, setWatch, startBrowserSignIn, type Happening, connectService, listServices, removeConnection, updateConnection } from "./connector-kit.ts";
 import "./services/index.ts";
 import { installKit, listKits, previewKit, runPlaybook, undoKit } from "./kits.ts";
-import { connectLangfuse, langfuseIntegration, recordStep, removeLangfuse } from "./langfuse.ts";
 import { finishOpenRouterSignIn, openrouterIntegration, openrouterModels, removeOpenRouter, saveOpenRouterKey, startOpenRouterSignIn, useOpenRouterModel } from "./openrouter.ts";
 import { autoSetupGit, cloneRepository, disconnectRepository, gitIntegration, githubAccounts, githubRepos, installGit, listIntegrations, pollGithubSignIn, removeGitIntegration, startGithubSignIn, testGithub } from "./integrations.ts";
 import { ASSIGN_RULES, INDUSTRIES, REQUEST_RULES, STRUCTURES, seatsFor } from "./structures.ts";
@@ -143,12 +141,6 @@ export const engine = new Engine({
   onEvent: (id, event) => {
     quests.onEvent(id, event);
     auditEvent(id, event);
-    // Each model call's cost and tokens go to Langfuse too, when the owner connected it.
-    if (event.type === "assistant" && event.step && getConfig().langfuse) {
-      const quest = questStore.get(id);
-      const root = quest ? rootOf(quest) : id;
-      recordStep(event.step, { trace: root, traceName: (questStore.get(root)?.title ?? conversations.get(id)?.title ?? "Chat").slice(0, 200), agent: quest ? quest.bot.title || quest.bot.name : getConfig().agentName || "Assistant", session: id });
-    }
   },
 });
 quests.attach(engine);
@@ -231,7 +223,6 @@ function describeRequest(method: string, parts: string[], body: any, url: URL): 
   }
   if (area === "integrations" && id === "services") return null; // the kit writes its own audit entries, with the account's name
   if (area === "integrations" && id === "wordpress") return action === "connect" ? null : { kind: "integration", action: method === "DELETE" ? "Disconnected a WordPress site" : parts[3] === "daily" ? "Set up a routine that writes a blog post" : "Changed a WordPress site's settings" };
-  if (area === "integrations" && id === "connectors") return { kind: "integration", action: `${parts[3] === "remove" ? "Disconnected" : "Connected"} the ${connectorLabel(parts[2] ?? "")} connector from the catalogue` };
   if (area === "integrations") return { kind: "integration", action: `${id ? id[0].toUpperCase() + id.slice(1) : "Integration"}: ${(action ?? method.toLowerCase()).replace(/-/g, " ")}`, detail: words(body) };
   // Goals and projects write their own entries; small edits (a title, a description) are not worth a line each.
   if (area === "goals" || area === "projects") return method === "POST" || method === "DELETE" || (area === "goals" && method === "PATCH") ? null : { kind: "organization", action: "Changed a project", detail: words(body) };
@@ -1094,10 +1085,10 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
     return send(res, 200, { policy: policy(cfg), levels: LEVELS.map((id) => ({ id, ...LEVEL_WORDS[id] })), where: WHERE.map((id) => ({ id, words: WHERE_WORDS[id] })), recommended: RECOMMENDED, services: cfg.providers.filter((p) => p.kind === "anthropic" ? Boolean(cfg.apiKey) : true).map((p) => ({ id: p.id, name: p.name, local: isLocalRef(`${p.id}/x`), why: notApprovedWhy(p.id, policy(cfg)) })), regions: REGIONS.map((id) => ({ id, words: REGION_WORDS[id] })), words: describePolicy(policy(cfg)) });
   }
   if (route === "GET guardrails") {
-    // The connected services there are to approve: catalogue and hand-added connectors, built-in services, WordPress.
+    // The connected services there are to approve: hand-added connectors, built-in services, WordPress.
     const cfg = getConfig();
     const connected = [
-      ...cfg.mcpServers.map((s) => ({ id: s.name.toLowerCase(), name: connectorLabel(s.name) })),
+      ...cfg.mcpServers.map((s) => ({ id: s.name.toLowerCase(), name: s.name })),
       ...listServices().filter((s) => s.connections.length).map((s) => ({ id: s.id, name: s.name })),
       ...((cfg.wordpress ?? []).length ? [{ id: "wordpress", name: "WordPress" }] : []),
     ];
@@ -1280,7 +1271,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
       } catch {
         kits = [];
       }
-      return send(res, 200, { bots, teams: loadTeams(), packs, kits, connectors: listCatalog(), officeTemplates: listOfficeTemplates(), problems: market.problems, updates: bots.filter((b) => b.install.state === "update").length });
+      return send(res, 200, { bots, teams: loadTeams(), packs, kits, officeTemplates: listOfficeTemplates(), problems: market.problems, updates: bots.filter((b) => b.install.state === "update").length });
     }
     const plainly = <T>(fn: () => T): T => {
       try {
@@ -1919,13 +1910,6 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
         }));
       }
     }
-    // The connector catalogue: well-known services, what each can read and change, connected with a key.
-    if (route === "GET integrations" && parts[1] === "connectors") return send(res, 200, listCatalog());
-    if (route === "POST integrations" && parts[1] === "connectors" && parts[3] === "connect") return send(res, 200, await attempt(() => connectCatalog(parts[2], body.key)));
-    if (route === "POST integrations" && parts[1] === "connectors" && parts[3] === "remove") return send(res, 200, await attempt(() => disconnectCatalog(parts[2])));
-    if (route === "GET integrations" && parts[1] === "langfuse") return send(res, 200, langfuseIntegration());
-    if (route === "POST integrations" && parts[1] === "langfuse" && parts[2] === "connect") return send(res, 200, await attempt(() => connectLangfuse(body)));
-    if (route === "POST integrations" && parts[1] === "langfuse" && parts[2] === "remove") return send(res, 200, await attempt(async () => removeLangfuse()));
     if (route === "GET integrations" && parts[1] === "openrouter") return send(res, 200, await openrouterIntegration());
     if (route === "POST integrations" && parts[1] === "openrouter") {
       // Sign-in starts from the address the app is open on, so OpenRouter can send the person back to it.
@@ -2199,6 +2183,7 @@ export function start() {
   setInterval(() => nightlyBackup(), 3600 * 1000).unref();
   setInterval(tidy, 24 * 3600 * 1000).unref();
   const server = http.createServer(handle);
+  forgetRemovedServices();
   server.listen(PORT, HOST, () => {
     // If Talqava was added to the Claude app from an older copy of this app (it was renamed), point Claude at this one.
     // Only the desktop app does this, so running from the code folder never repoints Claude.

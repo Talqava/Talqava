@@ -21,8 +21,6 @@ export interface IntegrationInfo {
   state: "connected" | "needs-setup" | "unavailable" | "coming";
   /** One line on where it stands. */
   status: string;
-  /** Set for a service from the connector catalogue: its id there. It connects with a pasted key, from the list itself. */
-  connector?: string;
 }
 
 /** The categories integrations are filed under, in the order they are shown. */
@@ -140,7 +138,6 @@ export async function listIntegrations(): Promise<{ categories: string[]; integr
     state: keys.length ? "connected" : "needs-setup",
     status: keys.length ? `${keys.length} key${keys.length === 1 ? "" : "s"} saved` : "No keys saved",
   };
-  const { langfuseIntegration } = await import("./langfuse.ts");
   const wpSites = cfg.wordpress ?? [];
   const wordpress: IntegrationInfo = {
     id: "wordpress",
@@ -150,18 +147,8 @@ export async function listIntegrations(): Promise<{ categories: string[]; integr
     state: wpSites.length ? "connected" : "needs-setup",
     status: wpSites.length ? `${wpSites.length} site${wpSites.length === 1 ? "" : "s"} connected` : "Connect your site",
   };
-  const own = [aiModels, wordpress, line(openrouter), line(git), line(mcp), apiKeys, line(langfuseIntegration())].map((i) => ({ ...i, category: FILED_UNDER[i.id] ?? "Advanced" }));
-  // Services from the connector catalogue stand in the same list, each under its own category.
-  const { listCatalog } = await import("./connector-catalog.ts");
-  const services: IntegrationInfo[] = listCatalog().connectors.map((c) => ({
-    id: `connector:${c.id}`,
-    connector: c.id,
-    name: c.name,
-    category: FILED_UNDER[c.id] ?? "Advanced",
-    summary: c.about,
-    state: c.connected ? "connected" : "needs-setup",
-    status: c.connected ? "Connected with your key" : "Connects with a key you paste",
-  }));
+  const own = [aiModels, wordpress, line(openrouter), line(git), line(mcp), apiKeys].map((i) => ({ ...i, category: FILED_UNDER[i.id] ?? "Advanced" }));
+  const services: IntegrationInfo[] = [];
   // And the services built on Talqava's own connector kit.
   const { listServices } = await import("./connector-kit.ts");
   await import("./services/index.ts");

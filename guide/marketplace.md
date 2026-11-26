@@ -45,9 +45,7 @@ A playbook is one known process: **Month-end close**, **Hiring** or **Client onb
 
 ### Connect a service your business already uses
 
-1. Scroll to **Connectors**: Stripe, Airtable, monday.com, Intercom, Linear and GitHub.
-2. Press **See what it can do** to read what it can read and change, then paste a key you make in that service and press **Check the key and connect**.
-3. **Not available yet** says which services cannot be connected yet, and why.
+Services are connected under **Connections**, not in the Marketplace.
 
 See [Connections](integrations.md) for the details.
 

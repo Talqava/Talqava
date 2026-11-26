@@ -277,29 +277,6 @@ test("Typeform: forms and the answers people sent, with each question's words", 
   assert.equal(await run("typeform__read_answers", { form: "frm001" }), "Catering request: 1 response in all, showing 1.\n\nSent 2026-11-25 14:03\n- Your name: Sam\n- What do you need?: Lunch for 20\n- Which breads?: Rye, Sourdough");
 });
 
-test("Shopify: an app's ID and secret become a day-long token, orders and products are read, and mistakes are explained", async () => {
-  await assert.rejects(K.connectService("shopify", { values: { shop: "not a shop!", client_id: "id", client_secret: "shh" } }), /first part of its myshopify\.com address/);
-  await assert.rejects(K.connectService("shopify", { values: { shop: "adas-bakery", client_id: "id", client_secret: "wrong" } }), /client ID or secret is not accepted/);
-  const c = await K.connectService("shopify", { values: { shop: "https://Adas-Bakery.myshopify.com/admin", client_id: "id", client_secret: "shh" } });
-  assert.equal(c.label, "Ada's Bakery (adas-bakery.myshopify.com)");
-  const before = shop.tokens;
-  assert.equal(await run("shopify__list_orders", { words: "financial_status:paid" }), "[1001] #1001 · 2026-11-25 · paid / unfulfilled · 19.50 USD · sam@example.com");
-  assert.deepEqual(seen.at(-1)!.body.variables, { n: 20, q: "financial_status:paid" });
-  assert.equal(await run("shopify__get_order", { order: "1001" }), "[1001] #1001 · 2026-11-25 · paid / unfulfilled · 19.50 USD · sam@example.com\nItems:\n- 2 × Rye loaf (SKU RYE)");
-  assert.equal(shop.tokens, before, "the token is fetched once and kept, not asked for on every call");
-  await assert.rejects(run("shopify__get_order", { order: "1001) { id } evil" }), /number in brackets/);
-  assert.match(await run("shopify__update_product", { product: "55", title: "Dark rye", status: "DRAFT" }), /Updated: \[55\] Dark rye · draft · 4 in stock/);
-  assert.deepEqual(seen.at(-1)!.body.variables.product, { id: "gid://shopify/Product/55", title: "Dark rye", status: "DRAFT" });
-  await assert.rejects(run("shopify__find_customers", { words: "sam" }), /the app lacks a permission.*read_customers.*add the scope/s);
-  // A new order starts a task through a watch.
-  const w = await K.addWatch({ connection: c.id, trigger: "new_order", bot: "cashier", org: "o1", instructions: "Thank the customer." });
-  shop.orders.unshift({ ...shop.orders[0], id: "gid://shopify/Order/1002", name: "#1002" });
-  const started: any[] = [];
-  assert.equal(await K.pollWatches((h) => started.push(h)), 1);
-  assert.match(started[0].text, /\[1002\] #1002/);
-  K.removeWatch(w.id);
-});
-
 test("Pipedrive: deals, people, organizations, notes and activities with a personal token", async () => {
   await assert.rejects(K.connectService("pipedrive", { values: { domain: "bakery", api_token: "short" } }), /does not look like a Pipedrive API token/);
   await assert.rejects(K.connectService("pipedrive", { values: { domain: "evil.example.com/x", api_token: "pd-token-0123456789abcdef" } }), /company domain/);
@@ -439,96 +416,6 @@ test("ClickUp: tasks with a personal token sent as it is, or a browser sign-in w
   const trigger = K.services().find((s) => s.id === "clickup")!.triggers![0];
   assert.deepEqual(await trigger.list({ values: { token: "oauth-token" } } as never, "901"), ["86c0abc"]);
   assert.equal(seen.at(-1)!.auth, "Bearer oauth-token");
-});
-
-test("Freshdesk: tickets with the agent's key; a reply to the customer always asks first", async () => {
-  await assert.rejects(K.connectService("freshdesk", { values: { domain: "evil.example.com/x", api_key: "fd-key" } }), /helpdesk domain/);
-  await assert.rejects(K.connectService("freshdesk", { values: { domain: "bakery", api_key: "wrong" } }), /Freshdesk refused that: You have to be logged in/);
-  assert.equal((await K.connectService("freshdesk", { values: { domain: "Bakery.freshdesk.com", api_key: "fd-key" }, rule: "auto" })).label, "Ada Baker (bakery.freshdesk.com)");
-  const row = "[41] Late delivery · open · high · from Sam Customer · updated 2026-11-25";
-  assert.equal(await run("freshdesk__list_tickets", { since: "2026-09-01" }), row);
-  assert.match(seen.at(-1)!.path, /updated_since=2026-09-01T00%3A00%3A00Z&order_by=updated_at&order_type=desc&include=requester&per_page=30/);
-  assert.equal(await run("freshdesk__find_tickets", { status: "open", priority: "high", tag: "deliv'ery" }), `${row}\n(3 in all)`);
-  assert.equal(new URLSearchParams(seen.at(-1)!.path.split("?")[1]).get("query"), `"status:2 AND priority:3 AND tag:'delivery'"`);
-  await assert.rejects(run("freshdesk__find_tickets", {}), /Give a status/);
-  const one = await run("freshdesk__get_ticket", { ticket: "#41" });
-  assert.match(one, /Customer: sam@example\.com\nTags: delivery\n\nWhere is my bread\?\n\n2026-11-25 09:00 · the customer\nStill waiting\.\n\n2026-11-25 09:30 · private note\nDriver was late\./);
-  await run("freshdesk__add_note", { ticket: 41, note: "Refund <offered>\nby phone" });
-  assert.deepEqual([seen.at(-1)!.path, seen.at(-1)!.body], ["/freshdesk/tickets/41/notes", { body: "Refund &lt;offered&gt;<br>by phone", private: true }]);
-  assert.equal(asks("freshdesk__reply_to_customer"), true, "even when changes need no asking");
-  assert.equal(asks("freshdesk__add_note"), false);
-  assert.equal(K.toolActionKind("freshdesk__reply_to_customer"), "send");
-  assert.match(await run("freshdesk__update_ticket", { ticket: 41, status: "resolved", priority: "low" }), /· resolved · low ·/);
-  assert.deepEqual(seen.at(-1)!.body, { status: 4, priority: 1 });
-  await assert.rejects(run("freshdesk__update_ticket", { ticket: 41, status: "gone" }), /choose one of: open, pending, resolved, closed/);
-  assert.equal(await run("freshdesk__create_ticket", { customer_email: "Lee@Example.com", subject: "Cake order", message: "Two cakes" }), "Opened ticket 42: “Cake order” for lee@example.com.");
-  assert.deepEqual(seen.at(-1)!.body, { email: "lee@example.com", subject: "Cake order", description: "Two cakes", status: 2, priority: 1 });
-  await assert.rejects(run("freshdesk__create_ticket", { customer_email: "bad@example.com", subject: "x", message: "y" }), /Freshdesk answered 400: email: It should be a valid email address/);
-});
-
-test("Brevo: contacts, lists and campaign results with a key; nothing is sent from here", async () => {
-  await assert.rejects(K.connectService("brevo", { values: { api_key: "short" } }), /starts with xkeysib-/);
-  await assert.rejects(K.connectService("brevo", { values: { api_key: "xkeysib-wrong-0123456789abc" } }), /Brevo refused that: Key not found/);
-  assert.equal((await K.connectService("brevo", { values: { api_key: "xkeysib-0123456789abcdef0123" }, rule: "auto" })).label, "Bakery Ltd (ada@example.com)");
-  assert.ok(!K.services().find((s) => s.id === "brevo")!.actions.some((a) => /send|campaign_create/.test(a.name)), "no action sends email");
-  assert.equal(await run("brevo__list_lists"), "[3] Newsletter · 240 people");
-  const row = "sam@example.com · Sam Customer · lists 3 · added 2026-11-20";
-  assert.equal(await run("brevo__list_contacts"), row);
-  assert.equal(await run("brevo__list_contacts", { list: "3" }), row);
-  assert.equal(await run("brevo__get_contact", { email: "Sam@Example.com" }), row);
-  assert.equal(seen.at(-1)!.path, "/brevo/contacts/sam%40example.com?identifierType=email_id");
-  await assert.rejects(run("brevo__get_contact", { email: "../account" }), /email address/);
-  assert.equal(await run("brevo__add_contact", { email: "lee@example.com", first_name: "Lee", lists: ["3"] }), "Saved the contact lee@example.com on list 3.");
-  assert.deepEqual(seen.at(-1)!.body, { email: "lee@example.com", attributes: { FIRSTNAME: "Lee" }, listIds: [3], updateEnabled: true });
-  assert.equal(await run("brevo__update_contact", { email: "sam@example.com", remove_from_lists: ["3"], unsubscribed: true }), "Updated the contact sam@example.com.");
-  assert.deepEqual([seen.at(-1)!.method, seen.at(-1)!.body], ["PUT", { unlinkListIds: [3], emailBlacklisted: true }]);
-  await assert.rejects(run("brevo__update_contact", { email: "sam@example.com" }), /Say what to change/);
-  assert.equal(await run("brevo__list_campaigns"), "[8] November news · “Stollen is back” · sent · sent 2026-11-18 · delivered 200 · opened 90 (45%) · clicked 20 (10%) · unsubscribed 1 · bounced 3");
-  const trigger = K.services().find((s) => s.id === "brevo")!.triggers![0];
-  const conn = { values: { api_key: "xkeysib-0123456789abcdef0123" } } as never;
-  assert.deepEqual(await trigger.list(conn, ""), ["12"]);
-  assert.equal((await trigger.describe(conn, "12", "")).title, "New contact: sam@example.com");
-});
-
-test("Telegram: a bot's messages are received once and kept in memory; sending always asks the owner", async () => {
-  await assert.rejects(K.connectService("telegram", { values: { token: "not a token" } }), /does not look like a bot token/);
-  await assert.rejects(K.connectService("telegram", { values: { token: "999999:made-up-for-tests-not-a-real-token" } }), /already sends its messages to another program/);
-  const c = await K.connectService("telegram", { values: { token: "123456:made-up-for-tests-not-a-real-token" }, rule: "auto" });
-  assert.equal(c.label, "Bakery helper (@bakery_help_bot)");
-  assert.equal(await run("telegram__recent_messages"), "No messages have arrived since Talqava was started.");
-
-  telegramUpdates = [
-    { update_id: 10, message: { message_id: 5, date: 1795478400, chat: { id: 42, type: "private", first_name: "Sam" }, from: { id: 42, is_bot: false, first_name: "Sam", last_name: "Customer" }, text: "Do you have rye today?" } },
-    { update_id: 11, message: { message_id: 6, date: 1795478460, chat: { id: -1001, type: "supergroup", title: "Bakery staff" }, from: { id: 9, is_bot: true, first_name: "Other bot" }, text: "ignored: from a bot" } },
-    { update_id: 12, channel_post: { message_id: 7, date: 1795478520, chat: { id: -1002, type: "channel", title: "Bakery news" }, caption: "New stollen" } },
-  ];
-  const got = await run("telegram__recent_messages");
-  assert.equal(got, "2026-11-24 00:02 · Bakery news · Bakery news [chat -1002, message 7]\nNew stollen\n\n2026-11-24 00:00 · Sam Customer · private chat [chat 42, message 5]\nDo you have rye today?");
-  // The next ask starts past what was received, so Telegram forgets those; they stay readable here.
-  await run("telegram__recent_messages", { chat: "42" });
-  assert.equal(seen.at(-1)!.body.offset, 13);
-  telegramUpdates = [];
-  assert.match(await run("telegram__recent_messages", { chat: "42" }), /^2026-11-24 00:00 · Sam Customer/);
-
-  assert.equal(asks("telegram__send_message"), true, "even when changes need no asking");
-  assert.equal(K.toolActionKind("telegram__send_message"), "send");
-  assert.equal(await run("telegram__send_message", { chat: "42", text: " Yes, until 3pm. ", reply_to: "5" }), "Sent to Sam (message 77).");
-  assert.deepEqual(seen.at(-1)!.body, { chat_id: 42, text: "Yes, until 3pm.", reply_parameters: { message_id: 5, allow_sending_without_reply: true } });
-  await assert.rejects(run("telegram__send_message", { chat: "404", text: "x" }), /Telegram answered 400: Bad Request: chat not found/);
-  await assert.rejects(run("telegram__send_message", { chat: "42", text: "x".repeat(4097) }), /4,096 characters/);
-  await assert.rejects(run("telegram__send_message", { chat: "someone", text: "x" }), /chat's number/);
-  assert.equal(await run("telegram__get_chat", { chat: "@bakerystaff" }), "supergroup · Bakery staff · @bakerystaff [chat -1001]");
-
-  // A new message can start a task, and is described from what was kept.
-  const trigger = K.services().find((s) => s.id === "telegram")!.triggers![0];
-  const conn = { values: { token: "123456:made-up-for-tests-not-a-real-token" } } as never;
-  telegramUpdates = [{ update_id: 13, message: { message_id: 8, date: 1795478600, chat: { id: 42, type: "private", first_name: "Sam" }, from: { id: 42, first_name: "Sam" }, text: "Thanks!" } }];
-  const ids = await trigger.list(conn, "");
-  assert.deepEqual(ids, ["42_8", "m1002_7", "42_5"]);
-  const told = await trigger.describe(conn, "42_8", "");
-  assert.equal(told.title, "Telegram message from Sam");
-  assert.match(told.text, /Thanks!\n\nTo answer, use send_message with chat 42\./);
-  await assert.rejects(trigger.describe(conn, "1_1", ""), /no longer kept/);
 });
 
 test("Klaviyo: profiles and lists with a private key; subscribing records consent and always asks first", async () => {

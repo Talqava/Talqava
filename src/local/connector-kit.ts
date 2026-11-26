@@ -217,6 +217,22 @@ const serviceOf = (id: string): ServiceDef => {
 const saved = (): Connection[] => (getConfig().connections ?? []).filter((c) => registry.some((d) => d.id === c.service)).map((c) => ({ ...c, rule: CHANGE_RULES.includes(c.rule as ChangeRule) ? (c.rule as ChangeRule) : "ask" }));
 const store = (list: Connection[]) => saveConfig({ connections: [...(getConfig().connections ?? []).filter((c) => !registry.some((d) => d.id === c.service)), ...list] });
 
+/**
+ * Services Talqava no longer offers (they connect only with a pasted key), and Langfuse likewise. Their saved keys
+ * are forgotten when the app starts, so nothing secret stays behind for a service that can no longer be used or
+ * disconnected from the page. Nothing at the service itself is changed.
+ */
+const REMOVED_SERVICES = ["shopify", "woocommerce", "freshdesk", "brevo", "telegram"];
+export function forgetRemovedServices(): string[] {
+  const cfg = getConfig() as ReturnType<typeof getConfig> & { langfuse?: unknown };
+  const gone = (cfg.connections ?? []).filter((c) => REMOVED_SERVICES.includes(c.service));
+  if (!gone.length && cfg.langfuse === undefined) return [];
+  saveConfig({ connections: (cfg.connections ?? []).filter((c) => !REMOVED_SERVICES.includes(c.service)), langfuse: undefined } as Parameters<typeof saveConfig>[0]);
+  const names = [...new Set([...gone.map((c) => c.service), ...(cfg.langfuse === undefined ? [] : ["langfuse"])])];
+  audit({ actor: "system", actorName: "Talqava", kind: "integration", action: "Forgot the saved keys of services Talqava no longer offers", detail: names.join(", ") });
+  return names;
+}
+
 /** A connection as the app shows it: never its keys. */
 export type PublicConnection = Omit<Connection, "values">;
 const view = ({ values: _v, ...c }: Connection): PublicConnection => c;

@@ -44,15 +44,17 @@ Their return address is on the owner's own computer, not the website. Talqava's 
 | Zendesk | Each account has its own address; a shared app needs Zendesk's global OAuth client, which is requested from Zendesk | `read`, `write` | Whether Zendesk grants one for this use |
 | Square | developer.squareup.com/apps, the application's OAuth page, Production | `MERCHANT_PROFILE_READ`, `PAYMENTS_READ`, `ORDERS_READ`, `CUSTOMERS_READ`, `CUSTOMERS_WRITE`, `ITEMS_READ` | Whether Square accepts a return address on the owner's own computer in Production. Try it; if refused, Square moves to the table above |
 
-## Services that stay on a key, and why
+## Services Talqava does not offer, and why
 
-| Service | Why |
+Talqava offers only services that can sign in through the browser. These were removed; each can come back once it can.
+
+| Service | What it would take |
 |---|---|
-| Telegram | Its bots have a token and nothing else; there is no sign-in page for other apps. |
+| Telegram | Nothing can be done: its bots have a token and no sign-in page for other apps. |
 | Freshdesk | Its own pages describe only an API key. Its parent company has a sign-in for some of its other products; nothing confirms it covers Freshdesk. |
-| WooCommerce | It has an approval page, but it hands the new key to a public https address, not to the browser. Receiving it would mean Talqava's website holding a shop's key for a moment, which the sign-in service is built never to do. |
-| Brevo | It has a sign-in, but an app for other companies is made with Brevo's command-line tool and reviewed by Brevo first (about a week, by its pages). Its pages also give two different sets of addresses. Worth doing after the others; nothing is built for it yet. |
-| Shopify | Owners already connect with their own app's ID and secret, exchanged for a short-lived token. One shared app for every shop needs Shopify's approval, and approval again for customer data. Worth doing after the others. |
+| WooCommerce | Its approval page hands the new key to a public https address, not to the browser. Receiving it would mean Talqava's website holding a shop's key for a moment, which the sign-in service is built never to do. |
+| Brevo | An app for other companies is made with Brevo's command-line tool and reviewed by Brevo first (about a week, by its pages). Its pages also give two different sets of addresses. |
+| Shopify | One shared app for every shop needs Shopify's approval, and approval again for customer data. |
 
 ## Things to know before registering Slack
 

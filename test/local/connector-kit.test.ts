@@ -77,6 +77,8 @@ before(async () => {
   process.env.TALQAVA_SLACK_API = `${url}/slack`;
   K = await import("../../src/local/connector-kit.ts");
   await import("../../src/local/services/index.ts");
+  // A key-only service to exercise the kit with; Talqava itself no longer offers it.
+  K.registerServices((await import("../fixtures/key-shop.ts")).woocommerce);
 });
 after(() => server.close());
 const tool = (name: string) => K.serviceTools().find((t) => t.name === name);
@@ -260,4 +262,17 @@ test("an account can be limited to chosen agents, single actions switched off, a
   assert.equal(shown.watches.length, 1);
   K.removeConnection(c.id);
   assert.equal(K.watches().length, 0, "disconnecting removes its events");
+});
+
+test("the saved keys of services Talqava no longer offers are forgotten when the app starts", async () => {
+  const store = await import("../../src/local/store.ts");
+  const before = store.getConfig().connections ?? [];
+  const old = (service: string) => ({ id: `old-${service}`, service, label: "Old", values: { api_key: "kept-too-long" }, rule: "ask", addedAt: "2026-11-01T00:00:00.000Z", checkedAt: "2026-11-01T00:00:00.000Z" });
+  store.saveConfig({ connections: [...before, old("freshdesk"), old("telegram")], langfuse: { host: "https://x.example", publicKey: "pk", secretKey: "sk" } } as never);
+  assert.deepEqual(K.forgetRemovedServices().sort(), ["freshdesk", "langfuse", "telegram"]);
+  const after = store.getConfig() as ReturnType<typeof store.getConfig> & { langfuse?: unknown };
+  assert.equal(JSON.stringify(after).includes("kept-too-long"), false, "the keys are gone from the settings");
+  assert.equal(after.langfuse, undefined);
+  assert.equal((after.connections ?? []).length, before.filter((c) => !["shopify", "woocommerce", "freshdesk", "brevo", "telegram"].includes(c.service)).length, "other connections are kept");
+  assert.deepEqual(K.forgetRemovedServices(), [], "nothing to do the second time");
 });
