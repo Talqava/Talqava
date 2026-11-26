@@ -279,6 +279,12 @@ function pptBody(markdown: string): string {
   const paras: string[] = [];
   for (const raw of markdown.split("\n")) {
     if (!raw.trim() || /^\s*\|?\s*:?-{3,}/.test(raw)) continue;
+    // A chart that lives in a sheet cannot go into the file as a chart: its place is marked in words.
+    const chart = /^\s*!chart\s+\S+\s*(.*)$/.exec(raw);
+    if (chart) {
+      paras.push(`<a:p><a:pPr marL="0" indent="0"><a:buNone/></a:pPr>${pptRuns(`(Chart: ${chart[1].trim() || "from a sheet"})`)}</a:p>`);
+      continue;
+    }
     const bullet = /^(\s*)(?:[-*+]|\d+[.)])\s+(.*)$/.exec(raw);
     if (bullet) {
       const level = Math.min(4, Math.floor(bullet[1].replace(/\t/g, "    ").length / 2));

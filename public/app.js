@@ -7771,8 +7771,118 @@ function parseDeck(text) {
   return slides.length ? slides : [{ title: "", body: "", notes: "" }];
 }
 const writeDeck = (slides) => `${slides.map((x) => [`# ${x.title.replace(/\s+/g, " ").trim() || "Untitled slide"}`, x.body.trim(), x.notes.trim() ? `Notes: ${x.notes.trim()}` : ""].filter(Boolean).join("\n\n")).join("\n\n---\n\n")}\n`;
+/** The numbers a chart shows: a column of labels beside a column of numbers, or one row. */
+function chartPoints(eng, value, tab, range) {
+  const out = [];
+  const wide = range.r1 === range.r2 && range.c2 > range.c1;
+  if (wide) for (let c = range.c1; c <= range.c2; c++) out.push({ label: eng.colName(c), v: value(tab, c, range.r1) });
+  else for (let r = range.r1; r <= range.r2; r++) out.push({ label: range.c2 > range.c1 ? eng.show(value(tab, range.c1, r)) : String(r + 1), v: value(tab, range.c2, r) });
+  return out.filter((p) => typeof p.v === "number");
+}
+/** A bar or line chart as a picture with its numbers in words for screen readers. */
+function chartPicture(eng, type, pts) {
+  if (!pts.length) return h("p", { class: "note small" }, "There are no numbers in that range yet.");
+  const max = Math.max(1, ...pts.map((p) => Math.abs(p.v)));
+  const words = pts.map((p) => `${p.label} ${eng.show(p.v, "number")}`).join("; ");
+  let picture;
+  if (type === "line" && pts.length > 1) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 300 110");
+    svg.setAttribute("class", "sheetline");
+    const low = Math.min(0, ...pts.map((p) => p.v));
+    const high = Math.max(...pts.map((p) => p.v), low + 1);
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    line.setAttribute("fill", "none");
+    line.setAttribute("stroke", "currentColor");
+    line.setAttribute("stroke-width", "2");
+    line.setAttribute("points", pts.map((p, n) => `${10 + (280 * n) / (pts.length - 1)},${100 - (90 * (p.v - low)) / (high - low)}`).join(" "));
+    svg.append(line);
+    picture = h("div", {}, svg, h("div", { class: "sheetlinelabels note small" }, pts.map((p) => h("span", {}, p.label))));
+  } else picture = h("div", { class: "sheetbars" }, pts.map((p) => h("div", { class: "sheetbarrow" }, h("span", { class: "sheetbarlabel" }, p.label), h("span", { class: "sheetbarfill", style: `width: ${Math.max(1, (Math.abs(p.v) / max) * 100).toFixed(1)}%` }), h("span", { class: "mono small" }, eng.show(p.v, "number")))));
+  return h("div", { role: "img", "aria-label": `${type === "line" ? "Line" : "Bar"} chart. ${words}` }, picture);
+}
+
+/** A line of a slide that shows a sheet's chart: "!chart <the sheet's page id> <the chart's title>". */
+const SLIDE_CHART = /^!chart\s+([\w-]{4,80})(?:\s+(.*))?$/;
+const sheetPages = new Map();
+/** A sheet's page, kept for half a minute so a deck with several charts asks once. */
+const sheetPage = (id) => {
+  const had = sheetPages.get(id);
+  if (had && Date.now() - had.at < 30_000) return had.page;
+  const page = api("GET", `workspace/pages/${id}`);
+  sheetPages.set(id, { at: Date.now(), page });
+  return page;
+};
+/** Draws a sheet's chart on a slide. It is read from the sheet each time, so it always shows the sheet as it is now. */
+function slideChart(pageId, title) {
+  const box = h("figure", { class: "slidechart" }, h("p", { class: "note small" }, "Loading the chart…"));
+  (async () => {
+    try {
+      const [page, eng] = await Promise.all([sheetPage(pageId), import("/sheet-engine.js")]);
+      if (page.kind !== "sheet") throw new Error("not a sheet");
+      const file = eng.parseFile(page.markdown);
+      const want = String(title ?? "").trim().toLowerCase();
+      let found = null;
+      file.sheets.forEach((sh, tab) => sh.charts.forEach((ch) => (found ??= !want || String(ch.title ?? "").trim().toLowerCase() === want ? { ch, tab } : null)));
+      if (!found) return fill(box, h("p", { class: "note small" }, want ? `The sheet “${page.title}” has no chart called “${title}”.` : `The sheet “${page.title}” has no chart yet.`));
+      fill(box, h("figcaption", {}, h("b", {}, found.ch.title || "Chart"), h("span", { class: "note small" }, ` · from ${page.title}`)), chartPicture(eng, found.ch.type, chartPoints(eng, eng.compute(file), found.tab, found.ch.range)));
+    } catch {
+      fill(box, h("p", { class: "note small" }, "This chart's sheet could not be opened. It may have been deleted, or you may not have access to it."));
+    }
+  })();
+  return box;
+}
+/** Lets the owner pick one chart of one sheet, and hands back the line that shows it on a slide. */
+async function pickSheetChart(done) {
+  const dialog = h("dialog", { class: "aidialog" });
+  const close = () => (dialog.close(), dialog.remove());
+  const status = h("p", { class: "note", role: "status" }, "Loading your sheets…");
+  const sheetSel = h("select", { "aria-label": "Sheet" });
+  const chartSel = h("select", { "aria-label": "Chart" });
+  const add = h("button", { class: "primary", disabled: true }, "Add to the slide");
+  const loadCharts = async () => {
+    add.disabled = true;
+    fill(chartSel);
+    if (!sheetSel.value) return;
+    try {
+      const [page, eng] = await Promise.all([api("GET", `workspace/pages/${sheetSel.value}`), import("/sheet-engine.js")]);
+      const charts = eng.parseFile(page.markdown).sheets.flatMap((sh) => sh.charts);
+      fill(chartSel, charts.map((ch) => h("option", { value: ch.title ?? "" }, ch.title || "Chart")));
+      status.textContent = charts.length ? "The chart on the slide always shows the sheet as it is now." : "That sheet has no chart yet. Open it, select some numbers and press Add a chart.";
+      add.disabled = !charts.length;
+    } catch (err) {
+      status.textContent = err.message;
+    }
+  };
+  sheetSel.addEventListener("change", loadCharts);
+  add.addEventListener("click", () => (done(`!chart ${sheetSel.value} ${chartSel.value}`.trim()), close()));
+  fill(dialog, h("h3", {}, "Add a chart from a sheet"), h("div", { class: "form" }, h("label", {}, "Sheet", sheetSel), h("label", {}, "Chart", chartSel), status, h("div", { class: "row" }, add, h("button", { onclick: close }, "Cancel"))));
+  document.body.append(dialog);
+  dialog.showModal();
+  try {
+    const sheets = (await api("GET", "workspace/office")).files.filter((f) => f.kind === "sheet");
+    fill(sheetSel, sheets.map((f) => h("option", { value: f.id }, f.title)));
+    if (!sheets.length) status.textContent = "You have no sheets yet. Make one under Sheets, with a chart in it.";
+    else await loadCharts();
+  } catch (err) {
+    status.textContent = err.message;
+  }
+}
+/** A slide's text: Markdown, with any chart lines drawn in place. */
+function slideBody(text) {
+  const parts = [];
+  let run = [];
+  const flush = () => (run.join("\n").trim() && parts.push(renderMarkdown(run.join("\n"))), (run = []));
+  for (const line of String(text ?? "").split("\n")) {
+    const m = SLIDE_CHART.exec(line.trim());
+    if (m) (flush(), parts.push(slideChart(m[1], m[2])));
+    else run.push(line);
+  }
+  flush();
+  return parts;
+}
 /** One slide drawn at 16:9: its title and its text. */
-const slideFace = (x, n, total) => h("div", { class: "slideface" }, h("h2", {}, x.title || "Untitled slide"), h("div", { class: "md slidebody" }, renderMarkdown(x.body || "")), total ? h("span", { class: "slidenum" }, `${n} / ${total}`) : null);
+const slideFace = (x, n, total) => h("div", { class: "slideface" }, h("h2", {}, x.title || "Untitled slide"), h("div", { class: "md slidebody" }, slideBody(x.body || "")), total ? h("span", { class: "slidenum" }, `${n} / ${total}`) : null);
 
 /** Shows a deck full screen, one slide at a time: arrows or a click move on, Escape leaves. */
 function presentDeck(slides, from = 0) {
@@ -7968,7 +8078,7 @@ async function renderDeck(col, id) {
         h("div", { class: "wshead" }, title),
         h("div", { class: "row wrap decktools" }, h("button", { class: "primary", onclick: () => presentDeck(slides, at) }, "Present"), h("button", { onclick: () => move(-1) }, "Move earlier"), h("button", { onclick: () => move(1) }, "Move later"), h("button", { class: "danger", onclick: remove }, "Delete slide"), h("button", { onclick: printDeck }, "Print or save as PDF"), h("button", { onclick: () => downloadFrom(`workspace/pages/${id}/pptx`, `${page.title}.pptx`, ui.body) }, "PowerPoint file (.pptx)"), status),
         waiting,
-        h("div", { class: "deckwork" }, rail, h("div", { class: "deckmain" }, face, h("label", {}, "Slide title", sTitle), h("label", {}, "On the slide", sBody), h("label", {}, "Speaker notes", sNotes))),
+        h("div", { class: "deckwork" }, rail, h("div", { class: "deckmain" }, face, h("label", {}, "Slide title", sTitle), h("label", {}, "On the slide", sBody), h("div", {}, h("button", { type: "button", class: "small", onclick: () => pickSheetChart((line) => ((sBody.value = `${sBody.value.trim()}\n\n${line}`.trim()), sBody.dispatchEvent(new Event("input")))) }, "Add a chart from a sheet")), h("label", {}, "Speaker notes", sNotes))),
       ),
       aside,
     ),
@@ -8495,13 +8605,7 @@ async function renderSheet(col, id) {
   bar.addEventListener("change", () => commit(active.col, active.row, bar.value));
 
   // ----- charts -----
-  const seriesOf = (range) => {
-    const out = [];
-    const wide = range.r1 === range.r2 && range.c2 > range.c1;
-    if (wide) for (let c = range.c1; c <= range.c2; c++) out.push({ label: eng.colName(c), v: value(mem.tab, c, range.r1) });
-    else for (let r = range.r1; r <= range.r2; r++) out.push({ label: range.c2 > range.c1 ? eng.show(value(mem.tab, range.c1, r)) : String(r + 1), v: value(mem.tab, range.c2, r) });
-    return out.filter((p) => typeof p.v === "number");
-  };
+  const seriesOf = (range) => chartPoints(eng, value, mem.tab, range);
   const drawCharts = () => {
     fill(
       chartsBox,
