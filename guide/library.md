@@ -61,6 +61,15 @@ To lock one file quickly, open its preview and press **Private**.
 2. Or use **Move** and pick a folder, then press **Move here**.
 3. To rename, press **Rename**, type, and press Enter.
 
+### Find a picture by the words in it
+
+A photo or screenshot you add (PNG, JPEG, WebP or GIF, up to 5 MB) is kept and found by its name. To find it by its words too, such as a receipt or a whiteboard:
+
+1. Click the picture and, in its details, press **Read the words in this picture**.
+2. Confirm. The picture is sent to your team's AI model, which writes out the words it sees; they are kept with the picture, so you and your agents can find it by them. It costs about as much as a short question.
+
+This needs a Claude model as your team's model, because it can look at pictures. A picture whose sensitivity level may not be sent to that AI service is not sent; Talqava says so instead. The call appears under **Security › What was sent**.
+
 ### Check what an agent will find
 
 1. Open **Check what your agents will find**.

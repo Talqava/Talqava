@@ -26,6 +26,9 @@ const MAX_FILE = 60_000_000;
 const MAX_TEXT = 3_000_000;
 const TEXT_TYPES = new Set(["txt", "md", "markdown", "csv", "tsv", "json", "yaml", "yml", "xml", "log", "rtf", "ini", "toml", "sql", "js", "ts", "py", "rb", "go", "java", "c", "h", "cpp", "cs", "php", "sh", "css"]);
 const OFFICE_TYPES = new Set(["docx", "pptx", "xlsx"]);
+/** Pictures whose words an AI model can write out when the owner asks (see readPicture). */
+export const PICTURE_TYPES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif" };
+const MAX_PICTURE = 5_000_000;
 
 const home = (orgId: string) => path.join(DATA, "organizations", orgId);
 /** The folder the person drops documents into. */
@@ -226,6 +229,7 @@ async function readText(file: string, type: string): Promise<{ text: string; pro
     else if (OFFICE_TYPES.has(type)) text = officeText(type, buffer);
     else if (type === "html" || type === "htm") text = htmlToText(buffer.toString("utf8")).text;
     else if (TEXT_TYPES.has(type) || !buffer.subarray(0, 4000).includes(0)) text = buffer.toString("utf8");
+    else if (PICTURE_TYPES[type]) return { text: "", problem: "A picture. To find it by the words in it, open its details and press Read the words in this picture." };
     else return { text: "", problem: "This kind of file has no text to read. It is kept, and agents can find it by its name." };
     text = text.replace(/\r\n?/g, "\n").replace(/\u0000/g, "").trim();
     if (!text) return { text: "", problem: type === "pdf" ? "No text was found in this PDF. It may be a scan (pictures of pages)." : "The file has no text in it." };
@@ -793,6 +797,38 @@ export const library = {
   },
 
   /** How much is in the library, for the page and for telling agents it exists. */
+  /**
+   * Writes out the words in a picture so that it can be found by them. `see` is given the picture and returns its
+   * words (an AI model that can look at pictures does this; the caller decides which, and whether the picture's
+   * sensitivity level lets it). The words are kept like any document's text.
+   */
+  async readPicture(org: Org, id: number, see: (picture: Buffer, mediaType: string) => Promise<string>): Promise<{ name: string; words: number }> {
+    const db = openOrgDb(org.id);
+    const row = db.prepare("select * from documents where id = ?").get(id) as unknown as Row | undefined;
+    if (!row) throw new Error("There is no such document in the library.");
+    const mediaType = PICTURE_TYPES[String(row.type).toLowerCase()];
+    if (!mediaType) throw new Error("Only pictures (PNG, JPEG, WebP or GIF) can be read this way.");
+    const file = path.join(ensureFolders(org), row.path);
+    const picture = fs.readFileSync(file);
+    if (picture.length > MAX_PICTURE) throw new Error("This picture is larger than 5 MB. Save a smaller copy and add that.");
+    const text = (await see(picture, mediaType)).replace(/\r\n?/g, "\n").trim().slice(0, MAX_TEXT);
+    const none = !text || /^NONE\.?$/i.test(text);
+    db.exec("begin");
+    try {
+      db.prepare("delete from passages where document = ?").run(id);
+      db.prepare("update documents set readable = ?, problem = ? where id = ?").run(none ? 0 : 1, none ? "No words were found in this picture. It is kept, and agents can find it by its name." : "", id);
+      const insert = db.prepare("insert into passages (document, seq, text) values (?, ?, ?)");
+      insert.run(id, 0, `File: ${row.name.replace(/[._-]+/g, " ")}`);
+      if (!none) passagesOf(text).forEach((p, i) => insert.run(id, i + 1, p));
+      db.exec("commit");
+    } catch (err) {
+      db.exec("rollback");
+      throw err;
+    }
+    audit({ actor: "owner", actorName: "You", kind: "library", action: `Had the words in the picture “${row.name}” written out`, detail: none ? "No words were found" : `${text.split(/\s+/).length} words` });
+    return { name: row.name, words: none ? 0 : text.split(/\s+/).length };
+  },
+
   stats(org: Org, botId: string | null = OWNER): { documents: number; readable: number; passages: number; private: number } {
     const docs = this.list(org, botId);
     return { documents: docs.length, readable: docs.filter((d) => d.readable).length, passages: docs.reduce((n, d) => n + d.passages, 0), private: docs.filter((d) => d.access.private).length };
