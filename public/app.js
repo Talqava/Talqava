@@ -9223,7 +9223,11 @@ function levelPicker(page, id) {
   const say = () => (note.textContent = `${words[sel.value]} Which AI services may receive each level is set under Security.`);
   sel.addEventListener("change", () => attempt(async () => (await api("PATCH", `workspace/pages/${id}`, { level: sel.value }), (page.level = sel.value), say(), toast(`Marked ${LEVEL_NAMES[sel.value]}.`))));
   say();
-  return [levelsEditor(page, id), h("div", { class: "label" }, "Sensitivity"), sel, note, projectPicker(page, id), page.kind === "sheet" || page.kind === "deck" ? null : checklistBox(page, id), commentsBox(page, id), page.kind === "sheet" || page.kind === "deck" ? linksBox(id) : null];
+  // A nudge when the text looks more sensitive than its level: the owner decides, with one press.
+  const hint = page.levelHint
+    ? h("div", { class: "banner" }, `This looks more sensitive than ${LEVEL_NAMES[page.level] ?? "its level"}: ${page.levelHint.why}. `, h("button", { class: "small", onclick: () => ((sel.value = page.levelHint.level), sel.dispatchEvent(new Event("change")), hint.remove()) }, `Mark ${LEVEL_NAMES[page.levelHint.level]}`))
+    : null;
+  return [levelsEditor(page, id), h("div", { class: "label" }, "Sensitivity"), hint, sel, note, projectPicker(page, id), page.kind === "sheet" || page.kind === "deck" ? null : checklistBox(page, id), commentsBox(page, id), page.kind === "sheet" || page.kind === "deck" ? linksBox(id) : null];
 }
 
 const ACCESS_WORDS = { none: "No access", read: "Read", comment: "Comment", suggest: "Suggest", edit: "Edit" };

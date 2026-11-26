@@ -54,7 +54,7 @@ import { backupStatus, makeBackup, nightlyBackup, restoreTo, setBackup, testRest
 import { finishSso, setSso, sso, ssoPublic, startSso } from "./sso.ts";
 import { RETENTION_CHOICES, findPerson, retention, retentionFrom, sweep } from "./retention.ts";
 import { REVIEW_EVERY_DAYS, alerts, feedStatus, reviews, setFeed, startAuditFeed } from "./auditfeed.ts";
-import { LEVELS, LEVEL_WORDS, RECOMMENDED, WHERE, WHERE_WORDS, describePolicy, policy, policyFrom } from "./sensitivity.ts";
+import { LEVELS, LEVEL_WORDS, RECOMMENDED, WHERE, WHERE_WORDS, describePolicy, higherLevel, policy, policyFrom } from "./sensitivity.ts";
 import { ROLES, ROLE_WORDS, mayDo, people } from "./people.ts";
 import type { Person } from "./people.ts";
 import { projects } from "./projects.ts";
@@ -1500,7 +1500,8 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     }
     if (area === "pages") {
       if (route === "POST workspace" && !id) return send(res, 200, await attempt(() => workspace.create(org, null, { parent: body.parent, title: body.title, markdown: body.markdown, icon: body.icon, kind: body.kind, folder: body.folder, tags: body.tags, level: body.level, project: body.project })));
-      if (route === "GET workspace" && id && !sub) return send(res, 200, await attempt(() => workspace.get(org, id)));
+      // With the file goes a hint when its text looks more sensitive than its level says (worked out here, from patterns).
+      if (route === "GET workspace" && id && !sub) return send(res, 200, await attempt(() => ((page) => ({ ...page, levelHint: higherLevel(page.markdown, page.level) }))(workspace.get(org, id))));
       if (route === "PUT workspace" && id && !sub) return send(res, 200, await attempt(() => workspace.save(org, id, body.markdown, body.baseRev)));
       if (route === "PATCH workspace" && id && !sub) return send(res, 200, await attempt(() => workspace.update(org, id, body)));
       if (route === "DELETE workspace" && id && id !== "deleted" && !sub) return send(res, 200, await attempt(() => workspace.archive(org, id)));
