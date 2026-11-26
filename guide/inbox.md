@@ -74,6 +74,10 @@ Work handed between agents doesn't send you separate messages. Its progress show
 **See the cost or open the full task**
 1. In the message, click **See the receipt** or **Open the task**.
 
+**Delete a card under Waiting on you**
+1. Press **Delete** at the bottom of the card. It leaves the Inbox, and **Undo** shows for a few seconds.
+2. The task is kept and still shows under **Tasks**, where it goes on waiting for your answer. For a card that asks to allow a step, Delete also answers **Don't allow**, so the agent is told and carries on without that step. Undo brings the card back, but not the step.
+
 **Archive a problem**
 1. A card for something that failed, with nothing left to decide, has **Archive** at the bottom. It moves the card to the **Archive** tab; the task is kept.
 
