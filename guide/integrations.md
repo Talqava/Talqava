@@ -100,7 +100,12 @@ These services are built into Talqava and all work the same way.
 
 1. Open **Integrations** and choose the service, for example **WooCommerce**.
 2. Read **What agents can do**: what they can read, what they can change, and what they can delete (deleting always asks you first).
-3. Follow the numbered steps on the page to make a key in the service, paste it, and press **Check and connect**. Talqava checks the key with the service before saving it.
+3. Sign in:
+   - **Asana, HubSpot, Typeform and Trello** sign in through your browser. The page shows **Sign in to** the service first. The service asks for an app registered with it; you register your own once, following the numbered steps on the page, then press the button and approve in the browser. The tab says **Connected**. For Trello you copy only its public API key; there is no token to copy.
+   - If you would rather paste a key, open **Use a key instead** on the same page.
+   - **Shopify, WooCommerce, Mailchimp, Slack and Calendly** connect with a key for now: follow the numbered steps, paste it, and press **Check and connect**. Each of these services either does not allow a browser sign-in that returns to an app on your own computer, or needs an app that Talqava's maker must register with them first.
+   
+   Talqava checks the sign-in with the service before saving it.
 4. Choose **What agents may do with this account**:
    - **Agents only read; they change nothing.**
    - **Agents ask me before each change** (the starting choice).

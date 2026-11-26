@@ -190,7 +190,7 @@ test("a browser sign-in: the code is exchanged once, the account is checked, and
     actions: [{ name: "whoami", kind: "read", summary: "Say who is signed in", description: "Says who is signed in.", properties: {}, run: async (c) => (await me(c)).token }],
   });
   const redirect = "http://localhost:8788/api/oauth/callback";
-  assert.throws(() => K.startBrowserSignIn("asana", { clientId: "x" }, redirect), /connects with a key/);
+  assert.throws(() => K.startBrowserSignIn("mailchimp", { clientId: "x" }, redirect), /connects with a key/);
   assert.throws(() => K.startBrowserSignIn("standin", { clientId: "my-app" }, redirect), /client secret/);
   assert.throws(() => K.startBrowserSignIn("standin", { clientId: "my-app", clientSecret: "my-secret" }, "http://evil.example/api/oauth/callback"), /on this computer/);
   const to = new URL(K.startBrowserSignIn("standin", { clientId: "my-app", clientSecret: "my-secret" }, redirect).url);

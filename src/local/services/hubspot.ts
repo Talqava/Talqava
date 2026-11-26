@@ -39,6 +39,22 @@ export const hubspot: ServiceDef = {
     "Press Create, then Show and Copy, and paste the key below.",
   ],
   docs: "https://developers.hubspot.com/docs/apps/developer-platform/build-apps/authentication/account-service-keys",
+  // Browser sign-in with the owner's own HubSpot app. HubSpot's pages do not describe PKCE, so the app's secret does
+  // that job, as they document. The access token lasts 30 minutes and is renewed here.
+  browser: {
+    authUrl: "https://app.hubspot.com/oauth/authorize",
+    tokenUrl: "https://api.hubspot.com/oauth/v3/token",
+    scopes: ["oauth", "crm.objects.contacts.read", "crm.objects.contacts.write", "crm.objects.companies.read", "crm.objects.companies.write", "crm.objects.deals.read", "crm.objects.deals.write"],
+    secret: "required",
+    pkce: false,
+    tokenKey: "token",
+    appSteps: [
+      "In a HubSpot developer account, create an app named Talqava.",
+      "In the app's Auth settings, add this redirect URL exactly: {redirect}",
+      "Add the scopes for reading and writing CRM contacts, companies and deals.",
+      "Copy the Client ID and Client secret below, and press the button. HubSpot asks which account to connect; you need to be a Super Admin of it.",
+    ],
+  },
   fields: [{ key: "token", label: "Service key", secret: true, placeholder: "pat-…", help: "A token from an existing private app also works." }],
   async check(values) {
     const d = await api<{ portalId: number; uiDomain?: string }>({ values }, "/account-info/2026-09/details");
