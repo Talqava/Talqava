@@ -29,9 +29,9 @@ before(async () => {
       // A stand-in for Talqava's sign-in service: it holds the app's secret, so the app never sends one.
       if (u.pathname === "/relay/token.php" || u.pathname === "/relay/refresh.php") {
         const sent = JSON.parse(raw);
-        if (sent.service !== "asana") return json(404, { error: "This service does not sign in through Talqava." });
+        if (!["asana", "slack", "calendly"].includes(sent.service)) return json(404, { error: "This service does not sign in through Talqava." });
         if (u.pathname.endsWith("refresh.php")) return sent.refresh_token === "relay-rt1" ? json(200, { access_token: "second", refresh_token: "relay-rt2", expires_in: 1800 }) : json(400, { error: "invalid_grant" });
-        return sent.code === "ok" && sent.code_verifier ? json(200, { access_token: "first", refresh_token: "relay-rt1", expires_in: 1 }) : json(400, { error: "The sign-in code was not accepted." });
+        return sent.code === "ok" && (sent.code_verifier || sent.service === "slack") ? json(200, { access_token: "first", refresh_token: "relay-rt1", expires_in: 1 }) : json(400, { error: "The sign-in code was not accepted." });
       }
       if (u.pathname.endsWith("/token")) {
         // Some services take the exchange as JSON (Square, Atlassian); Square says when the token runs out as a moment; Pipedrive names the address to use.
@@ -41,8 +41,12 @@ before(async () => {
         if (sent.grant_type === "refresh_token") return json(200, { access_token: "second", refresh_token: "rt2", ...lasts(1800), ...more });
         return sent.code === "ok" ? json(200, { access_token: "first", refresh_token: "rt1", ...lasts(1), ...more }) : json(400, { error: "invalid_grant" });
       }
+      if (u.pathname === "/mailchimp-meta") return auth === "OAuth first" ? json(200, { dc: "us21", accountname: "Ada's Bakery" }) : json(401, { error: "invalid_token" });
       if (u.pathname === "/trello/members/me") return auth.includes('oauth_token="ttoken"') && auth.includes('oauth_consumer_key="tkey"') ? json(200, { fullName: "Ada Baker", username: "ada" }) : json(401, { message: "invalid token" });
       if (!/^Bearer (first|second)$/.test(auth)) return json(401, { message: "no" });
+      if (u.pathname === "/mailchimp/") return json(200, { account_name: "Ada's Bakery" });
+      if (u.pathname === "/slack/auth.test") return json(200, { ok: true, team: "Bakery HQ", user: "talqava" });
+      if (u.pathname === "/calendly/users/me") return json(200, { resource: { uri: "https://api.calendly.com/users/U1", name: "Ada Baker", email: "ada@example.com" } });
       if (u.pathname === "/square/merchants/me") return json(200, { merchant: { id: "M1", business_name: "Bakery", currency: "USD", main_location_id: "L1" } });
       if (u.pathname === "/square/locations") return json(200, { locations: [{ id: "L1", name: "Main shop", status: "ACTIVE", currency: "USD" }] });
       if (u.pathname === "/klaviyo/accounts") return json(200, { data: [{ id: "A1", attributes: { contact_information: { organization_name: "Bakery", default_sender_email: "hi@bakery.example" } } }] });
@@ -97,7 +101,8 @@ before(async () => {
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  for (const id of ["ASANA", "HUBSPOT", "TYPEFORM", "TRELLO", "ZENDESK", "GITLAB", "XERO", "SQUARE", "KLAVIYO", "JIRA", "PIPEDRIVE"]) (process.env[`TALQAVA_${id}_API`] = `${url}/${id.toLowerCase()}`), (process.env[`TALQAVA_${id}_TOKEN_API`] = `${url}/${id.toLowerCase()}/token`);
+  for (const id of ["ASANA", "HUBSPOT", "TYPEFORM", "TRELLO", "ZENDESK", "GITLAB", "XERO", "SQUARE", "KLAVIYO", "JIRA", "PIPEDRIVE", "MAILCHIMP", "SLACK", "CALENDLY"]) (process.env[`TALQAVA_${id}_API`] = `${url}/${id.toLowerCase()}`), (process.env[`TALQAVA_${id}_TOKEN_API`] = `${url}/${id.toLowerCase()}/token`);
+  process.env.TALQAVA_MAILCHIMP_METADATA_API = `${url}/mailchimp-meta`;
   process.env.TALQAVA_JIRA_SITES_API = `${url}/jira-sites`;
   process.env.TALQAVA_AUTH_RELAY = `${url}/relay`;
   K = await import("../../src/local/connector-kit.ts");
@@ -409,4 +414,46 @@ test("Jira signs in through Atlassian with the code exchanged as JSON, and remem
   const jx = seen.filter((s) => s.path === "/jira/token").at(-1)!;
   assert.deepEqual([jx.body, jx.json.client_id, jx.json.client_secret, jx.json.redirect_uri], [null, "japp", "jsecret", redirect]);
   assert.ok(seen.some((s) => s.path === "/jira-sites" && s.auth === "Bearer first"), "asked Atlassian which site was allowed");
+});
+
+test("Mailchimp signs in with a code and the app's secret, asks which data centre the account is on, and has nothing to renew", async () => {
+  const m = new URL(K.startBrowserSignIn("mailchimp", { clientId: "mapp", clientSecret: "msecret" }, redirect).url);
+  assert.equal(m.origin + m.pathname, "https://login.mailchimp.com/oauth2/authorize");
+  assert.equal(m.searchParams.get("code_challenge"), null, "no PKCE: Mailchimp's pages do not describe it");
+  assert.equal((await K.finishBrowserSignIn(m.searchParams.get("state"), "ok")).label, "Ada's Bakery");
+  const mx = seen.filter((s) => s.path === "/mailchimp/token").at(-1)!.body!;
+  assert.deepEqual([mx.client_id, mx.client_secret, mx.grant_type, mx.redirect_uri], ["mapp", "msecret", "authorization_code", redirect]);
+  assert.ok(seen.some((s) => s.path === "/mailchimp-meta" && s.auth === "OAuth first"), "asked Mailchimp which data centre, in its own header form");
+});
+
+test("Slack and Calendly send the browser back only to https, so they sign in only through Talqava's sign-in service", async () => {
+  for (const id of ["slack", "calendly"]) {
+    const s = K.listServices().find((x) => x.id === id)!;
+    assert.deepEqual([s.browser, s.fields.length], [null, 1], `${id} offers only a key until Talqava's app is registered`);
+    assert.throws(() => K.startBrowserSignIn(id, { clientId: "mine", clientSecret: "s" }, redirect), /connects with a key/, "an owner's own app cannot receive an https return");
+  }
+  process.env.TALQAVA_SLACK_RELAY_CLIENT_ID = "talqava-slack-app";
+  process.env.TALQAVA_CALENDLY_RELAY_CLIENT_ID = "talqava-calendly-app";
+  try {
+    const slack = K.listServices().find((s) => s.id === "slack")!;
+    assert.deepEqual([slack.browser!.oneClick, slack.browser!.viaTalqava], [true, true]);
+    // An ID typed by the owner is ignored: only Talqava's app can be used.
+    const to = new URL(K.startBrowserSignIn("slack", { clientId: "mine" }, redirect).url);
+    assert.equal(to.origin + to.pathname, "https://slack.com/oauth/v2/authorize");
+    assert.deepEqual([to.searchParams.get("client_id"), to.searchParams.get("scope"), to.searchParams.get("code_challenge")], ["talqava-slack-app", "channels:read,groups:read,channels:history,groups:history,chat:write,users:read,users:read.email", null]);
+    assert.match(to.searchParams.get("redirect_uri")!, /\/relay\/callback\.php$/);
+    assert.equal((await K.finishBrowserSignIn(to.searchParams.get("state"), "ok")).label, "Bakery HQ");
+    const sx = seen.filter((s) => s.path === "/relay/token.php").at(-1)!.json;
+    assert.deepEqual([sx.service, sx.client_secret, sx.code_verifier], ["slack", undefined, undefined]);
+
+    const cal = new URL(K.startBrowserSignIn("calendly", {}, redirect).url);
+    assert.equal(cal.origin + cal.pathname, "https://auth.calendly.com/oauth/authorize");
+    assert.deepEqual([cal.searchParams.get("code_challenge_method"), cal.searchParams.get("scope")], ["S256", "users:read scheduled_events:read event_types:read"]);
+    assert.equal((await K.finishBrowserSignIn(cal.searchParams.get("state"), "ok")).label, "Ada Baker (ada@example.com)");
+    const cx = seen.filter((s) => s.path === "/relay/token.php").at(-1)!.json;
+    assert.deepEqual([cx.service, Boolean(cx.code_verifier)], ["calendly", true], "Calendly requires the PKCE proof");
+  } finally {
+    delete process.env.TALQAVA_SLACK_RELAY_CLIENT_ID;
+    delete process.env.TALQAVA_CALENDLY_RELAY_CLIENT_ID;
+  }
 });

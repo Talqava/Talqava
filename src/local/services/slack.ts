@@ -2,6 +2,12 @@
 // developer documentation, read November 2026: docs.slack.dev/apis/web-api, /authentication/tokens,
 // /app-management/quickstart-app-settings and /reference/methods auth.test, conversations.list,
 // conversations.history, conversations.replies, chat.postMessage, users.list, users.lookupByEmail.
+//
+// Browser sign-in, from docs.slack.dev/authentication/installing-with-oauth and /reference/methods/oauth.v2.access
+// (read November 2026): Slack sends the browser back only to an https address, and its sign-in for apps on a
+// computer (PKCE) may not ask for a bot's permissions. So it works only through Talqava's sign-in service, once
+// Talqava's maker has registered the app. Bot permissions go in "scope", separated by commas; the answer's
+// access_token is the bot token; tokens do not run out unless the app turns rotation on, which Talqava's app does not.
 import { baseOf, call, count, plain, query, type Connection, type ServiceDef } from "../connector-kit.ts";
 
 const WHY: Record<string, string> = {
@@ -36,8 +42,19 @@ export const slackService: ServiceDef = {
   ],
   docs: "https://docs.slack.dev/app-management/quickstart-app-settings",
   fields: [{ key: "token", label: "Bot User OAuth Token", secret: true, placeholder: "xoxb-…" }],
+  browser: {
+    authUrl: "https://slack.com/oauth/v2/authorize",
+    tokenUrl: "https://slack.com/api/oauth.v2.access",
+    scopes: ["channels:read", "groups:read", "channels:history", "groups:history", "chat:write", "users:read", "users:read.email"],
+    scopeSeparator: ",",
+    secret: "required",
+    pkce: false,
+    tokenKey: "token",
+    relayOnly: true,
+    appSteps: [],
+  },
   async check(values) {
-    if (!/^xoxb-/.test(values.token)) throw new Error("That is not a bot token. Copy the Bot User OAuth Token, which starts with xoxb-.");
+    if (!values.access_token && !/^xoxb-/.test(values.token)) throw new Error("That is not a bot token. Copy the Bot User OAuth Token, which starts with xoxb-.");
     const me = await slack<{ team: string; user: string }>({ values }, "auth.test", {}, true);
     return { label: me.team };
   },

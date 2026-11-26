@@ -22,6 +22,9 @@ The places and labels below are as each service's own pages described them in No
 | Typeform | Typeform account settings, Developer apps, Register a new app | OAuth app | Chosen at sign-in: `forms:read`, `responses:read`, `offline` | `'typeform'` (already there) |
 | Todoist | Todoist App Management console, Create a new app | OAuth app | Chosen at sign-in: `data:read_write` | `'todoist'` (already there) |
 | ClickUp | ClickUp Settings, Apps (ClickUp API), Create an App | OAuth app | None to choose: the person picks which Workspaces at sign-in | `'clickup'` (already there) |
+| Mailchimp | In Mailchimp: Profile, Extras, Registered apps, Register An App | OAuth app | None to choose | `'mailchimp'` |
+| Slack | api.slack.com/apps, Create New App. Add the return address under OAuth & Permissions, then turn on Manage Distribution, Activate Public Distribution so other workspaces can install it | Slack app with a bot. Do **not** turn on PKCE or token rotation: neither can be turned off again, and PKCE apps may not ask for a bot's permissions | Bot Token Scopes: `channels:read`, `groups:read`, `channels:history`, `groups:history`, `chat:write`, `users:read`, `users:read.email` | `'slack'` |
+| Calendly | Calendly, profile menu, Developer, OAuth apps. Choose **Production** (a Sandbox app is separate). It takes exactly one return address | OAuth app | `users:read`, `scheduled_events:read`, `event_types:read` | `'calendly'`, with `'style' => 'basic_with_id'` |
 | Klaviyo | klaviyo.com/manage-apps, Create app | OAuth app | `accounts:read`, `lists:read`, `lists:write`, `profiles:read`, `profiles:write`, `subscriptions:write` | `'klaviyo'`, with `'style' => 'basic'` |
 | Jira | developer.atlassian.com/console/myapps, Create, OAuth 2.0 integration | OAuth 2.0 (3LO) | Add **Jira API**, then `read:jira-work`, `write:jira-work`, `read:jira-user`. The app must also be set to **Sharing** (distribution) before people outside the company can sign in | `'jira'`, with `'style' => 'json'` |
 | Pipedrive | A Pipedrive developer sandbox account, Settings, Developer Hub, Create an app | Start with a private app to test; a public app needs Pipedrive's review before other companies can use it | Full access to deals, contacts and activities; read access to search and users | `'pipedrive'`, with `'style' => 'basic'` and `'pass' => ['api_domain']` |
@@ -41,7 +44,25 @@ Their return address is on the owner's own computer, not the website. Talqava's 
 | Zendesk | Each account has its own address; a shared app needs Zendesk's global OAuth client, which is requested from Zendesk | `read`, `write` | Whether Zendesk grants one for this use |
 | Square | developer.squareup.com/apps, the application's OAuth page, Production | `MERCHANT_PROFILE_READ`, `PAYMENTS_READ`, `ORDERS_READ`, `CUSTOMERS_READ`, `CUSTOMERS_WRITE`, `ITEMS_READ` | Whether Square accepts a return address on the owner's own computer in Production. Try it; if refused, Square moves to the table above |
 
+## Services that stay on a key, and why
+
+| Service | Why |
+|---|---|
+| Telegram | Its bots have a token and nothing else; there is no sign-in page for other apps. |
+| Freshdesk | Its own pages describe only an API key. Its parent company has a sign-in for some of its other products; nothing confirms it covers Freshdesk. |
+| WooCommerce | It has an approval page, but it hands the new key to a public https address, not to the browser. Receiving it would mean Talqava's website holding a shop's key for a moment, which the sign-in service is built never to do. |
+| Brevo | It has a sign-in, but an app for other companies is made with Brevo's command-line tool and reviewed by Brevo first (about a week, by its pages). Its pages also give two different sets of addresses. Worth doing after the others; nothing is built for it yet. |
+| Shopify | Owners already connect with their own app's ID and secret, exchanged for a short-lived token. One shared app for every shop needs Shopify's approval, and approval again for customer data. Worth doing after the others. |
+
+## Things to know before registering Slack
+
+- Slack limits how often an app that is shared with other workspaces but not listed in its Marketplace may read a channel's messages: once a minute, fifteen messages at a time. Posting is not limited this way. A Marketplace listing lifts the limit and needs Slack's review.
+
+## Uploading again
+
+Calendly needs one small change to `lib.php` on the website (the `basic_with_id` style). Upload the new `lib.php` before filling in Calendly's line. Nothing else on the website changes.
+
 ## What has been tried
 
 - The website's pages have been tried with made-up values (see the README). No real app has been registered yet, so **no real sign-in has gone through any of these**. The first one registered is the test of the whole path.
-- Klaviyo, Jira, Pipedrive and Square sign-ins are tested only against stand-ins that behave as each service's pages describe.
+- Klaviyo, Jira, Pipedrive, Square, Mailchimp, Slack and Calendly sign-ins are tested only against stand-ins that behave as each service's pages describe.

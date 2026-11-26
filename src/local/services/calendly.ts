@@ -2,6 +2,11 @@
 // developer.calendly.com/docs/authentication/how-to-authenticate-with-personal-access-tokens, /docs/authentication/scopes,
 // and the reference for the current user, scheduled events, invitees and event types. Reading only: Talqava does not
 // cancel or book meetings.
+//
+// Browser sign-in, from developer.calendly.com/docs/authentication/creating-an-oauth-app and the reference for
+// auth.calendly.com/oauth/authorize and /oauth/token (read November 2026): PKCE is required of every app; a
+// production app's return address must be https, so it works only through Talqava's sign-in service, once Talqava's
+// maker has registered the app. A token lasts two hours and is renewed; each renewal gives a new renewing token.
 import { baseOf, call, count, plain, query, type Connection, type ServiceDef } from "../connector-kit.ts";
 
 const api = <T = any>(c: Pick<Connection, "values">, path: string) => call<T>(`${baseOf("calendly", "https://api.calendly.com")}${path}`, { name: "Calendly", headers: { authorization: `Bearer ${c.values.token}` } });
@@ -24,6 +29,15 @@ export const calendly: ServiceDef = {
   ],
   docs: "https://developer.calendly.com/docs/authentication/how-to-authenticate-with-personal-access-tokens",
   fields: [{ key: "token", label: "Personal access token", secret: true }],
+  browser: {
+    authUrl: "https://auth.calendly.com/oauth/authorize",
+    tokenUrl: "https://auth.calendly.com/oauth/token",
+    scopes: ["users:read", "scheduled_events:read", "event_types:read"],
+    secret: "required",
+    tokenKey: "token",
+    relayOnly: true,
+    appSteps: [],
+  },
   async check(values) {
     const me = (await api<{ resource: { uri: string; name: string; email: string } }>({ values }, "/users/me")).resource;
     return { label: me.email ? `${me.name} (${me.email})` : me.name, values: { user: me.uri } };

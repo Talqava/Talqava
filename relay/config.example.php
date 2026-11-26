@@ -16,6 +16,10 @@ return [
         'typeform' => ['client_id' => '', 'client_secret' => '', 'token_url' => 'https://api.typeform.com/oauth/token'],
         'todoist'  => ['client_id' => '', 'client_secret' => '', 'token_url' => 'https://api.todoist.com/oauth/access_token'],
         'clickup'  => ['client_id' => '', 'client_secret' => '', 'token_url' => 'https://api.clickup.com/api/v2/oauth/token'],
+        'mailchimp' => ['client_id' => '', 'client_secret' => '', 'token_url' => 'https://login.mailchimp.com/oauth2/token'],
+        'slack'    => ['client_id' => '', 'client_secret' => '', 'token_url' => 'https://slack.com/api/oauth.v2.access'],
+        // Calendly wants the app's ID in the form as well as in the header.
+        'calendly' => ['client_id' => '', 'client_secret' => '', 'token_url' => 'https://auth.calendly.com/oauth/token', 'style' => 'basic_with_id'],
         'klaviyo'  => ['client_id' => '', 'client_secret' => '', 'token_url' => 'https://a.klaviyo.com/oauth/token', 'style' => 'basic'],
         'jira'     => ['client_id' => '', 'client_secret' => '', 'token_url' => 'https://auth.atlassian.com/oauth/token', 'style' => 'json'],
         // Pipedrive names the address to use for each company in its answer; the app needs it passed on.
