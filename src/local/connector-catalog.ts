@@ -34,13 +34,10 @@ const NEEDS_REGISTRATION = "Signing in needs Talqava to be registered with this 
 
 /** Listed so nobody has to wonder: these are known, and not possible yet. */
 export const COMING: ComingEntry[] = [
-  { name: "Gmail, Google Calendar and Google Drive", category: "Email, calendar and files", why: NEEDS_REGISTRATION },
-  { name: "Microsoft 365 (Outlook, Calendar, OneDrive)", category: "Email, calendar and files", why: NEEDS_REGISTRATION },
   { name: "Dropbox and Box", category: "Email, calendar and files", why: NEEDS_REGISTRATION },
   { name: "QuickBooks", category: "Accounting", why: "QuickBooks' connector is open by invitation only for now." },
   { name: "Xero", category: "Accounting", why: NEEDS_REGISTRATION },
   { name: "HubSpot and Salesforce", category: "Customer records", why: NEEDS_REGISTRATION },
-  { name: "Slack", category: "Customer support", why: NEEDS_REGISTRATION },
 ];
 
 export const CATALOG: CatalogEntry[] = [

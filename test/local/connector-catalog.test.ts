@@ -54,7 +54,7 @@ test("the catalogue says what each connector reads and changes, and lists what i
     assert.equal(c.connected, false);
   }
   assert.equal(new Set(CATALOG.map((c) => c.id)).size, CATALOG.length);
-  assert.ok(cat.coming.some((x) => /Gmail/.test(x.name)) && cat.coming.every((x) => x.why));
+  assert.ok(cat.coming.some((x) => /QuickBooks/.test(x.name)) && cat.coming.every((x) => x.why));
 });
 
 test("a catalogue connector is saved only after the service accepts the key", async () => {

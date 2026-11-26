@@ -54,9 +54,24 @@ export interface ActionDef {
   description: string;
   /** One short line for the owner, shown in the list of what agents can do. */
   summary: string;
+  /** For a change that reaches other people (sending an email): the owner is asked every time, whatever their rule. */
+  alwaysAsk?: boolean;
   properties: Record<string, unknown>;
   required?: string[];
   run(connection: Connection, input: Record<string, any>): Promise<string>;
+}
+
+/** A service that signs in through the browser (OAuth 2.0 with a code and PKCE), with an app the owner registers. */
+export interface BrowserSignIn {
+  authUrl: string;
+  tokenUrl: string;
+  scopes: string[];
+  /** Extra values for the address the browser is sent to, such as asking for a token that can be renewed. */
+  extra?: Record<string, string>;
+  /** Whether the owner's registered app comes with a secret: always, sometimes, or never. */
+  secret: "required" | "optional" | "never";
+  /** How to register the app with the service, as numbered steps. {redirect} stands for the address to give it. */
+  appSteps: string[];
 }
 
 export interface ServiceDef {
@@ -70,6 +85,8 @@ export interface ServiceDef {
   /** The service's own page about making the key. */
   docs: string;
   fields: SignInField[];
+  /** Set when the service signs in through the browser instead of a pasted key. `check` then receives access_token. */
+  browser?: BrowserSignIn;
   /** Checks the sign-in with the service. Returns the account's name, and any values worked out from the answer. */
   check(values: Record<string, string>): Promise<{ label: string; values?: Record<string, string> }>;
   actions: ActionDef[];
@@ -111,7 +128,8 @@ export function listServices() {
     steps: d.steps,
     docs: d.docs,
     fields: d.fields,
-    actions: d.actions.map((a) => ({ name: a.name, kind: a.kind, summary: a.summary })),
+    browser: d.browser ? { secret: d.browser.secret, appSteps: d.browser.appSteps, scopes: d.browser.scopes } : null,
+    actions: d.actions.map((a) => ({ name: a.name, kind: a.kind, summary: a.alwaysAsk ? `${a.summary} (always asks you first)` : a.summary })),
     connections: all.filter((c) => c.service === d.id).map(view),
   }));
 }
@@ -173,7 +191,7 @@ export async function checkConnections(): Promise<PublicConnection[]> {
   for (const c of saved()) {
     let problem: string | undefined;
     try {
-      await serviceOf(c.service).check(c.values);
+      await serviceOf(c.service).check((await fresh(c)).values);
     } catch (err) {
       // A service that cannot be reached right now is not a broken key: only a refusal marks the connection.
       if (!(err as { refused?: boolean }).refused) continue;
@@ -232,7 +250,7 @@ export function serviceTools(): Tool[] {
           required: action.required ?? [],
           needsApproval: (input) => {
             if (action.kind === "read") return false;
-            if (action.kind === "destructive") return true;
+            if (action.kind === "destructive" || action.alwaysAsk) return true;
             try {
               return which(def.id, input.account).rule !== "auto";
             } catch {
@@ -240,7 +258,7 @@ export function serviceTools(): Tool[] {
             }
           },
           async run(input) {
-            const connection = which(def.id, input.account);
+            const connection = await fresh(which(def.id, input.account));
             if (action.kind !== "read" && connection.rule === "read") throw new Error(`On ${def.name} (${connection.label}) the owner lets agents read only. Say in your report what you would change, and leave it to them.`);
             let out: string;
             try {
@@ -278,6 +296,10 @@ export interface CallOptions {
   body?: unknown;
   /** Sent as a form, for the few services that want one. */
   form?: Record<string, string>;
+  /** Sent as it is, with this content type. */
+  raw?: { type: string; data: string };
+  /** The answer is plain text (a file's contents), returned as a string and cut at this many characters. */
+  text?: number;
 }
 
 /** One call to a service. Follows no redirects (a key must only reach its own service) and explains refusals plainly. */
@@ -285,8 +307,8 @@ export async function call<T = any>(url: string, opts: CallOptions): Promise<T> 
   if (!/^https:\/\//.test(url) && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(url)) throw new Error(`${opts.name}'s address must start with https://.`);
   const res = await fetch(url, {
     method: opts.method ?? "GET",
-    headers: { accept: "application/json", ...(opts.body !== undefined ? { "content-type": "application/json" } : opts.form ? { "content-type": "application/x-www-form-urlencoded" } : {}), ...opts.headers },
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : opts.form ? new URLSearchParams(opts.form).toString() : undefined,
+    headers: { accept: "application/json", ...(opts.body !== undefined ? { "content-type": "application/json" } : opts.form ? { "content-type": "application/x-www-form-urlencoded" } : opts.raw ? { "content-type": opts.raw.type } : {}), ...opts.headers },
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : opts.form ? new URLSearchParams(opts.form).toString() : opts.raw?.data,
     signal: AbortSignal.timeout(30_000),
     redirect: "error",
   }).catch(() => {
@@ -297,7 +319,7 @@ export async function call<T = any>(url: string, opts: CallOptions): Promise<T> 
   try {
     data = text ? JSON.parse(text) : null;
   } catch {}
-  if (res.ok) return data as T;
+  if (res.ok) return (opts.text ? text.slice(0, opts.text) : data) as T;
   const said = String(data?.message ?? data?.error?.message ?? data?.detail ?? data?.error_description ?? (typeof data?.error === "string" ? data.error : "") ?? "")
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
@@ -327,3 +349,103 @@ export const plain = (value: unknown, most = 300): string => {
   for (let before = ""; before !== t; ) (before = t), (t = t.replace(/<[^>]*>/g, " "));
   return t.replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim().slice(0, most);
 };
+
+
+// ---------- signing in through the browser ----------
+// The owner registers their own app with the service and gives Talqava its ID (and secret, where it has one). The
+// browser is sent to the service, the owner approves, and the service sends a one-time code back to this computer,
+// which is exchanged for tokens. The tokens stay on this computer and are renewed here as they run out.
+interface Pending {
+  service: string;
+  clientId: string;
+  clientSecret: string;
+  verifier: string;
+  redirect: string;
+  rule?: unknown;
+  at: number;
+}
+const pending = new Map<string, Pending>();
+const b64url = (b: Buffer) => b.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+/** Starts a browser sign-in: returns the address to open. `redirect` is this app's own address for the answer. */
+export function startBrowserSignIn(id: string, input: { clientId?: unknown; clientSecret?: unknown; rule?: unknown }, redirect: string): { url: string } {
+  const def = serviceOf(id);
+  if (!def.browser) throw new Error(`${def.name} connects with a key, not a browser sign-in.`);
+  if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(redirect) && !/^https:\/\//.test(redirect)) throw new Error("Open Talqava on this computer to sign in to a service.");
+  const clientId = String(input.clientId ?? "").trim();
+  const clientSecret = String(input.clientSecret ?? "").trim();
+  if (!clientId || clientId.length > 500 || /\s/.test(clientId)) throw new Error("Paste your app's client ID.");
+  if (def.browser.secret === "required" && !clientSecret) throw new Error("Paste your app's client secret.");
+  for (const [k, v] of pending) if (Date.now() - v.at > 600_000) pending.delete(k);
+  if (pending.size > 50) throw new Error("Too many sign-ins were started. Wait ten minutes and try again.");
+  const state = b64url(crypto.randomBytes(32));
+  const verifier = b64url(crypto.randomBytes(48));
+  pending.set(state, { service: id, clientId, clientSecret: def.browser.secret === "never" ? "" : clientSecret, verifier, redirect, rule: input.rule, at: Date.now() });
+  const q = new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: redirect, scope: def.browser.scopes.join(" "), state, code_challenge: b64url(crypto.createHash("sha256").update(verifier).digest()), code_challenge_method: "S256", ...(def.browser.extra ?? {}) });
+  return { url: `${def.browser.authUrl}${def.browser.authUrl.includes("?") ? "&" : "?"}${q}` };
+}
+
+async function tokenCall(def: ServiceDef, form: Record<string, string>): Promise<{ access_token: string; refresh_token?: string; expires_in?: number }> {
+  const t = await call<any>(baseOf(`${def.id}_token`, def.browser!.tokenUrl), { name: def.name, method: "POST", form });
+  if (!t?.access_token) throw new Error(`${def.name} did not complete the sign-in.`);
+  return t;
+}
+
+/** Finishes a browser sign-in with the code the service sent back. The account is checked before it is saved. */
+export async function finishBrowserSignIn(state: unknown, code: unknown, problem?: unknown): Promise<PublicConnection> {
+  const p = pending.get(String(state ?? ""));
+  pending.delete(String(state ?? ""));
+  if (!p || Date.now() - p.at > 600_000) throw new Error("That sign-in was not started here, or it took longer than ten minutes. Start it again from Integrations.");
+  const def = serviceOf(p.service);
+  if (problem || !code) throw new Error(problem === "access_denied" ? `You did not approve the sign-in, so ${def.name} was not connected.` : `${def.name} did not complete the sign-in${problem ? ` (${String(problem).slice(0, 80)})` : ""}.`);
+  const t = await tokenCall(def, { grant_type: "authorization_code", code: String(code), redirect_uri: p.redirect, client_id: p.clientId, code_verifier: p.verifier, ...(p.clientSecret ? { client_secret: p.clientSecret } : {}) });
+  const values: Record<string, string> = { client_id: p.clientId, ...(p.clientSecret ? { client_secret: p.clientSecret } : {}), access_token: t.access_token, ...(t.refresh_token ? { refresh_token: t.refresh_token } : {}), expires_at: String(Date.now() + (Number(t.expires_in) || 3600) * 1000) };
+  const found = await def.check(values);
+  const label = String(found.label || def.name).replace(/\s+/g, " ").trim().slice(0, 120);
+  const all = saved();
+  const before = all.find((c) => c.service === def.id && c.label.toLowerCase() === label.toLowerCase());
+  const connection: Connection = {
+    id: before?.id ?? crypto.randomBytes(5).toString("hex"),
+    service: def.id,
+    label,
+    // A service may not send the renewing token again when the same account signs in twice: the earlier one is kept.
+    values: { ...(before?.values.refresh_token && !values.refresh_token ? { refresh_token: before.values.refresh_token } : {}), ...values, ...(found.values ?? {}) },
+    rule: CHANGE_RULES.includes(p.rule as ChangeRule) ? (p.rule as ChangeRule) : (before?.rule ?? "ask"),
+    addedAt: before?.addedAt ?? new Date().toISOString(),
+    checkedAt: new Date().toISOString(),
+  };
+  store([...all.filter((c) => c.id !== connection.id), connection]);
+  audit({ actor: "owner", actorName: "You", kind: "integration", action: `Connected ${def.name}`, detail: `${label}, signed in through the browser` });
+  return view(connection);
+}
+
+const renewing = new Map<string, Promise<Connection>>();
+/** A connection whose access token is good for at least another minute, renewed here when it is not. */
+async function fresh(c: Connection): Promise<Connection> {
+  const def = serviceOf(c.service);
+  if (!def.browser || !c.values.expires_at || Number(c.values.expires_at) - Date.now() > 60_000) return c;
+  if (!c.values.refresh_token) throw Object.assign(new Error(`The sign-in to ${def.name} (${c.label}) has run out. The owner signs in again under Integrations.`), { refused: true });
+  const running = renewing.get(c.id);
+  if (running) return running;
+  const work = (async () => {
+    let t;
+    try {
+      t = await tokenCall(def, { grant_type: "refresh_token", refresh_token: c.values.refresh_token, client_id: c.values.client_id, ...(c.values.client_secret ? { client_secret: c.values.client_secret } : {}) });
+    } catch (err) {
+      // The service no longer honours the sign-in (revoked, or too old): the owner has to sign in again.
+      if ((err as Error).message.includes(" answered 400") || (err as { refused?: boolean }).refused) {
+        const why = `The sign-in to ${def.name} is no longer accepted. Sign in again.`;
+        mark(c.id, why);
+        throw Object.assign(new Error(why), { refused: true });
+      }
+      throw err;
+    }
+    const all = saved();
+    const mine = all.find((x) => x.id === c.id) ?? c;
+    mine.values = { ...mine.values, access_token: t.access_token, ...(t.refresh_token ? { refresh_token: t.refresh_token } : {}), expires_at: String(Date.now() + (Number(t.expires_in) || 3600) * 1000) };
+    if (all.includes(mine)) store(all);
+    return mine;
+  })().finally(() => renewing.delete(c.id));
+  renewing.set(c.id, work);
+  return work;
+}

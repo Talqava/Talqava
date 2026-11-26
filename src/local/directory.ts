@@ -58,7 +58,7 @@ export const COMING_SERVICES: ComingService[] = [
   { name: "Calendly", category: "Email and calendar", about: "See booked meetings and share booking links." },
   { name: "Google Drive", category: "Files and documents", about: "Find, read and save files and folders." },
   { name: "Google Docs and Sheets", category: "Files and documents", about: "Read and write documents and spreadsheets." },
-  { name: "OneDrive and SharePoint", category: "Files and documents", about: "Find, read and save files." },
+  { name: "SharePoint", category: "Files and documents", about: "Find, read and save the files of your team sites." },
   { name: "Dropbox", category: "Files and documents", about: "Find, read and save files." },
   { name: "Box", category: "Files and documents", about: "Find, read and save files." },
   { name: "Slack", category: "Team chat", about: "Read channels, post updates and answer questions." },

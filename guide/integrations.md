@@ -121,6 +121,26 @@ Talqava checks every few hours that each key still works. If a service stops acc
 
 You can connect more than one account of a service. To disconnect, press **Disconnect** on the account; its key is forgotten and nothing in the service is changed.
 
+### Connect Gmail, Google Calendar, Google Drive, Outlook or OneDrive
+
+These sign in through your browser instead of a pasted key. Google and Microsoft ask for an app registered with them; you register your own once (about ten minutes, free), and it stays yours. The service's page in Talqava lists the exact steps.
+
+1. Open **Integrations** and choose the service, for example **Gmail**.
+2. Follow the numbered steps to register your app, then paste its **Client ID** (and, for Google, its **Client secret**).
+3. Press **Sign in**. Your browser opens the service; approve, and the tab says **Connected**. Go back to Talqava.
+4. Choose what agents may do with the account, as for any built-in service.
+
+What each one does:
+
+- **Gmail** and **Outlook**: search and read email, and write drafts and replies. A draft is never sent by itself: **sending always asks you first**, whatever rule you chose.
+- **Google Calendar** and **Outlook's calendar**: see events and free time; add, change and remove events. Removing always asks first. On Google, guests are emailed only when you ask for that; on Outlook, agents add events without guests, because Microsoft emails every guest at once.
+- **Google Drive** and **OneDrive**: find files, read text files (and Google Docs, Sheets and Slides as text), and save new text files. Agents never replace an existing file.
+
+Good to know:
+
+- **Google asks you to sign in again every seven days** while your Google app is in "Testing", which is the case for a personal Google account. With Google Workspace, choose **Internal** when registering and there is no such limit. When a sign-in runs out, the account shows **Needs attention** and your Inbox gets a note.
+- One Google project serves Gmail, Calendar and Drive; you sign in to each separately, so each gets only the permission it needs.
+
 ### Connect a well-known service from the catalogue
 
 The catalogue lists services that publish their own connector and accept a key you make: **Stripe**, **Airtable**, **monday.com**, **Intercom**, **Linear** and **GitHub**. It is on the **Connectors and AI apps** page under **From the catalogue**, and in the **Marketplace** under **Connectors**.

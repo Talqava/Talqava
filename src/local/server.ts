@@ -59,7 +59,7 @@ import { ROLES, ROLE_WORDS, mayDo, people } from "./people.ts";
 import type { Person } from "./people.ts";
 import { projects } from "./projects.ts";
 import { connectCatalog, connectorLabel, disconnectCatalog, listCatalog } from "./connector-catalog.ts";
-import { changeRules, checkConnections, connectionProblems, connectService, listServices, removeConnection, updateConnection } from "./connector-kit.ts";
+import { changeRules, checkConnections, connectionProblems, finishBrowserSignIn, startBrowserSignIn, connectService, listServices, removeConnection, updateConnection } from "./connector-kit.ts";
 import "./services/index.ts";
 import { installKit, listKits, previewKit, runPlaybook, undoKit } from "./kits.ts";
 import { connectLangfuse, langfuseIntegration, recordStep, removeLangfuse } from "./langfuse.ts";
@@ -747,6 +747,21 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   const sessionCookie = (token: string, maxAge: number) => ({ "set-cookie": `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secureCookie}` });
   // How to sign in: with an email and password once people are set up, with the one password otherwise.
   if (route === "GET login") return send(res, 200, { people: people.enabled(), password: Boolean(PASSWORD), sso: people.enabled() && Boolean(sso()), ssoOnly: Boolean(sso()?.only) });
+  // A service's browser sign-in comes back here with a one-time code. The browser arrives from the service's site, so
+  // it carries no session: the unguessable, single-use value Talqava put in the request stands in for one.
+  if (parts[0] === "oauth" && parts[1] === "callback" && req.method === "GET") {
+    const page = (status: number, title: string, message: string) => {
+      const safe = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+      res.writeHead(status, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+      res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safe(title)}</title><body style="font-family:system-ui,sans-serif;max-width:520px;margin:15vh auto;padding:0 16px"><h1 style="font-size:22px">${safe(title)}</h1><p>${safe(message)}</p></body>`);
+    };
+    try {
+      const c = await finishBrowserSignIn(url.searchParams.get("state"), url.searchParams.get("code"), url.searchParams.get("error"));
+      return page(200, "Connected", `${c.label} is connected. You can close this tab and go back to Talqava.`);
+    } catch (err) {
+      return page(400, "Not connected", (err as Error).message);
+    }
+  }
   // Single sign-on: off to the company's identity provider, and back again with its signed answer.
   if (parts[0] === "sso" && req.method === "GET" && people.enabled()) {
     const origin = `${req.headers["x-forwarded-proto"] === "https" ? "https" : "http"}://${req.headers.host}`;
@@ -1620,7 +1635,11 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (route === "GET integrations" && parts[1] === "mcp") return send(res, 200, mcpIntegration());
     // Services built on the connector kit: one set of routes for all of them.
     if (parts[1] === "services") {
-      if (route === "GET integrations" && !parts[2]) return send(res, 200, { services: listServices(), rules: changeRules() });
+      // The address a service sends the browser back to. On this computer it is always written with "localhost",
+      // which both Google and Microsoft accept for an app on the owner's own machine (Microsoft ignores its port).
+      const redirect = `${req.headers["x-forwarded-proto"] === "https" ? "https" : "http"}://${String(req.headers.host).replace(/^127\.0\.0\.1(?=:|$)/, "localhost")}/api/oauth/callback`;
+      if (route === "GET integrations" && !parts[2]) return send(res, 200, { services: listServices(), rules: changeRules(), redirect });
+      if (route === "POST integrations" && parts[2] && parts[3] === "sign-in") return send(res, 200, await attempt(async () => startBrowserSignIn(parts[2], body, redirect)));
       if (route === "POST integrations" && parts[2] && parts[3] === "connect") return send(res, 200, await attempt(() => connectService(parts[2], body)));
       if (route === "POST integrations" && parts[2] === "check") return send(res, 200, await checkConnections());
       if (route === "PATCH integrations" && parts[2] === "connections" && parts[3]) return send(res, 200, await attempt(async () => updateConnection(parts[3], body)));
