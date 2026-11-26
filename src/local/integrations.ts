@@ -173,7 +173,7 @@ export async function listIntegrations(): Promise<{ categories: string[]; integr
       category: s.category,
       summary: s.about,
       state: s.connections.length ? "connected" : "needs-setup",
-      status: s.connections.length ? `${s.connections.map((c) => c.label).join(", ")}${bad ? " · needs attention" : ""}` : "Connects with a key you paste",
+      status: s.connections.length ? `${s.connections.map((c) => c.label).join(", ")}${bad ? " · needs attention" : ""}` : s.browser ? "Signs in through your browser" : "Connects with a key you paste",
     });
   }
   const taken = new Set([...own, ...services].map((i) => i.name.toLowerCase()));

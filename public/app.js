@@ -3924,13 +3924,43 @@ async function servicePage(col, again, id) {
   };
   const inputs = svc.fields.map((f) => ({ f, node: h("input", { type: f.secret ? "password" : "text", autocomplete: "off", placeholder: f.placeholder ?? f.label, "aria-label": f.label }) }));
   const values = () => Object.fromEntries(inputs.map((x) => [x.f.key, x.node.value]));
+  // A service that signs in through the browser: the owner registers their own app once, then approves in the browser.
+  const browserForm = () => {
+    const clientId = h("input", { autocomplete: "off", placeholder: "Client ID", "aria-label": "Client ID", value: ui.signIn?.id === id ? ui.signIn.clientId : "" });
+    const clientSecret = h("input", { type: "password", autocomplete: "off", placeholder: svc.browser.secret === "optional" ? "Client secret (if your app has one)" : "Client secret", "aria-label": "Client secret" });
+    const status = h("p", { class: "note", role: "status" }, ui.signIn?.id === id ? `Waiting for you to approve in the browser… This page updates when ${svc.name} is connected.` : "");
+    const start = async () => {
+      const { url } = await api("POST", `integrations/services/${svc.id}/sign-in`, { clientId: clientId.value, clientSecret: clientSecret.value });
+      window.open(url, "_blank", "noopener");
+      ui.signIn = { id, clientId: clientId.value, had: svc.connections.length, since: Date.now() };
+      again();
+    };
+    return h(
+      "form",
+      { class: "card form", onsubmit: (e) => (e.preventDefault(), attempt(start, col)) },
+      h("b", {}, svc.connections.length ? "Connect another account" : `Connect ${svc.name}`),
+      h("p", { class: "note small" }, `${svc.name} signs in through your browser. It asks for an app registered with ${svc.name}; you register your own once, which takes about ten minutes, and it stays yours.`),
+      h("ol", {}, svc.browser.appSteps.map((step) => h("li", {}, step.split("{redirect}").flatMap((part, i) => (i ? [h("code", {}, d.redirect), part] : [part]))))),
+      h("label", {}, "Client ID", clientId),
+      svc.browser.secret === "never" ? null : h("label", {}, "Client secret", clientSecret),
+      status,
+      h("p", { class: "note small" }, `Your app's details and the sign-in stay on this computer and are sent only to ${svc.name}. `, h("button", { type: "button", class: "plain link", onclick: () => window.open(svc.docs, "_blank", "noopener") }, `${svc.name}'s instructions`)),
+      h("div", {}, h("button", { class: "primary" }, ui.signIn?.id === id ? "Open the sign-in again" : `Sign in to ${svc.name}`)),
+    );
+  };
+  // While a sign-in is under way, look every two seconds for the new connection, for up to five minutes.
+  if (ui.signIn?.id === id) {
+    if (svc.connections.length > ui.signIn.had) (toast(`${svc.name} is connected.`), (ui.signIn = null));
+    else if (Date.now() - ui.signIn.since > 300_000) ui.signIn = null;
+    else setTimeout(() => state.view === "integrations" && ui.integration === `service:${id}` && ui.signIn?.id === id && again(), 2000);
+  }
   fill(
     col,
     back,
     h("div", { class: "ihero" }, h("span", { class: "packicon conn big", "aria-hidden": "true" }, svc.name[0].toUpperCase()), h("div", { class: "grow" }, h("div", { class: "row" }, h("h1", {}, svc.name), h("span", { class: `chip ${svc.connections.length ? "on" : ""}` }, svc.connections.length ? "Connected" : "Not connected")), h("p", { class: "lead" }, svc.about))),
     allows,
     svc.connections.map(card),
-    h(
+    svc.browser ? browserForm() : h(
       "form",
       { class: "card form", onsubmit: (e) => (e.preventDefault(), act(() => api("POST", `integrations/services/${svc.id}/connect`, { values: values() }), (c) => `${svc.name} is connected (${c.label}). Agents ask before each change until you choose otherwise.`)) },
       h("b", {}, svc.connections.length ? "Connect another account" : `Connect ${svc.name}`),

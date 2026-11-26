@@ -12,6 +12,7 @@ let K: typeof import("../../src/local/connector-kit.ts");
 let server: http.Server;
 let url = "";
 const seen: { method: string; path: string; auth: string; body: any }[] = [];
+const tokens = { life: 3600, n: 1, revoked: false };
 const state = { asanaDown: false, tasks: [{ gid: "11", name: "Order flour", completed: false, due_on: "2026-12-01" }] as any[], slackPosts: [] as any[], products: new Map<number, any>([[5, { id: 5, name: "Rye loaf", status: "publish", sku: "RYE", price: "6.50", regular_price: "6.50", sale_price: "", stock_quantity: 4 }]]), dropHeader: false };
 
 before(async () => {
@@ -20,10 +21,17 @@ before(async () => {
     req.on("data", (c) => (raw += c));
     req.on("end", () => {
       const u = new URL(req.url!, "http://x");
-      const body = raw ? JSON.parse(raw) : null;
+      const form = req.headers["content-type"] === "application/x-www-form-urlencoded";
+      const body = form ? Object.fromEntries(new URLSearchParams(raw)) : raw ? JSON.parse(raw) : null;
       const auth = String(req.headers.authorization ?? "");
       seen.push({ method: req.method!, path: u.pathname + u.search, auth, body });
       const json = (status: number, v: unknown) => (res.writeHead(status, { "content-type": "application/json" }), res.end(JSON.stringify(v)));
+      // ---- a service that signs in through the browser ----
+      if (u.pathname === "/token") {
+        if (body.grant_type === "authorization_code") return body.code === "good-code" && body.code_verifier && body.client_id === "my-app" && body.client_secret === "my-secret" ? json(200, { access_token: "at-1", refresh_token: "rt-1", expires_in: tokens.life }) : json(400, { error: "invalid_grant" });
+        if (body.grant_type === "refresh_token") return body.refresh_token === "rt-1" && !tokens.revoked ? json(200, { access_token: `at-${++tokens.n}`, expires_in: 3600 }) : json(400, { error: "invalid_grant" });
+      }
+      if (u.pathname === "/standin/me") return /^Bearer at-\d+$/.test(auth) ? json(200, { email: "ada@example.com", token: auth.slice(7) }) : json(401, { message: "Sign in again" });
       // ---- Asana ----
       if (u.pathname.startsWith("/asana/")) {
         if (auth !== "Bearer good-token" || state.asanaDown) return json(401, { errors: [{ message: "Not Authorized" }] });
@@ -159,4 +167,50 @@ test("WooCommerce: connects by header, or by address when the host drops the hea
   await assert.rejects(run("woocommerce__update_product", { id: 5, regular_price: "cheap" }), /Write a price like 19\.99/);
   assert.match(await run("woocommerce__update_product", { id: 5, regular_price: "7.00", stock_quantity: 10 }), /price 7\.00 · 10 in stock/);
   K.removeConnection(d.id);
+});
+
+test("a browser sign-in: the code is exchanged once, the account is checked, and the token is renewed when it runs out", async () => {
+  process.env.TALQAVA_STANDIN_TOKEN_API = `${url}/token`;
+  const me = (c: { values: Record<string, string> }) => K.call<{ email: string; token: string }>(`${url}/standin/me`, { name: "Stand-in", headers: { authorization: `Bearer ${c.values.access_token}` } });
+  K.registerServices({
+    id: "standin",
+    name: "Stand-in",
+    category: "Advanced",
+    about: "A stand-in service.",
+    steps: [],
+    docs: "https://example.com",
+    fields: [],
+    browser: { authUrl: "https://auth.example.com/authorize", tokenUrl: "https://auth.example.com/token", scopes: ["read", "write"], extra: { access_type: "offline" }, secret: "required", appSteps: ["Give it {redirect}."] },
+    check: async (values) => ({ label: (await me({ values })).email }),
+    actions: [{ name: "whoami", kind: "read", summary: "Say who is signed in", description: "Says who is signed in.", properties: {}, run: async (c) => (await me(c)).token }],
+  });
+  const redirect = "http://localhost:8788/api/oauth/callback";
+  assert.throws(() => K.startBrowserSignIn("asana", { clientId: "x" }, redirect), /connects with a key/);
+  assert.throws(() => K.startBrowserSignIn("standin", { clientId: "my-app" }, redirect), /client secret/);
+  assert.throws(() => K.startBrowserSignIn("standin", { clientId: "my-app", clientSecret: "my-secret" }, "http://evil.example/api/oauth/callback"), /on this computer/);
+  const to = new URL(K.startBrowserSignIn("standin", { clientId: "my-app", clientSecret: "my-secret" }, redirect).url);
+  assert.equal(to.origin + to.pathname, "https://auth.example.com/authorize");
+  assert.deepEqual([to.searchParams.get("response_type"), to.searchParams.get("client_id"), to.searchParams.get("redirect_uri"), to.searchParams.get("scope"), to.searchParams.get("code_challenge_method"), to.searchParams.get("access_type")], ["code", "my-app", redirect, "read write", "S256", "offline"]);
+  const stateValue = to.searchParams.get("state")!;
+  assert.ok(stateValue.length >= 40 && to.searchParams.get("code_challenge")!.length >= 40);
+
+  await assert.rejects(K.finishBrowserSignIn("made-up", "good-code"), /not started here/);
+  const denied = new URL(K.startBrowserSignIn("standin", { clientId: "my-app", clientSecret: "my-secret" }, redirect).url).searchParams.get("state");
+  await assert.rejects(K.finishBrowserSignIn(denied, null, "access_denied"), /You did not approve/);
+
+  tokens.life = 30; // runs out within the minute, so the first use renews it
+  const c = await K.finishBrowserSignIn(stateValue, "good-code");
+  assert.equal(c.label, "ada@example.com");
+  await assert.rejects(K.finishBrowserSignIn(stateValue, "good-code"), /not started here/, "the value works once");
+  assert.equal(JSON.stringify(K.listServices()).includes("rt-1"), false, "tokens never reach the screen");
+  assert.equal(await run("standin__whoami"), "at-2", "the token was renewed before use");
+  assert.equal(await run("standin__whoami"), "at-2", "and is then good for an hour");
+
+  // When the service no longer honours the sign-in, the owner is told to sign in again.
+  const cfg = await import("../../src/local/store.ts");
+  cfg.saveConfig({ connections: cfg.getConfig().connections!.map((x) => (x.id === c.id ? { ...x, values: { ...x.values, expires_at: "1" } } : x)) });
+  tokens.revoked = true;
+  await assert.rejects(run("standin__whoami"), /no longer accepted\. Sign in again/);
+  assert.match(K.connectionProblems()[0].problem, /Sign in again/);
+  K.removeConnection(c.id);
 });
