@@ -441,8 +441,8 @@ export async function call<T = any>(url: string, opts: CallOptions): Promise<T> 
   // Jira lists general reasons under errorMessages and the fields at fault under errors.
   const reasons = [...(Array.isArray(data?.errorMessages) ? data.errorMessages.map(String) : []), ...(data?.errors && typeof data.errors === "object" && !Array.isArray(data.errors) ? Object.entries(data.errors).map(([k, v]) => `${k}: ${String(v)}`) : [])].slice(0, 4).join("; ");
   // Freshdesk lists the fields at fault as [{field, message}]; ClickUp says what went wrong under err.
-  const listed = Array.isArray(data?.errors) ? data.errors.map((e: any) => (e && typeof e === "object" ? `${e.field ? `${e.field}: ` : ""}${String(e.message ?? "")}` : String(e))).filter(Boolean).slice(0, 4).join("; ") : "";
-  const said = String(fields || faults || reasons || listed || (typeof data?.err === "string" ? data.err : "") || (data?.message ?? data?.Message ?? data?.error?.message ?? data?.detail ?? data?.error_description ?? (typeof data?.error === "string" ? data.error : "") ?? ""))
+  const listed = Array.isArray(data?.errors) ? data.errors.map((e: any) => (e && typeof e === "object" ? `${e.field ? `${e.field}: ` : ""}${String(e.message ?? e.detail ?? e.title ?? e.code ?? "")}` : String(e))).filter(Boolean).slice(0, 4).join("; ") : "";
+  const said = String(fields || faults || reasons || listed || (typeof data?.err === "string" ? data.err : "") || (data?.ok === false && typeof data?.description === "string" ? data.description : "") || (data?.message ?? data?.Message ?? data?.error?.message ?? data?.detail ?? data?.error_description ?? (typeof data?.error === "string" ? data.error : "") ?? ""))
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim()
