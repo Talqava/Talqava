@@ -1951,6 +1951,7 @@ function syncInboxCount() {
   ui.inboxCount.hidden = !n;
   ui.inboxCount.textContent = String(n);
   renderRecent();
+  renderOverview();
 }
 
 async function mailMark(ids, set) {
@@ -6064,8 +6065,39 @@ function conversationPane() {
   return h("div", { class: "convo" }, ui.scroll, h("div", { class: "compose" }, h("div", { class: "col" }, ui.input, ui.send)));
 }
 
+/**
+ * Beside the chat: what is waiting on the owner, what is being worked on, and what got done today. The same items
+ * as the Inbox, in three short lists, so the owner never has to leave the conversation to see where things stand.
+ */
+function renderOverview() {
+  if (!ui.over?.isConnected) return;
+  let mail = [];
+  try {
+    mail = mailMessages();
+  } catch {}
+  const today = new Date().toDateString();
+  const needs = mail.filter((m) => m.label === "needs" || m.label === "failed");
+  const working = mail.filter((m) => m.label === "working");
+  const done = mail.filter((m) => m.label === "done" && new Date(m.activityAt ?? m.at).toDateString() === today);
+  const open = (m) => ((ui.mailOpen = m.id), go("inbox"));
+  const who = (m) => (m.bot ? roleOf(m.bot.id)?.title || m.bot.name : "");
+  const card = (m, note, cls = "") => h("button", { class: `plain overcard ${cls}`, onclick: () => open(m), title: m.subject }, h("span", { class: "overrow" }, m.bot ? keycap(m.bot, 20, "", m.bot.type) : null, h("span", { class: "overname" }, m.subject)), h("span", { class: "note small" }, [who(m), note].filter(Boolean).join(" · ")));
+  const group = (title, list, body) => h("section", { class: "overgroup" }, h("div", { class: "label overlabel" }, h("span", { class: "grow" }, title), h("span", {}, String(list.length))), body);
+  fill(
+    ui.over,
+    h("div", { class: "overhead" }, h("b", { class: "grow" }, "Overview"), h("button", { class: "plain link small", onclick: () => go("inbox") }, "Inbox")),
+    !mail.length || (!needs.length && !working.length && !done.length)
+      ? h("p", { class: "note overempty" }, "Your work will show here: what is waiting on you, what is being worked on, and what is done.")
+      : [
+          group("Waiting on you", needs, needs.length ? needs.slice(0, 5).map((m) => card(m, m.label === "failed" ? "stopped; needs a look" : "needs your yes", "wait")) : h("p", { class: "note small" }, "Nothing. You're up to date.")),
+          group("Working", working, working.length ? working.slice(0, 5).map((m) => card(m, m.snippet ? String(m.snippet).slice(0, 60) : "")) : h("p", { class: "note small" }, "Nothing is running.")),
+          done.length ? group("Done today", done, done.slice(0, 6).map((m) => h("button", { class: "plain overdone", onclick: () => open(m), title: m.subject }, m.subject))) : null,
+        ],
+  );
+}
+
 function chatView() {
-  ui.body.className = "body two";
+  ui.body.className = "body two over";
   ui.chatSide = h("aside", { class: "side" });
   const withBot = chatBotOf();
   ui.title = h("h1", {}, "New chat");
@@ -6079,6 +6111,10 @@ function chatView() {
   syncPin();
   const pane = conversationPane();
   fill(ui.body, ui.chatSide, h("main", { class: "center flush" }, h("div", { class: "chathead", style: withBot ? botStyle(withBot) : "" }, withBot ? keycap(withBot, 28, "", withBot.type) : null, ui.title, withBot ? h("span", { class: "small muted", title: "This chat is with one agent, in its role. It uses that agent's instructions, powers, model and limits." }, roleLine(withBot, roleOf(withBot.id)?.title)) : null, ui.meta, ui.move, withBot ? null : modelPicker(), ui.pin, ui.remove), pane));
+  ui.over = h("aside", { class: "overpane", "aria-label": "Overview" });
+  ui.body.append(ui.over);
+  renderOverview();
+  if (!state.mail) loadMail().then(renderOverview).catch(() => {});
   renderChatList();
   setRunning(false);
   if (state.convId) connect(state.convId);

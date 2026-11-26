@@ -4,6 +4,8 @@ Chat is where you talk with your assistant, or with one of your agents, in a con
 
 ## What you'll see
 
+**On the right: Overview.** Three short lists, so you can see where things stand without leaving the chat: **Waiting on you** (what needs your yes, in amber), **Working** (what your agents are doing now) and **Done today**. Click any line to open it in the Inbox. In a narrow window the panel is hidden; the Inbox shows the same things.
+
 **On the left:**
 
 - **Project**: a menu to choose which project's chats you see, with **＋ New project**. "General" is the default.
