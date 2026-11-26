@@ -1986,6 +1986,30 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .areatab.on { background: var(--raised); border-color: var(--line2, var(--line)); font-weight: 600; }
 .railfold { width: 100%; text-align: left; background: transparent; border: 0; cursor: pointer; font: inherit; }
 /* Home. */
+/* ---------- home: one box to ask ---------- */
+.askhome { display: grid; gap: 14px; justify-items: center; text-align: center; max-width: 680px; margin: 6vh auto 10px; }
+.askhome h1 { margin: 0; font-size: clamp(26px, 4vw, 36px); letter-spacing: -0.03em; }
+.askhome .lead { margin: 0; }
+.askhome .askset { width: 100%; text-align: left; }
+.askwrap { width: 100%; border: 1.5px solid var(--line2); border-radius: 14px; background: var(--panel); text-align: left; transition: border-color 0.15s, box-shadow 0.15s; }
+.askwrap:focus-within { border-color: var(--accent-ink, var(--accent)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.askbox { display: block; width: 100%; border: 0; background: none; resize: none; padding: 16px 16px 10px; font-size: 16px; line-height: 1.45; min-height: 76px; outline: none; color: var(--text); }
+.askbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--line); }
+.askchip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 12px; color: var(--soft); }
+.asksend { margin-left: auto; width: 34px; min-width: 34px; height: 34px; min-height: 34px; padding: 0; border-radius: 50%; font-size: 16px; line-height: 1; }
+.askor { margin: 6px 0 0; }
+.askideas { width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.askidea { display: grid; gap: 6px; text-align: left; padding: 12px 14px; align-content: start; }
+.askmake, .askfoot { margin: 0; }
+.askfoot { text-align: center; margin-top: 18px; }
+.startpage .isec { max-width: 680px; margin-left: auto; margin-right: auto; width: 100%; }
+/* ---------- the menu: what is in motion ---------- */
+.railrecent { margin-top: 6px; min-height: 0; overflow: hidden; }
+.recentitem { font-size: 13px; min-height: 30px; color: var(--muted); }
+.recentitem .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.recentdot { width: 7px; height: 7px; flex: none; background: var(--accent); margin: 0 5px 0 6px; }
+.recentitem.needs .recentdot { background: var(--warn, #ffb020); }
+.recentitem.failed .recentdot { background: var(--bad, #ff6b6b); }
 .startpage .startgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
 .startpage .starttile, .startpage .mapcard { display: grid; gap: 4px; text-align: left; padding: 14px 16px; }
 .startpage .startline { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; margin-top: 6px; padding: 10px 14px; }

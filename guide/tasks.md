@@ -172,7 +172,7 @@ Chats with Talqava itself keep working while agents are paused.
 
 **Start a project**
 
-A project is a folder for a body of work, with its own page under **Projects** in the menu. See [Projects](projects.md).
+A project is a folder for a body of work, with its own page under **Tasks** › **Projects**. See [Projects](projects.md).
 
 1. On a goal card, click **+ Project**, or open **Projects** and click **+ New project**.
 2. Name it, say what it covers under **About**, and choose who it is **Led by**.

@@ -4,7 +4,7 @@ Office is where you and your agents write things that are not procedures: letter
 
 ## What you'll see
 
-- **Office** in the menu on the left. Its parts are tabs across the top: **Home**, **Documents**, **Sheets**, **Slides** and **Notes**.
+- **Files** in the menu on the left. Its tabs across the top include **Office** (the home of this part), **Documents**, **Sheets**, **Slides** and **Notes**.
 - **Documents.** A list of your documents by folder on the left. On the home screen: **+ New document**, a box to find a document, **Or ask an agent to write it**, anything **Waiting for you**, and a table of every document with who last changed it and who can read it.
 - **Sheets.** A list of your sheet files by folder. On the home screen: **+ New sheet**, **Import a CSV file**, **Or ask an agent to build it**, anything **Waiting for you**, and a table of every sheet file.
 - **An open sheet.** A title, a row of tools, a box showing what is in the selected cell, and the grid of cells. Under the grid are the sheets in the file and any charts. On the right is a panel with who can see it and how agents may change it.
