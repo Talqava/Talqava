@@ -49,7 +49,7 @@ import { PUBLISH_RULES, PUBLISH_WORDS, connectSite, dailyPostPrompt, listContent
 import { fromDocx, fromXlsx, toDocx, toPptx, fromPptx, toXlsx } from "./officefiles.ts";
 import { listOfficeTemplates, useOfficeTemplate } from "./office-templates.ts";
 import { pageTool } from "../core/tools/page.ts";
-import { describeGuardrails, guardrails, guardrailsFrom, marketAllowed, noteStuck } from "./guardrails.ts";
+import { STEP_KINDS, STEP_WORDS, decideStep, describeGuardrails, firstApprover, guardrails, guardrailsFrom, marketAllowed, noteStuck, stepKind } from "./guardrails.ts";
 import { securityOverview, securityReport } from "./securitycenter.ts";
 import { backupStatus, makeBackup, nightlyBackup, restoreTo, setBackup, testRestore } from "./backup.ts";
 import { finishSso, setSso, sso, ssoPublic, startSso } from "./sso.ts";
@@ -62,7 +62,7 @@ import { ROLES, ROLE_WORDS, mayDo, people } from "./people.ts";
 import type { Person } from "./people.ts";
 import { projects } from "./projects.ts";
 import { connectCatalog, connectorLabel, disconnectCatalog, listCatalog } from "./connector-catalog.ts";
-import { addWatch, changeRules, checkConnections, connectionProblems, awaitsFragment, finishBrowserSignIn, finishFragmentSignIn, pollWatches, removeWatch, setWatch, startBrowserSignIn, type Happening, connectService, listServices, removeConnection, updateConnection } from "./connector-kit.ts";
+import { addWatch, changeRules, checkConnections, connectionProblems, awaitsFragment, finishBrowserSignIn, finishFragmentSignIn, pollWatches, toolActionKind, removeWatch, setWatch, startBrowserSignIn, type Happening, connectService, listServices, removeConnection, updateConnection } from "./connector-kit.ts";
 import "./services/index.ts";
 import { installKit, listKits, previewKit, runPlaybook, undoKit } from "./kits.ts";
 import { connectLangfuse, langfuseIntegration, recordStep, removeLangfuse } from "./langfuse.ts";
@@ -1054,7 +1054,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
       ...listServices().filter((s) => s.connections.length).map((s) => ({ id: s.id, name: s.name })),
       ...((cfg.wordpress ?? []).length ? [{ id: "wordpress", name: "WordPress" }] : []),
     ];
-    return send(res, 200, { rules: guardrails(), connected, spentToday: spentToday(), words: describeGuardrails(), refused: readAudit({ kind: "guardrail", limit: 30 }).entries });
+    return send(res, 200, { rules: guardrails(), connected, stepKinds: STEP_KINDS.map((id) => ({ id, words: STEP_WORDS[id] })), people: people.enabled() ? people.list().filter((p) => p.role !== "auditor" && (p as { active?: boolean }).active !== false).map((p) => ({ id: p.id, name: p.name })) : [], spentToday: spentToday(), words: describeGuardrails(), refused: readAudit({ kind: "guardrail", limit: 30 }).entries });
   }
   if (route === "GET state") return send(res, 200, publicConfig());
   if (route === "PUT settings") return send(res, 200, await updateSettings(body));
@@ -1164,7 +1164,21 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
     }
     if (action === "approvals" && req.method === "POST") {
       if (!["allow", "always", "deny"].includes(body.decision)) throw new HttpError(400, "Bad decision.");
-      if (!engine.resolveApproval(id, actionId, body.decision as Decision)) throw new HttpError(404, "That request is no longer waiting.");
+      // The organization may name who approves each kind of step, and ask for two people.
+      const asked = engine.liveState(id).approvals.find((a) => a.id === actionId);
+      if (!asked) throw new HttpError(404, "That request is no longer waiting.");
+      let answer;
+      try {
+        answer = decideStep(`${id}:${actionId}`, stepKind(asked.name, asked.input, toolActionKind), me ? { id: me.id, name: me.name } : null, body.decision, people.list().map((p) => p.id));
+      } catch (err) {
+        if ((err as { forbidden?: boolean }).forbidden) throw new HttpError(403, (err as Error).message);
+        throw err;
+      }
+      if (!answer.go) {
+        audit({ ...requestActor(req), kind: "approval", task: id, action: "Approved a step that needs two people; it waits for a second person" });
+        return send(res, 200, { ok: true, waiting: true, message: answer.message });
+      }
+      if (!engine.resolveApproval(id, actionId, answer.decision as Decision)) throw new HttpError(404, "That request is no longer waiting.");
       return send(res, 200, { ok: true });
     }
     if (action === "events" && req.method === "GET") {

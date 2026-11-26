@@ -205,6 +205,15 @@ export function listServices() {
     connections: all.filter((c) => c.service === d.id).map(view),
   }));
 }
+/**
+ * What kind of step one of the kit's tools is, by its name: reading, changing something, sending something to a
+ * person outside (an email, a reply to a customer), or deleting. Nothing for a tool that is not the kit's.
+ */
+export function toolActionKind(name: string): "read" | "change" | "send" | "delete" | null {
+  const [service, action] = name.split("__");
+  const found = registry.find((d) => d.id === service)?.actions.find((a) => a.name === action);
+  return !found ? null : found.kind === "read" ? "read" : found.kind === "destructive" ? "delete" : found.alwaysAsk ? "send" : "change";
+}
 export const changeRules = () => CHANGE_RULES.map((id) => ({ id, words: CHANGE_WORDS[id] }));
 
 /** Connects an account: the sign-in is checked with the service before anything is saved. */
