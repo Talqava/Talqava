@@ -2,6 +2,7 @@
 import { registerServices, type ServiceDef } from "../connector-kit.ts";
 import { asana } from "./asana.ts";
 import { calendly } from "./calendly.ts";
+import { gitlab } from "./gitlab.ts";
 import { gmail, googleCalendar, googleDrive } from "./google.ts";
 import { hubspot } from "./hubspot.ts";
 import { mailchimp } from "./mailchimp.ts";
@@ -10,8 +11,9 @@ import { shopify } from "./shopify.ts";
 import { slackService } from "./slack.ts";
 import { trello } from "./trello.ts";
 import { typeform } from "./typeform.ts";
+import { xero } from "./xero.ts";
 import { zendesk } from "./zendesk.ts";
 import { woocommerce } from "./woocommerce.ts";
 
-export const SERVICES: ServiceDef[] = [gmail, googleCalendar, googleDrive, outlook, onedrive, shopify, woocommerce, hubspot, mailchimp, slackService, asana, trello, calendly, typeform, zendesk];
+export const SERVICES: ServiceDef[] = [gmail, googleCalendar, googleDrive, outlook, onedrive, shopify, woocommerce, hubspot, mailchimp, slackService, asana, trello, calendly, typeform, zendesk, gitlab, xero];
 registerServices(...SERVICES);
