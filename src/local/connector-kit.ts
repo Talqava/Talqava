@@ -335,7 +335,8 @@ export function serviceTools(agent?: string): Tool[] {
       // An action the owner switched off on every account is not offered either.
       if (mine.every((c) => c.off?.includes(action.name))) continue;
       tools.push(
-        defineTool<Record<string, any>>({
+        // Marked when it deletes, so the organization's "never delete" rule can take it away (see guardrails.ts).
+        Object.assign(defineTool<Record<string, any>>({
           name: `${def.id}__${action.name}`,
           description: `${def.name}: ${action.description}${action.kind === "read" ? "" : action.kind === "destructive" ? " This cannot be undone, so the owner is always asked first." : " This changes the owner's account; say what you changed in your report."}`,
           properties: { ...action.properties, ...(several ? { account: { type: "string", description: `Which account: ${mine.map((c) => c.label).join(", ")}.` } } : {}) },
@@ -375,7 +376,7 @@ export function serviceTools(agent?: string): Tool[] {
             }
             return out.length > 30_000 ? `${out.slice(0, 30_000)}\n… (cut short; ask for less at a time)` : out;
           },
-        }),
+        }), action.kind === "destructive" ? { deletes: true } : {}),
       );
     }
   }

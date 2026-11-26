@@ -13,7 +13,12 @@ interface Ledger {
   seen: Record<string, number>;
   /** Dollars spent by each group, by month: "orgId/groupId" for the group a task was charged to when it started. */
   groups?: Record<string, Record<string, number>>;
+  /** Dollars spent by every agent together, by day ("2026-11-26"), for the organization's daily limit. */
+  days?: Record<string, number>;
 }
+export const dayKey = (now = new Date()) => `${monthKey(now)}-${String(now.getDate()).padStart(2, "0")}`;
+/** What every agent's tasks together have spent today. */
+export const spentToday = (now = new Date()): number => read().days?.[dayKey(now)] ?? 0;
 
 const file = () => path.join(DATA, "spend.json");
 const read = (): Ledger => ({ months: {}, seen: {}, ...readJson<Partial<Ledger>>(file(), {}) });
@@ -34,6 +39,9 @@ export function recordSpend(questId: string, botId: string, cost: number, now = 
     groups[key] = Math.round(((groups[key] ?? 0) + delta) * 1e6) / 1e6;
     ledger.groups = Object.fromEntries(Object.entries(ledger.groups).sort().slice(-12));
   }
+  const days = (ledger.days ??= {});
+  days[dayKey(now)] = Math.round(((days[dayKey(now)] ?? 0) + delta) * 1e6) / 1e6;
+  ledger.days = Object.fromEntries(Object.entries(days).sort().slice(-60));
   ledger.seen[questId] = cost;
   // Only the latest quests need remembering, and the last year of months.
   ledger.seen = Object.fromEntries(Object.entries(ledger.seen).slice(-1000));

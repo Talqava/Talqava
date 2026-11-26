@@ -9521,6 +9521,10 @@ function guardrailsSection(canEdit) {
     const sites = h("textarea", { rows: 4, disabled: !canEdit, placeholder: "One site on each line, for example:\nexample.com\ngov.uk", "aria-label": "Approved sites" }, g.sites.join("\n"));
     const spend = h("input", { type: "number", min: "0", step: "0.5", value: g.maxTaskSpend ?? "", placeholder: "No cap", disabled: !canEdit, "aria-label": "Most a task may spend, in dollars" });
     const minutes = h("input", { type: "number", min: "1", step: "1", value: g.maxMinutes ?? "", placeholder: "No cap", disabled: !canEdit, "aria-label": "Longest a task may run, in minutes" });
+    const day = h("input", { type: "number", min: "0", step: "1", value: g.maxDaySpend ?? "", placeholder: "No limit", disabled: !canEdit, "aria-label": "Most all tasks together may spend in a day, in dollars" });
+    const stuck = h("input", { type: "number", min: "2", step: "1", value: g.pauseAfter ?? "", placeholder: "Never", disabled: !canEdit, "aria-label": "Pause an agent after its work got stuck this many times within an hour" });
+    day.addEventListener("change", () => save({ maxDaySpend: day.value }));
+    stuck.addEventListener("change", () => save({ pauseAfter: stuck.value }));
     spend.addEventListener("change", () => save({ maxTaskSpend: spend.value }));
     minutes.addEventListener("change", () => save({ maxMinutes: minutes.value }));
     const org = activeOrg();
@@ -9543,10 +9547,13 @@ function guardrailsSection(canEdit) {
               h("p", { class: "note small" }, "Agents get the tools of ticked services only. A service connected later is off until you tick it."),
             ]
           : null,
+        h("label", {}, "Deleting in a connected service (a calendar event, a file)", choice("deletes", [["ask", "Always ask a person first"], ["never", "Never"]])),
         h("label", {}, "The web", choice("web", [["any", "Any site, for agents with that power"], ["approved", "Only the sites approved below"], ["never", "Never"]])),
         g.web === "approved" ? [h("label", {}, "Approved sites", sites), h("p", { class: "note small" }, "A site covers its pages and its sub-sites: example.com also allows www.example.com. With none listed, the web is off."), canEdit ? h("div", {}, h("button", { onclick: () => save({ sites: sites.value }) }, "Save the list")) : null] : null,
         h("div", { class: "row wrap" }, h("label", { class: "grow" }, "Most one task may spend ($)", spend), h("label", { class: "grow" }, "Longest one task may run (minutes)", minutes)),
         h("p", { class: "note small" }, "These caps only ever tighten: an agent with a lower budget keeps it. Leave empty for no extra cap."),
+        h("div", { class: "row wrap" }, h("label", { class: "grow" }, "Most all tasks together may spend in a day ($)", day), h("label", { class: "grow" }, "Pause an agent after its work got stuck this many times in an hour", stuck)),
+        h("p", { class: "note small" }, data.spentToday !== undefined ? `Spent by tasks today: $${Number(data.spentToday).toFixed(2)}. When the daily limit is reached, nothing more starts until the next day or until you raise it. A paused agent loses nothing; resume it from Tasks.` : "When the daily limit is reached, nothing more starts until the next day or until you raise it."),
         canEdit ? null : h("p", { class: "note small" }, "Only owners and administrators change these rules."),
       ),
       h("div", { class: "card form" }, h("b", {}, "In plain words, right now"), h("ul", {}, data.words.map((w) => h("li", {}, w)))),

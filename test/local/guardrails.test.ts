@@ -76,12 +76,12 @@ test("always ask: changes and commands ask a person whatever the agent's own set
 
 test("what the owner types is checked: sites are tidied, unknown choices are ignored, amounts must be positive", () => {
   assert.deepEqual(G.guardrailsFrom({ web: "approved", sites: "https://www.Example.com/page, gov.uk\n*.acme.io  not_a_site  example.com" }).sites, ["example.com", "gov.uk", "acme.io"]);
-  assert.deepEqual(G.guardrailsFrom({ changes: "whatever", commands: "never", maxTaskSpend: -5, maxMinutes: "20" }), { ...G.NO_GUARDRAILS, commands: "never", maxMinutes: 20, maxTaskSpend: undefined });
+  assert.deepEqual(G.guardrailsFrom({ changes: "whatever", commands: "never", maxTaskSpend: -5, maxMinutes: "20" }), { ...G.NO_GUARDRAILS, commands: "never", maxMinutes: 20, maxTaskSpend: undefined , maxDaySpend: undefined, pauseAfter: undefined });
   const before = { ...G.NO_GUARDRAILS, maxTaskSpend: 4, sites: ["a.com"] };
-  assert.deepEqual(G.guardrailsFrom({ maxTaskSpend: "" }, before), { ...before, maxTaskSpend: undefined, maxMinutes: undefined });
+  assert.deepEqual(G.guardrailsFrom({ maxTaskSpend: "" }, before), { ...before, maxTaskSpend: undefined, maxMinutes: undefined, maxDaySpend: undefined, pauseAfter: undefined });
   assert.equal(G.siteAllowed("https://sub.a.com/x", ["a.com"]), true);
   assert.equal(G.siteAllowed("https://a.com.evil.io/x", ["a.com"]), false);
-  assert.equal(G.describeGuardrails({ ...G.NO_GUARDRAILS, web: "approved", sites: ["a.com"], commands: "never" }).length, 6);
+  assert.equal(G.describeGuardrails({ ...G.NO_GUARDRAILS, web: "approved", sites: ["a.com"], commands: "never" }).length, 9);
 });
 
 test("with an approved list, only approved connected services keep their tools", () => {
@@ -93,4 +93,43 @@ test("with an approved list, only approved connected services keep their tools",
   const cleaned = G.guardrailsFrom({ connectors: "approved", services: ["Gmail", "gmail", "bad name!", "stripe"] });
   assert.deepEqual(cleaned.services, ["gmail", "stripe"]);
   assert.match(G.describeGuardrails(cleaned).join(" "), /only 2 approved connected services: gmail, stripe/);
+});
+
+test("a daily limit for the whole organization: the rest of today caps each run, and once reached nothing starts", async () => {
+  const { recordSpend, spentToday } = await import("../../src/local/spend.ts");
+  const rules = { ...G.NO_GUARDRAILS, maxDaySpend: 10 };
+  assert.equal(G.guard(spec(), "the Bookkeeper", rules).budget!.spend, 5, "the agent's lower budget stays");
+  recordSpend("task-a", "bookkeeper", 7);
+  recordSpend("task-a", "bookkeeper", 7.5);
+  assert.equal(spentToday(), 7.5, "a task's cost is counted once as it grows");
+  assert.equal(G.guard(spec(), "the Bookkeeper", rules).budget!.spend, 2.5, "only what is left of today may be spent");
+  recordSpend("task-b", "sales", 3);
+  assert.throws(() => G.guard(spec(), "the Bookkeeper", rules), /spending limit for today \(\$10\) is reached/);
+  assert.equal(G.guard(spec(), "the Bookkeeper", { ...rules, maxDaySpend: 50 }).budget!.spend, 5, "raising the limit lets work start again");
+  assert.equal(G.guard(spec(), "the Bookkeeper", G.NO_GUARDRAILS).budget!.spend, 5);
+  assert.ok(G.describeGuardrails(rules).some((w) => /at most \$10 a day/.test(w)));
+});
+
+test("never delete: tools that delete in a connected service are taken away, and the agent is told", () => {
+  const s = spec({ tools: [tool("memory"), tool("googlecalendar__delete_event", { deletes: true }), tool("googlecalendar__list_events")] });
+  assert.equal(G.guard(s, "the Assistant", G.NO_GUARDRAILS).tools.length, 3);
+  const g = G.guard(s, "the Assistant", { ...G.NO_GUARDRAILS, deletes: "never" });
+  assert.deepEqual(g.tools.map((t: any) => t.name), ["memory", "googlecalendar__list_events"]);
+  assert.match(g.system, /deleting things in connected services/);
+  assert.equal(G.guardrailsFrom({ deletes: "sometimes" }).deletes, "ask");
+});
+
+test("an agent whose work gets stuck often enough within an hour is to be paused; older trouble is forgotten", () => {
+  const rules = { ...G.NO_GUARDRAILS, pauseAfter: 3 };
+  const t0 = 1_800_000_000_000;
+  assert.equal(G.noteStuck("bookkeeper", t0, G.NO_GUARDRAILS), false, "off unless the owner sets it");
+  assert.equal(G.noteStuck("bookkeeper", t0, rules), false);
+  assert.equal(G.noteStuck("sales", t0, rules), false, "each agent is counted alone");
+  assert.equal(G.noteStuck("bookkeeper", t0 + 60_000, rules), false);
+  assert.equal(G.noteStuck("bookkeeper", t0 + 120_000, rules), true);
+  assert.equal(G.noteStuck("bookkeeper", t0 + 180_000, rules), false, "the count starts again after a pause");
+  assert.equal(G.noteStuck("sales", t0 + 2 * 3_600_000, rules), false);
+  assert.equal(G.noteStuck("sales", t0 + 2 * 3_600_000 + 1, rules), false, "trouble from over an hour ago no longer counts");
+  assert.equal(G.guardrailsFrom({ pauseAfter: 1 }).pauseAfter, 2, "once is not a pattern");
+  assert.equal(G.guardrailsFrom({ pauseAfter: "" }, rules).pauseAfter, undefined);
 });
