@@ -1,6 +1,7 @@
 // Optional real browser, used only if Playwright is installed (npm install playwright).
 import { defineTool } from "../core/index.ts";
 import type { Tool, ToolOutput } from "../core/index.ts";
+import { webRules } from "../core/tools/page.ts";
 
 // Loaded by name at run time so the app works without the package.
 let playwright: any;
@@ -47,9 +48,32 @@ interface BrowserInput {
   submit?: boolean;
 }
 
+/**
+ * Where an organization holds agents to approved sites, the browser is held to them wherever it ends up: a link, a
+ * form or a redirect that leaves them is undone, and the agent is told.
+ */
+async function stayOnApproved(p: { url(): string; goto(url: string): Promise<unknown> }): Promise<void> {
+  if (!webRules.allowed) return;
+  let at: URL;
+  try {
+    at = new URL(p.url());
+  } catch {
+    return;
+  }
+  if (!["http:", "https:"].includes(at.protocol) || webRules.allowed(at.hostname)) return;
+  await p.goto("about:blank").catch(() => {});
+  throw new Error(`${at.hostname} is not one of the sites this organization approves, so the browser left it. Stay on the approved sites.`);
+}
+
 async function act(input: BrowserInput): Promise<ToolOutput> {
   if (!(await browserAvailable())) throw new Error("The browser is not installed.");
   const p = await getPage();
+  const out = await step(p, input);
+  await stayOnApproved(p);
+  return out;
+}
+
+async function step(p: Awaited<ReturnType<typeof getPage>>, input: BrowserInput): Promise<ToolOutput> {
   switch (input.action) {
     case "goto": {
       const url = new URL(input.url ?? "");

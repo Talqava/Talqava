@@ -12,8 +12,10 @@ export interface Guardrails {
   changes: "agent" | "ask";
   /** Running commands on this computer: as each agent is set up, always ask first, or never. */
   commands: "allowed" | "ask" | "never";
-  /** Tools of connected services (connectors): allowed (they ask before changing anything), or never. */
-  connectors: "allowed" | "never";
+  /** Tools of connected services (connectors): allowed (they ask before changing anything), only the approved ones, or never. */
+  connectors: "allowed" | "approved" | "never";
+  /** The approved connected services, by the name their tools start with ("stripe", "gmail", "wordpress"). */
+  services: string[];
   /** The web: any site, only the approved sites, or never. */
   web: "any" | "approved" | "never";
   /** The approved sites, as host names ("example.com" also covers "www.example.com"). */
@@ -24,7 +26,7 @@ export interface Guardrails {
   maxMinutes?: number;
 }
 
-export const NO_GUARDRAILS: Guardrails = { changes: "agent", commands: "allowed", connectors: "allowed", web: "any", sites: [] };
+export const NO_GUARDRAILS: Guardrails = { changes: "agent", commands: "allowed", connectors: "allowed", services: [], web: "any", sites: [] };
 
 /** The guardrails in force. */
 export const guardrails = (): Guardrails => guardrailsFrom(getConfig().guardrails ?? {});
@@ -44,7 +46,8 @@ export function guardrailsFrom(input: unknown, before: Guardrails = NO_GUARDRAIL
   return {
     changes: pick(g.changes, ["agent", "ask"] as const, before.changes),
     commands: pick(g.commands, ["allowed", "ask", "never"] as const, before.commands),
-    connectors: pick(g.connectors, ["allowed", "never"] as const, before.connectors),
+    connectors: pick(g.connectors, ["allowed", "approved", "never"] as const, before.connectors),
+    services: g.services === undefined ? before.services : [...new Set((Array.isArray(g.services) ? g.services : []).map((x) => String(x).trim().toLowerCase()).filter((x) => /^[a-z0-9][a-z0-9_.-]{0,80}$/.test(x)))].slice(0, 200),
     web: pick(g.web, ["any", "approved", "never"] as const, before.web),
     sites,
     maxTaskSpend: amount(g.maxTaskSpend, before.maxTaskSpend, 100_000),
@@ -113,6 +116,14 @@ export function guard(spec: RunSpec, who: string, g: Guardrails = guardrails()):
   if (g.connectors === "never" && tools.some(isConnectorTool)) {
     tools = tools.filter((t) => !isConnectorTool(t));
     taken.push("connected services");
+  } else if (g.connectors === "approved") {
+    // Only services on the approved list keep their tools. With none approved, connected services are off.
+    const ok = (t: Tool) => g.services.includes(t.name.split("__")[0].toLowerCase());
+    const off = [...new Set(tools.filter((t) => isConnectorTool(t) && !ok(t)).map((t) => t.name.split("__")[0]))];
+    if (off.length) {
+      tools = tools.filter((t) => !isConnectorTool(t) || ok(t));
+      taken.push(`connected services that are not approved (${off.join(", ")})`);
+    }
   }
   if (g.web === "never" || (g.web === "approved" && !g.sites.length)) {
     if (tools.some((t) => WEB_TOOLS.has(t.name)) || hosted.some((t) => HOSTED_WEB_TOOLS.has((t as { name?: string }).name ?? ""))) taken.push("the web");
@@ -147,7 +158,7 @@ export function describeGuardrails(g: Guardrails = guardrails()): string[] {
   return [
     g.changes === "ask" ? "Every change an agent wants to make asks a person first." : "Each agent's own setting decides whether its changes ask first.",
     g.commands === "never" ? "Agents never run commands on this computer." : g.commands === "ask" ? "Agents always ask before running a command." : "Agents with that power may run commands.",
-    g.connectors === "never" ? "Agents may not use connected services." : "Agents may use connected services; their tools ask before changing anything.",
+    g.connectors === "never" ? "Agents may not use connected services." : g.connectors === "approved" ? (g.services.length ? `Agents may use only ${g.services.length} approved connected service${g.services.length === 1 ? "" : "s"}: ${g.services.join(", ")}.` : "Agents may use only approved connected services, and none is approved yet.") : "Agents may use connected services; their tools ask before changing anything.",
     g.web === "never" ? "Agents may not use the web." : g.web === "approved" ? (g.sites.length ? `Agents may open only ${g.sites.length} approved site${g.sites.length === 1 ? "" : "s"}.` : "Agents may open only approved sites, and none is approved yet, so the web is off.") : "Agents with that power may open any site.",
     g.maxTaskSpend !== undefined ? `No task may spend more than $${g.maxTaskSpend}.` : "No extra cap on what a task may spend.",
     g.maxMinutes !== undefined ? `No task may run longer than ${g.maxMinutes} minutes.` : "No extra cap on how long a task may run.",

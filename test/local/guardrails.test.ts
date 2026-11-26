@@ -83,3 +83,14 @@ test("what the owner types is checked: sites are tidied, unknown choices are ign
   assert.equal(G.siteAllowed("https://a.com.evil.io/x", ["a.com"]), false);
   assert.equal(G.describeGuardrails({ ...G.NO_GUARDRAILS, web: "approved", sites: ["a.com"], commands: "never" }).length, 6);
 });
+
+test("with an approved list, only approved connected services keep their tools", () => {
+  const withTwo = () => ({ ...spec(), tools: [...spec().tools, tool("gmail__search"), tool("gmail__send_draft")] });
+  const names = (g: any) => g.tools.map((t: any) => t.name).filter((n: string) => n.includes("__"));
+  assert.deepEqual(names(G.guard(withTwo(), "x", { ...G.NO_GUARDRAILS, connectors: "approved", services: ["gmail"] })), ["gmail__search", "gmail__send_draft"]);
+  assert.deepEqual(names(G.guard(withTwo(), "x", { ...G.NO_GUARDRAILS, connectors: "approved", services: [] })), [], "nothing approved means connected services are off");
+  assert.deepEqual(names(G.guard(withTwo(), "x", { ...G.NO_GUARDRAILS, connectors: "allowed", services: ["gmail"] })), ["stripe__create_invoice", "gmail__search", "gmail__send_draft"], "the list only counts when the rule says approved");
+  const cleaned = G.guardrailsFrom({ connectors: "approved", services: ["Gmail", "gmail", "bad name!", "stripe"] });
+  assert.deepEqual(cleaned.services, ["gmail", "stripe"]);
+  assert.match(G.describeGuardrails(cleaned).join(" "), /only 2 approved connected services: gmail, stripe/);
+});
