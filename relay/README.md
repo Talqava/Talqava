@@ -50,4 +50,4 @@ It needs PHP 8.1 or newer with the curl extension.
 ## What it does not do yet
 
 - It does not limit how often one address may call it. The hosting's own protection is relied on for that.
-- It has been read through carefully but **not yet run**: the computer it was written on has no PHP. The Talqava app's side is tested against a stand-in that behaves as these pages are meant to. Before it holds a real secret, each page should be tried once on the website with a test app.
+- It has been tried on auth.talqava.com (27 November 2026) with made-up app values: the pages run, find their settings, refuse what they should (wrong method, not JSON, an unknown service, too large a request), reach a real service and pass on its refusal, and the callback page redirects only to localhost. **A sign-in that succeeds has not been tried yet**: that needs a real registered app and its secret in the settings.
