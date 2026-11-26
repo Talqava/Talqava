@@ -4976,10 +4976,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 Talqava writes out speech with whisper.cpp, run as a separate program on the owner's computer. The speech model it uses is not part of Talqava: the owner downloads it from the whisper.cpp project's own files the first time they use speech.
 
 ### whisper.cpp (the whisper-server program, from github.com/ggml-org/whisper.cpp; in builds that write out speech)
-
 Licence: MIT  
 Copyright (c) 2023-2026 The ggml authors
-
 ```text
 MIT License
 
@@ -5009,10 +5007,8 @@ SOFTWARE.
 Small parts of these projects were adapted into Talqava's own files. Their names, logos and artwork are not used.
 
 ### OpenClaw (github.com/openclaw/openclaw): the interaction-layer colour tokens in public/shell.css, adapted from ui/src/styles/base.css
-
 Licence: MIT  
 Copyright (c) 2026 OpenClaw Foundation
-
 ```text
 MIT License
 
