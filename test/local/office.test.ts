@@ -225,3 +225,45 @@ test("levels for each group and agent: no access, read, comment, suggest, edit; 
   assert.equal(workspace.get(org, doc.id).levels, null);
   assert.equal(workspace.level(org, doc.id, "bookkeeper"), "suggest");
 });
+
+test("a photo or file is attached to a note, kept with it, and the note is found by the words in the picture", async () => {
+  const note = workspace.create(org, null, { kind: "note", title: "Lunch receipt", markdown: "Team lunch." });
+  assert.deepEqual(workspace.get(org, note.id).files, []);
+  const png = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
+  const photo = workspace.attach(org, note.id, "../receipt photo.PNG", png);
+  assert.deepEqual([photo.name, photo.type, photo.picture, photo.size, photo.words], [".. receipt photo.PNG", "png", true, png.length, 0]);
+  const pdf = workspace.attach(org, note.id, "contract.pdf", Buffer.from("%PDF-1.4"));
+  assert.equal(pdf.picture, false);
+  assert.throws(() => workspace.attach(org, note.id, "empty.txt", Buffer.alloc(0)), /empty/);
+  assert.throws(() => workspace.attach(org, note.id, "big.bin", Buffer.alloc(15_000_001)), /15 MB/);
+  assert.throws(() => workspace.attach(org, "nope", "a.txt", Buffer.from("a")), /no such page/);
+
+  // The content comes back as it went in, and only through its own note.
+  assert.deepEqual(workspace.attachment(org, note.id, photo.id).data, png);
+  const other = workspace.create(org, null, { kind: "note", title: "Other" });
+  assert.throws(() => workspace.attachment(org, other.id, photo.id), /no such attachment/);
+
+  // Only pictures are read; what the model answers is kept, and "NONE" means no words.
+  await assert.rejects(workspace.readAttachment(org, note.id, pdf.id, async () => "x"), /Only pictures/);
+  let got: [number, string] | null = null;
+  const read = await workspace.readAttachment(org, note.id, photo.id, async (picture, type) => ((got = [picture.length, type]), "Trattoria Verde\r\nTotal 84.50"));
+  assert.deepEqual([read.words, got], [4, [png.length, "image/png"]]);
+  assert.equal(workspace.attachmentWords(org, note.id, photo.id), "Trattoria Verde\nTotal 84.50");
+  const listed = workspace.office(org).files.find((f) => f.id === note.id)!;
+  assert.match(listed.attached, /receipt photo\.PNG Trattoria Verde/);
+  assert.match(listed.attached, /contract\.pdf/);
+  assert.equal(workspace.get(org, note.id).files.find((f) => f.id === photo.id)!.words, 4);
+  assert.equal((await workspace.readAttachment(org, note.id, photo.id, async () => "NONE")).words, 0);
+
+  // Agents are not given attachments, even on a note they may see.
+  workspace.update(org, note.id, { access: { everyone: true } });
+  assert.deepEqual(workspace.get(org, note.id, "sales-lead").files, []);
+
+  // Removing one deletes it; deleting the note for good takes the rest with it.
+  workspace.detach(org, note.id, pdf.id);
+  assert.throws(() => workspace.detach(org, note.id, pdf.id), /no such attachment/);
+  assert.equal(workspace.attachments(org, note.id).length, 1);
+  workspace.archive(org, note.id);
+  workspace.purge(org);
+  assert.equal(workspace.attachments(org, note.id).length, 0);
+});

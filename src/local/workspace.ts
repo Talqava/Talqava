@@ -9,7 +9,7 @@ import { defineTool } from "../core/index.ts";
 import { newId } from "./store.ts";
 import { orgs, memberOf } from "./orgs.ts";
 import type { Org } from "./orgs.ts";
-import { GENERAL_AGENT, OWNER, mayUse, openOrgDb, parseAccess } from "./library.ts";
+import { GENERAL_AGENT, OWNER, PICTURE_TYPES, mayUse, openOrgDb, parseAccess } from "./library.ts";
 import type { Access } from "./library.ts";
 import { TEMPLATES } from "./workspace-templates.ts";
 import { loadCrew } from "./crew.ts";
@@ -87,11 +87,33 @@ export interface PageInfo {
   suggestions: number;
   /** The first words of the page, for lists and for agents. */
   summary: string;
+  /** The names of what is attached and the words found in attached pictures, so a note is found by them. */
+  attached: string;
 }
+
+/** A photo or file the owner attached to a note or document. */
+export interface Attachment {
+  id: string;
+  name: string;
+  /** The file's ending, in small letters: "png", "pdf". */
+  type: string;
+  size: number;
+  /** Whether it is a picture whose words can be written out. */
+  picture: boolean;
+  /** How many words were found in it; 0 when it was not read or has none. */
+  words: number;
+  createdAt: string;
+}
+const MAX_ATTACHMENT = 15_000_000;
+const MAX_ATTACHMENTS = 30;
+const MAX_PICTURE_READ = 5_000_000;
+const attachmentOf = (r: { id: string; name: string; type: string; size: number; words: string; created_at: string }): Attachment => ({ id: r.id, name: r.name, type: r.type, size: r.size, picture: Boolean(PICTURE_TYPES[r.type]), words: r.words ? r.words.split(/\s+/).filter(Boolean).length : 0, createdAt: r.created_at });
 
 export interface Page extends PageInfo {
   markdown: string;
   rev: number;
+  /** What the owner attached to it. */
+  files: Attachment[];
 }
 
 export interface Suggestion {
@@ -165,6 +187,8 @@ function db(orgId: string): DatabaseSync {
   if (!have.has("levels")) d.exec("alter table pages add column levels text");
   d.exec("create table if not exists page_comments (id text primary key, page text not null, author text not null, text text not null, task text, created_at text not null, resolved integer not null default 0); create index if not exists page_comments_page on page_comments(page, resolved);");
   if (!have.has("remind_at")) d.exec("alter table pages add column remind_at text");
+  // Photos and files the owner attached to a note or document, kept with it; `words` are the words in a picture.
+  d.exec("create table if not exists page_files (id text primary key, page text not null, name text not null, type text not null, size integer not null, data blob not null, words text not null default '', created_at text not null); create index if not exists page_files_page on page_files(page);");
   ready.add(d);
   return d;
 }
@@ -414,6 +438,7 @@ function info(org: Org, d: DatabaseSync, row: Row, byId: Map<string, Row>, open:
     project: row.project ?? null,
     pinned: Boolean(row.pinned),
     remindAt: row.remind_at ?? null,
+    attached: (d.prepare("select name, substr(words, 1, 1500) words from page_files where page = ? order by created_at").all(row.id) as unknown as { name: string; words: string }[]).map((f) => `${f.name} ${f.words}`).join(" ").slice(0, 6000),
     parent: row.parent,
     position: row.position,
     title: row.title,
@@ -591,7 +616,64 @@ export const workspace = {
     const d = db(org.id);
     const { row, byId } = visible(org, d, id, who);
     if (who !== OWNER) noteItem(row.title, levelOf(row.level), nameOf(org, String(who)));
-    return { ...info(org, d, row, byId, openCounts(d)), ...content(d, row.id) };
+    return { ...info(org, d, row, byId, openCounts(d)), ...content(d, row.id), files: who === OWNER ? this.attachments(org, row.id) : [] };
+  },
+
+  // ---------- photos and files attached to a note or document (the owner's; agents are not given them) ----------
+  attachments(org: Org, page: string): Attachment[] {
+    return (db(org.id).prepare("select id, name, type, size, words, created_at from page_files where page = ? order by created_at").all(String(page)) as never[]).map(attachmentOf);
+  },
+
+  /** Attaches a photo or file to a page. */
+  attach(org: Org, page: string, name: unknown, data: Buffer): Attachment {
+    const d = db(org.id);
+    const { row } = visible(org, d, page, OWNER);
+    const clean = String(name ?? "").replace(/[\\/\u0000-\u001f]/g, " ").trim().slice(-120) || "file";
+    if (!data.length) throw new Error("That file is empty.");
+    if (data.length > MAX_ATTACHMENT) throw new Error("That file is larger than 15 MB. Put it in the Library instead, and mention it in the note.");
+    if ((d.prepare("select count(*) n from page_files where page = ?").get(row.id) as { n: number }).n >= MAX_ATTACHMENTS) throw new Error(`A note holds up to ${MAX_ATTACHMENTS} attachments. Remove one, or put the file in the Library.`);
+    const id = newId();
+    const type = (/\.([a-z0-9]{1,8})$/i.exec(clean)?.[1] ?? "").toLowerCase();
+    d.prepare("insert into page_files (id, page, name, type, size, data, created_at) values (?, ?, ?, ?, ?, ?, ?)").run(id, row.id, clean, type, data.length, data, new Date().toISOString());
+    audit({ actor: "owner", actorName: "You", kind: "workspace", action: `Attached “${clean}” to “${row.title}”` });
+    return this.attachments(org, row.id).find((f) => f.id === id)!;
+  },
+
+  /** One attachment with its content. */
+  attachment(org: Org, page: string, id: string): { file: Attachment; data: Buffer; level: Level } {
+    const d = db(org.id);
+    const { row } = visible(org, d, page, OWNER);
+    const r = d.prepare("select * from page_files where page = ? and id = ?").get(row.id, String(id)) as unknown as (Parameters<typeof attachmentOf>[0] & { data: Uint8Array }) | undefined;
+    if (!r) throw new Error("There is no such attachment.");
+    return { file: attachmentOf(r), data: Buffer.from(r.data), level: levelOf(row.level) };
+  },
+
+  detach(org: Org, page: string, id: string): { ok: true } {
+    const d = db(org.id);
+    const { row } = visible(org, d, page, OWNER);
+    if (!Number(d.prepare("delete from page_files where page = ? and id = ?").run(row.id, String(id)).changes)) throw new Error("There is no such attachment.");
+    return { ok: true };
+  },
+
+  /**
+   * Writes out the words in an attached picture, so the note is found by them. `see` is given the picture and returns
+   * its words; the caller decides which AI model does that and whether the note's sensitivity level lets it.
+   */
+  async readAttachment(org: Org, page: string, id: string, see: (picture: Buffer, mediaType: string) => Promise<string>): Promise<{ name: string; words: number }> {
+    const { file, data } = this.attachment(org, page, id);
+    const mediaType = PICTURE_TYPES[file.type];
+    if (!mediaType) throw new Error("Only pictures (PNG, JPEG, WebP or GIF) can be read this way.");
+    if (data.length > MAX_PICTURE_READ) throw new Error("This picture is larger than 5 MB. Attach a smaller copy to have its words read.");
+    const text = (await see(data, mediaType)).replace(/\r\n?/g, "\n").trim().slice(0, 100_000);
+    const words = !text || /^NONE\.?$/i.test(text) ? "" : text;
+    db(org.id).prepare("update page_files set words = ? where id = ?").run(words, file.id);
+    return { name: file.name, words: words ? words.split(/\s+/).length : 0 };
+  },
+
+  /** The words written out from an attached picture. */
+  attachmentWords(org: Org, page: string, id: string): string {
+    this.attachment(org, page, id);
+    return (db(org.id).prepare("select words from page_files where id = ?").get(String(id)) as { words: string }).words;
   },
 
   /** A new page. The owner may put it anywhere; an agent only under a page it may see, and it inherits who may see it. */
@@ -736,7 +818,7 @@ export const workspace = {
       .filter((r) => cutoff === null || r.updated_at < cutoff)
       .map((r) => r.id);
     for (const id of gone) {
-      for (const table of ["page_revisions", "page_suggestions", "page_passages"]) d.prepare(`delete from ${table} where page = ?`).run(id);
+      for (const table of ["page_revisions", "page_suggestions", "page_passages", "page_files"]) d.prepare(`delete from ${table} where page = ?`).run(id);
       d.prepare("delete from page_content where page = ?").run(id);
       d.prepare("delete from pages where id = ?").run(id);
     }
