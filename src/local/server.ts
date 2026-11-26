@@ -2092,8 +2092,8 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
       const topic = cleanTopic(def, body.topic);
       if (def.ask?.required && !topic) throw new Error(`${def.name} needs an answer first: ${def.ask.label.replace(/\?$/, "").toLowerCase()}.`);
       const missing = missingService(def);
-      if (missing.length) throw new Error(`${def.name} reads from ${missing.length === 1 ? missing[0] : `one of ${missing.join(", ")}`}, and none is connected yet. Connect one under More › Connections.`);
-      if (def.kind === "ai" && String(getConfig().model).startsWith("anthropic/") && !publicConfig().hasApiKey) throw new Error("This briefing is researched with your AI model, and none is connected yet. Connect one under More › Connections › AI models.");
+      if (missing.length) throw new Error(`${def.name} reads from ${missing.length === 1 ? missing[0] : `one of ${missing.join(", ")}`}, and none is connected yet. Connect one under Connections (the account button at the bottom left).`);
+      if (def.kind === "ai" && String(getConfig().model).startsWith("anthropic/") && !publicConfig().hasApiKey) throw new Error("This briefing is researched with your AI model, and none is connected yet. Connect one under Connections › AI models (the account button at the bottom left).");
       // What the sender lacks for it (searching the web) is switched on with it, and said so on the screen first.
       const lacks = def.powers.filter((p) => !((loadCrew().bots.find((b) => b.id === sender.bot)?.powers ?? []) as string[]).includes(p));
       if (lacks.length) grantPowers(sender.bot, lacks);
