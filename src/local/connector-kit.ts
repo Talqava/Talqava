@@ -438,7 +438,9 @@ export async function call<T = any>(url: string, opts: CallOptions): Promise<T> 
   const fields = data?.message && typeof data.message === "object" ? Object.entries(data.message).map(([k, v]) => `${k} ${Array.isArray(v) ? v.join(", ") : String(v)}`).join("; ") : "";
   // Xero lists what is wrong with each record under Elements.
   const faults = Array.isArray(data?.Elements) ? data.Elements.flatMap((e: any) => (Array.isArray(e?.ValidationErrors) ? e.ValidationErrors.map((v: any) => String(v?.Message ?? "")) : [])).filter(Boolean).slice(0, 4).join("; ") : "";
-  const said = String(fields || faults || (data?.message ?? data?.Message ?? data?.error?.message ?? data?.detail ?? data?.error_description ?? (typeof data?.error === "string" ? data.error : "") ?? ""))
+  // Jira lists general reasons under errorMessages and the fields at fault under errors.
+  const reasons = [...(Array.isArray(data?.errorMessages) ? data.errorMessages.map(String) : []), ...(data?.errors && typeof data.errors === "object" && !Array.isArray(data.errors) ? Object.entries(data.errors).map(([k, v]) => `${k}: ${String(v)}`) : [])].slice(0, 4).join("; ");
+  const said = String(fields || faults || reasons || (data?.message ?? data?.Message ?? data?.error?.message ?? data?.detail ?? data?.error_description ?? (typeof data?.error === "string" ? data.error : "") ?? ""))
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim()
