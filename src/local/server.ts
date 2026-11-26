@@ -72,7 +72,7 @@ import { decide, listProposals } from "./proposals.ts";
 import { exportOrg, importOrg } from "./portable.ts";
 import { fileReport, parseDeck, workspace, writeDeck } from "./workspace.ts";
 import { PRIORITIES, work } from "./work.ts";
-import { PLANNED_BRIEFINGS, briefingOf, briefingPrompt, cleanTopic, digests, forgetDigest, listBriefings, missingService, runDigest, runWatch, senderFor } from "./briefings.ts";
+import { PLANNED_BRIEFINGS, briefingOf, briefingPrompt, chosenModel, cleanTopic, possibleSenders, digests, forgetDigest, listBriefings, missingService, runDigest, runWatch, senderFor } from "./briefings.ts";
 import { goals } from "./goals.ts";
 import { findTemplate, loadTemplates } from "./templates.ts";
 import { chainBudget, chainCost, chainOf, chainSize, journal, questStore, quests, rootOf, whyOf } from "./quests.ts";
@@ -262,7 +262,7 @@ async function runJob(job: Job): Promise<{ conversationId?: string; taskId?: str
   }
   if (briefing && job.owner && org && org.members.some((m) => m.bot === job.owner)) {
     // The agent's report is the briefing: it goes to the Inbox as an update, with nothing for the owner to review.
-    const item = work.create(org, { title: `${briefing.name} · ${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}`, description: briefingPrompt(briefing, job.topic ?? ""), owner: job.owner, createdBy: "owner", review: briefing.review === true, direct: true });
+    const item = work.create(org, { title: `${briefing.name} · ${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}`, description: briefingPrompt(briefing, job.topic ?? ""), owner: job.owner, createdBy: "owner", review: briefing.review === true, direct: true, model: job.model || undefined });
     await jobs.update(job.id, { lastTaskId: item.id, lastConversationId: null });
     work.kick();
     return { taskId: item.id };
@@ -2048,15 +2048,19 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
   }
 
   // Briefings: ready-made routines that report to the Inbox.
-  if (route === "GET jobs" && parts[1] === "briefings") return send(res, 200, { briefings: listBriefings(orgs.active(), await jobs.list()), digests: digests(), planned: PLANNED_BRIEFINGS });
+  if (route === "GET jobs" && parts[1] === "briefings") return send(res, 200, { briefings: listBriefings(orgs.active(), await jobs.list()), digests: digests(), planned: PLANNED_BRIEFINGS, team: possibleSenders(orgs.active()) });
   if (route === "POST jobs" && parts[1] === "briefings" && parts[3] === "on") {
     return send(res, 200, await attempt(async () => {
       const def = briefingOf(parts[2]);
       if (!def) throw new Error("There is no such briefing.");
       const org = orgs.active();
       if ((await jobs.list()).some((j) => j.briefing === def.id && (!j.org || j.org === org.id))) throw new Error(`${def.name} is already switched on.`);
-      const sender = senderFor(def, org);
+      // The owner's own choice of who sends it comes first; otherwise the person whose work it is.
+      const chosen = body.sender ? possibleSenders(org).find((m) => m.bot === body.sender) : undefined;
+      if (body.sender && !chosen) throw new Error("Choose someone on your team to send it.");
+      const sender = chosen ?? senderFor(def, org);
       if (!sender) throw new Error("A briefing is sent by someone on your team. Set up your team first, under Team.");
+      const model = def.kind === "ai" ? chosenModel(body.model, getConfig().providers) : "";
       const topic = cleanTopic(def, body.topic);
       if (def.ask?.required && !topic) throw new Error(`${def.name} needs an answer first: ${def.ask.label.replace(/\?$/, "").toLowerCase()}.`);
       const missing = missingService(def);
@@ -2066,8 +2070,8 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
       const lacks = def.powers.filter((p) => !((loadCrew().bots.find((b) => b.id === sender.bot)?.powers ?? []) as string[]).includes(p));
       if (lacks.length) grantPowers(sender.bot, lacks);
       const made = await jobs.create({ name: def.name, prompt: def.kind === "free" ? `${def.name}: built from your organization's tasks. It uses no AI model.` : briefingPrompt(def, topic), schedule: def.schedule, owner: sender.bot, org: org.id });
-      const job = await jobs.update(made.id, { briefing: def.id, topic });
-      audit({ ...requestActor(req), kind: "schedule", action: `Switched on the briefing “${def.name}”`, detail: `Sent by the ${sender.title}, ${def.when.toLowerCase()}${lacks.length ? `; switched on for them: ${lacks.join(", ")}` : ""}` });
+      const job = await jobs.update(made.id, { briefing: def.id, topic, ...(model ? { model } : {}) });
+      audit({ ...requestActor(req), kind: "schedule", action: `Switched on the briefing “${def.name}”`, detail: `Sent by the ${sender.title}, ${def.when.toLowerCase()}${model ? `, with the model ${model}` : ""}${lacks.length ? `; switched on for them: ${lacks.join(", ")}` : ""}` });
       // The first one arrives now, so the owner sees what was switched on.
       const ran = await runJob(job).catch((err) => ({ problem: (err as Error).message }));
       await jobs.update(job.id, { lastRunAt: new Date().toISOString() });
@@ -2085,8 +2089,23 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
       if (def.ask?.required && !topic) throw new Error(`${def.name} needs an answer: ${def.ask.label.replace(/\?$/, "").toLowerCase()}.`);
       // The time it arrives can be changed with it; an agent's instructions follow the new answer from the next run.
       if (body.schedule !== undefined && String(body.schedule).trim() !== job.schedule) await jobs.edit(job.id, { schedule: body.schedule });
-      await jobs.update(job.id, { topic, ...(def.kind === "ai" ? { prompt: briefingPrompt(def, topic) } : {}) });
-      audit({ ...requestActor(req), kind: "schedule", action: `Changed the briefing “${def.name}”` });
+      // Who sends it and which AI model it uses can be changed too; what the new sender lacks for it is switched on.
+      const changes: { owner?: string; model?: string } = {};
+      const said: string[] = [];
+      if (body.sender !== undefined && body.sender !== job.owner) {
+        const to = possibleSenders(org).find((m) => m.bot === body.sender);
+        if (!to) throw new Error("Choose someone on your team to send it.");
+        const lacks = def.powers.filter((p) => !((loadCrew().bots.find((b) => b.id === to.bot)?.powers ?? []) as string[]).includes(p));
+        if (lacks.length) grantPowers(to.bot, lacks);
+        changes.owner = to.bot;
+        said.push(`now sent by the ${to.title}${lacks.length ? ` (switched on for them: ${lacks.join(", ")})` : ""}`);
+      }
+      if (body.model !== undefined && def.kind === "ai") {
+        const model = chosenModel(body.model, getConfig().providers);
+        if (model !== (job.model ?? "")) (changes.model = model), said.push(model ? `with the model ${model}` : "with the sender's own model");
+      }
+      await jobs.update(job.id, { topic, ...changes, ...(def.kind === "ai" ? { prompt: briefingPrompt(def, topic) } : {}) });
+      audit({ ...requestActor(req), kind: "schedule", action: `Changed the briefing “${def.name}”`, ...(said.length ? { detail: said.join("; ") } : {}) });
       return { ok: true };
     }));
   }
