@@ -119,6 +119,8 @@ export interface Config {
   /** Encrypted backups: a key made from the owner's passphrase, where they go, and when the last one was made and tested (see backup.ts). */
   backup?: { salt?: string; key?: string; folder?: string; nightly?: boolean; lastAt?: string; lastFiles?: number; lastTestedAt?: string };
   /** Single sign-on through the company's identity provider (see sso.ts). */
+  /** Directory sync (see scim.ts): the hash of the token the company's identity provider signs in with. */
+  scim?: { tokenHash: string; role: string; createdAt: string; lastUsedAt?: string };
   sso?: { issuer: string; clientId: string; clientSecret?: string; domains?: string[]; addPeople?: boolean; role?: string; only?: boolean };
   /** How long chats and finished task records are kept, and whether a legal hold stops every deletion (see retention.ts). */
   retention?: { days?: number; legalHold?: boolean };

@@ -165,6 +165,19 @@ A page made inside a sensitive page starts at the same level. Tables follow thei
 2. Type one site on each line, such as `example.com`, and press **Save the list**. A site covers its pages and sub-sites.
 3. An agent that tries another site is refused, told not to look for a way round, and the attempt appears under **Refused by these rules**.
 
+### Have your company directory add and remove people (directory sync)
+
+Use this when Talqava runs where your identity provider can reach it over the network. A copy on one computer cannot be reached by a directory.
+
+1. Open **Security › People and sign-in** and find **Directory sync**.
+2. Choose the role people get when the directory adds them, and press **Switch on and show the token**.
+3. Copy the token (it is shown once) and the address. In your provider (Microsoft Entra ID, Okta or another that speaks SCIM 2.0), paste the address as the tenant URL and the token as the secret token.
+4. Assign people to Talqava in your provider.
+
+From then on, people your provider assigns are added here and sign in with the company account. A person removed or disabled there is switched off here: they are signed out at once and cannot sign in. The owner's account is never changed by the directory. Every change is in the audit log as "The company directory".
+
+Groups are not mapped yet, and this has not yet been tried against a real provider.
+
 ### Let agents use only the connected services you approve
 
 1. Under **Agent guardrails**, set **Connected services (connectors)** to **Only the services approved below**.
@@ -195,7 +208,7 @@ Agents get the tools of ticked services only. A service you connect later stays 
 
 ## What is not built yet
 
-- Single sign-on has been tested against a stand-in provider only, not yet against a real one. SAML, and adding and removing people automatically from your directory (SCIM), are not built: remove a leaver under **People** as well, or they keep their role if they are ever let back in.
+- Single sign-on and directory sync have been tested against stand-in providers only, not yet against a real one. SAML is not built, and directory groups are not mapped to roles.
 - Limiting sign-in to computers your company manages, and needing two administrators for a security change.
 - Approved networks are checked against the address the connection comes from. Behind a proxy or tunnel that hides it, every connection looks the same.
 - Approved sites hold page reading, including redirects, and the AI service's own web search. Calls to web services with saved keys and the built-in browser are checked at the address the agent gives; a redirect or a link clicked inside the browser is not checked yet.

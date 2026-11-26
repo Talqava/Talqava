@@ -8924,7 +8924,7 @@ async function securityView() {
       {},
       h("td", {}, h("b", {}, p.name), p.id === me?.id ? h("span", { class: "note small" }, " · you") : null, h("div", { class: "note small" }, p.email)),
       h("td", {}, admin && p.role !== "owner" && p.id !== me.id ? roleSelect(p.role, (e) => act(() => api("PATCH", `people/${p.id}`, { role: e.target.value }))) : data.roles.find((r) => r.id === p.role)?.name ?? p.role),
-      h("td", {}, h("span", { class: `chip ${p.secondStep ? "on" : ""}` }, p.secondStep ? "On" : "Not set up"), p.locked ? h("span", { class: "chip warn" }, "Locked") : null),
+      h("td", {}, h("span", { class: `chip ${p.secondStep ? "on" : ""}` }, p.secondStep ? "On" : "Not set up"), p.locked ? h("span", { class: "chip warn" }, "Locked") : null, p.active === false ? h("span", { class: "chip bad" }, "Switched off by the directory") : null),
       h("td", {}, p.lastSignIn ? when(p.lastSignIn) : "Never"),
       h(
         "td",
@@ -8984,6 +8984,7 @@ async function securityView() {
         )
       : null,
     admin ? ssoSection() : null,
+    admin ? directorySection() : null,
     sensitivitySection(admin),
     guardrailsSection(admin),
     securityOpsSection(admin),
@@ -9063,6 +9064,40 @@ function backupSection(canEdit) {
 }
 
 /** Security › Single sign-on: people sign in through the company's identity provider. */
+/** Security › Directory sync: the company's identity provider adds people and switches them off, with a token made here. */
+function directorySection() {
+  const box = h("section", { class: "isec" }, h("h2", {}, "Directory sync"));
+  const draw = async (shown = null) => {
+    let d;
+    try {
+      d = await api("GET", "people/directory");
+    } catch (err) {
+      return fill(box, h("h2", {}, "Directory sync"), h("div", { class: "banner error" }, err.message));
+    }
+    const role = h("select", { "aria-label": "Role for new people" }, [["member", "Member"], ["manager", "Manager"], ["auditor", "Auditor"], ["admin", "Administrator"]].map(([v, t]) => h("option", { value: v, selected: d.role === v }, t)));
+    const turnOn = () => attempt(async () => draw((await api("POST", "people/directory", { role: role.value })).token), box);
+    fill(
+      box,
+      h("h2", {}, "Directory sync"),
+      h("p", { class: "note", style: "margin: 0" }, "Let your company's identity provider (Microsoft Entra ID, Okta and others that speak SCIM) add people to Talqava and switch them off the moment they leave. It works when Talqava runs where your provider can reach it over the network; a copy on one computer cannot be reached."),
+      h(
+        "div",
+        { class: "card form" },
+        h("div", { class: "row" }, h("b", { class: "grow" }, d.on ? "On" : "Off"), h("span", { class: `chip ${d.on ? "on" : ""}` }, d.on ? (d.lastUsedAt ? `Last heard from ${new Date(d.lastUsedAt).toLocaleString()}` : "Not heard from yet") : "Not set up")),
+        shown
+          ? h("div", { class: "banner" }, h("b", {}, "Copy this token now. It is shown once."), h("div", { class: "mono", style: "word-break: break-all; margin-top: 6px" }, shown), h("p", { class: "note small" }, "Paste it into your provider as the secret token, with the address below as the tenant URL."))
+          : null,
+        h("label", {}, "Address to give your provider (tenant URL)", h("input", { readonly: true, value: d.address, "aria-label": "Directory address" })),
+        h("label", {}, "Role for people the directory adds", role),
+        h("p", { class: "note small" }, "People the directory adds sign in with the company account (single sign-on). A person it switches off is signed out at once and cannot sign in. The owner's account is never changed by the directory. Groups are not mapped yet."),
+        h("div", { class: "row wrap" }, h("button", { class: "primary", onclick: () => (!d.on || confirm("Make a new token? The old one stops working, so your provider needs the new one.")) && turnOn() }, d.on ? "Make a new token" : "Switch on and show the token"), d.on ? h("button", { class: "danger", onclick: () => confirm("Switch off directory sync? Your provider can no longer add or switch off people. Nobody is removed.") && attempt(async () => (await api("DELETE", "people/directory"), draw()), box) }, "Switch off") : null),
+      ),
+    );
+  };
+  draw();
+  return box;
+}
+
 function ssoSection() {
   const box = h("section", { class: "isec" }, h("h2", {}, "Single sign-on"));
   const draw = async () => {
