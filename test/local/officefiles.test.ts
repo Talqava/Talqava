@@ -83,3 +83,33 @@ test("a sheet goes out as an Excel file and comes back with its values, formulas
   assert.match(read, /^!sheet Data & more$/m);
   for (const line of ["A1\tName", "B1\tJane Okafor", "A2\t42", "B2\t=SUM(A2:A2)"]) assert.ok(read.includes(`${line}\n`), line);
 });
+
+test("slides go out as a PowerPoint file and come back: titles, bullets with their indent, bold, tables as lines, and notes", () => {
+  const slides = [
+    { title: "Winter menu", body: "- Three new **rye** loaves\n  - Seeded\n- Prices *unchanged*\n\nOrders open Monday.", notes: "Welcome everyone.\nMention the tasting." },
+    { title: "Sales & <costs>", body: "| Month | Sales |\n| --- | --- |\n| Oct | 4,200 |", notes: "" },
+  ];
+  const file = F.toPptx("Bakery update", slides);
+  const names = [...unzip(file).keys()];
+  for (const part of ["[Content_Types].xml", "ppt/presentation.xml", "ppt/slideMasters/slideMaster1.xml", "ppt/slideLayouts/slideLayout1.xml", "ppt/theme/theme1.xml", "ppt/slides/slide2.xml", "ppt/notesSlides/notesSlide1.xml"]) assert.ok(names.includes(part), part);
+  const back = F.fromPptx(file);
+  assert.equal(back.title, "Bakery update");
+  assert.deepEqual(back.slides[0], { title: "Winter menu", body: "- Three new **rye** loaves\n  - Seeded\n- Prices *unchanged*\nOrders open Monday.", notes: "Welcome everyone.\nMention the tasting." });
+  assert.deepEqual(back.slides[1], { title: "Sales & <costs>", body: "Month   ·   Sales\nOct   ·   4,200".replace(/ {3}/g, " "), notes: "" });
+  assert.throws(() => F.fromPptx(F.zip([{ name: "word/document.xml", data: "<w:document/>" }])), /does not look like a PowerPoint file/);
+
+  // A file as PowerPoint itself writes it: slides in the order the presentation lists them, a real table, a subtitle,
+  // a slide number to ignore, and notes beside the slide picture.
+  const sp = (ph: string, paras: string) => `<p:sp><p:nvSpPr><p:nvPr>${ph}</p:nvPr></p:nvSpPr><p:txBody>${paras}</p:txBody></p:sp>`;
+  const theirs = F.zip([
+    { name: "ppt/presentation.xml", data: '<p:presentation><p:sldIdLst><p:sldId id="257" r:id="rId3"/><p:sldId id="256" r:id="rId2"/></p:sldIdLst></p:presentation>' },
+    { name: "ppt/_rels/presentation.xml.rels", data: '<Relationships><Relationship Id="rId2" Type="http://x/slide" Target="slides/slide1.xml"/><Relationship Id="rId3" Type="http://x/slide" Target="slides/slide2.xml"/></Relationships>' },
+    { name: "ppt/slides/slide1.xml", data: `<p:sld>${sp('<p:ph type="ctrTitle"/>', "<a:p><a:r><a:t>Second </a:t></a:r><a:r><a:t>in file</a:t></a:r></a:p>")}${sp('<p:ph type="subTitle" idx="1"/>', "<a:p><a:r><a:t>A subtitle</a:t></a:r></a:p>")}${sp('<p:ph type="sldNum"/>', "<a:p><a:r><a:t>2</a:t></a:r></a:p>")}</p:sld>` },
+    { name: "ppt/slides/slide2.xml", data: `<p:sld>${sp('<p:ph type="title"/>', "<a:p><a:r><a:t>First shown</a:t></a:r></a:p>")}${sp('<p:ph idx="1"/>', '<a:p><a:r><a:rPr b="1"/><a:t>Bold point</a:t></a:r></a:p><a:p><a:pPr lvl="1"/><a:r><a:t>Under it</a:t></a:r></a:p>')}<p:graphicFrame><a:tbl><a:tr><a:tc><a:txBody><a:p><a:r><a:t>A</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>B</a:t></a:r></a:p></a:txBody></a:tc></a:tr><a:tr><a:tc><a:txBody><a:p><a:r><a:t>1</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>2</a:t></a:r></a:p></a:txBody></a:tc></a:tr></a:tbl></p:graphicFrame></p:sld>` },
+    { name: "ppt/slides/_rels/slide2.xml.rels", data: '<Relationships><Relationship Id="rId1" Type="http://x/notesSlide" Target="../notesSlides/notesSlide7.xml"/></Relationships>' },
+    { name: "ppt/notesSlides/notesSlide7.xml", data: `<p:notes>${sp('<p:ph type="sldImg"/>', "")}${sp('<p:ph type="body" idx="1"/>', "<a:p><a:r><a:t>Say hello.</a:t></a:r></a:p>")}${sp('<p:ph type="sldNum"/>', "<a:p><a:r><a:t>1</a:t></a:r></a:p>")}</p:notes>` },
+  ]);
+  const read = F.fromPptx(theirs).slides;
+  assert.deepEqual(read[0], { title: "First shown", body: "- **Bold point**\n  - Under it\n\n| A | B |\n| --- | --- |\n| 1 | 2 |", notes: "Say hello." });
+  assert.deepEqual(read[1], { title: "Second in file", body: "A subtitle", notes: "" });
+});

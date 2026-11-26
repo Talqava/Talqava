@@ -45,7 +45,7 @@ import { loadModelList } from "./modelprices.ts";
 import { COLUMN_TYPES, peopleOf, tables } from "./tables.ts";
 import { sheets } from "./sheets.ts";
 import { PUBLISH_RULES, PUBLISH_WORDS, connectSite, dailyPostPrompt, listContent, listSites, removeSite, updateSite } from "./wordpress.ts";
-import { fromDocx, fromXlsx, toDocx, toXlsx } from "./officefiles.ts";
+import { fromDocx, fromXlsx, toDocx, toPptx, fromPptx, toXlsx } from "./officefiles.ts";
 import { listOfficeTemplates, useOfficeTemplate } from "./office-templates.ts";
 import { pageTool } from "../core/tools/page.ts";
 import { describeGuardrails, guardrails, guardrailsFrom } from "./guardrails.ts";
@@ -69,7 +69,7 @@ import { ASSIGN_RULES, INDUSTRIES, REQUEST_RULES, STRUCTURES, seatsFor } from ".
 import { budgetBlock, groupSpend, monthlyBudgets } from "./spend.ts";
 import { decide, listProposals } from "./proposals.ts";
 import { exportOrg, importOrg } from "./portable.ts";
-import { fileReport, workspace } from "./workspace.ts";
+import { fileReport, parseDeck, workspace, writeDeck } from "./workspace.ts";
 import { PRIORITIES, work } from "./work.ts";
 import { goals } from "./goals.ts";
 import { findTemplate, loadTemplates } from "./templates.ts";
@@ -1382,19 +1382,20 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
     if (route === "POST workspace" && area === "sheets" && !id) return send(res, 200, await attempt(() => sheets.create(org, null, { title: body.title, folder: body.folder, csv: body.csv })));
     if (route === "GET workspace" && area === "sheets" && id && sub === "csv") return send(res, 200, await attempt(() => sheets.csv(org, id, url.searchParams.get("sheet") ?? undefined)));
     // Word and Excel files, out and in. They are written and read here, with no outside library.
-    if (route === "GET workspace" && area === "pages" && id && (sub === "docx" || sub === "xlsx")) {
+    if (route === "GET workspace" && area === "pages" && id && (sub === "docx" || sub === "xlsx" || sub === "pptx")) {
       let page: ReturnType<typeof workspace.get>;
       let data: Buffer;
       try {
         page = workspace.get(org, id);
         if (sub === "xlsx" && page.kind !== "sheet") throw new Error("Only a sheet can be saved as an Excel file.");
         if (sub === "docx" && page.kind === "sheet") throw new Error("A sheet is saved as an Excel file, not a Word file.");
-        data = sub === "docx" ? toDocx(page.title, page.markdown) : toXlsx(page.markdown);
+        if (sub === "pptx" && page.kind !== "deck") throw new Error("Only slides can be saved as a PowerPoint file.");
+        data = sub === "pptx" ? toPptx(page.title, parseDeck(page.markdown)) : sub === "docx" ? toDocx(page.title, page.markdown) : toXlsx(page.markdown);
       } catch (err) {
         throw new HttpError(400, (err as Error).message);
       }
       const name = `${page.title.replace(/[^\w .-]+/g, " ").trim().slice(0, 80) || "file"}.${sub}`;
-      res.writeHead(200, { "content-type": sub === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "content-disposition": `attachment; filename="${name}"`, "cache-control": "no-store", "x-content-type-options": "nosniff" });
+      res.writeHead(200, { "content-type": sub === "pptx" ? "application/vnd.openxmlformats-officedocument.presentationml.presentation" : sub === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "content-disposition": `attachment; filename="${name}"`, "cache-control": "no-store", "x-content-type-options": "nosniff" });
       return res.end(data);
     }
     if (route === "POST workspace" && area === "import-file") {
@@ -1414,7 +1415,11 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
           return workspace.create(org, null, { kind: "doc", title: doc.title || title, markdown: doc.markdown });
         }
         if (/\.xlsx$/i.test(name)) return workspace.create(org, null, { kind: "sheet", title, markdown: fromXlsx(data) });
-        throw new Error("Choose a Word file (.docx) or an Excel file (.xlsx). Older .doc and .xls files need saving in the newer format first.");
+        if (/\.pptx$/i.test(name)) {
+          const deck = fromPptx(data);
+          return workspace.create(org, null, { kind: "deck", title: deck.title || title, markdown: writeDeck(deck.slides) });
+        }
+        throw new Error("Choose a Word file (.docx), an Excel file (.xlsx) or a PowerPoint file (.pptx). Older .doc, .xls and .ppt files need saving in the newer format first.");
       }));
     }
     // Office templates, reminders that are due, and saving a web page as a note.

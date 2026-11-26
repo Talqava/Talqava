@@ -240,3 +240,182 @@ export function fromXlsx(buffer: Buffer): string {
   if (!file.sheets.length) throw new Error("That Excel file has no sheets.");
   return writeFile(file);
 }
+
+// ---------- slides as a PowerPoint file ----------
+// A deck becomes a .pptx with one "Title and Content" slide per slide, speaker notes included, on a plain white
+// widescreen master. Kept: titles, bullet points with their indent, paragraphs, bold and italic, tables as lines of
+// text, and notes. Not kept: pictures, charts, colours, animations and layouts.
+export interface PptSlide {
+  title: string;
+  body: string;
+  notes: string;
+}
+const NS = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
+const HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const rels = (list: [string, string, string][]) => `${HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${list.map(([id, type, target]) => `<Relationship Id="${id}" Type="${REL}/${type}" Target="${target}"/>`).join("")}</Relationships>`;
+const GROUP = '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>';
+const CLRMAP = '<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>';
+/** A placeholder shape. `at` gives its place on a master or layout; a slide leaves it out and inherits it. */
+const shape = (id: number, name: string, ph: string, text: string, at?: [number, number, number, number]) =>
+  `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph ${ph}/></p:nvPr></p:nvSpPr><p:spPr>${at ? `<a:xfrm><a:off x="${at[0]}" y="${at[1]}"/><a:ext cx="${at[2]}" cy="${at[3]}"/></a:xfrm>` : ""}</p:spPr><p:txBody><a:bodyPr/><a:lstStyle/>${text}</p:txBody></p:sp>`;
+/** The runs of one line: **bold** and *italic* become formatting, `code` and [links](…) plain words. */
+function pptRuns(text: string): string {
+  const out: string[] = [];
+  const re = /\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`|\[([^\]]+)\]\([^)]*\)/g;
+  let last = 0;
+  const run = (t: string, props = "") => t && out.push(`<a:r><a:rPr lang="en-US"${props} dirty="0"/><a:t>${xml(t)}</a:t></a:r>`);
+  for (let m; (m = re.exec(text)); last = re.lastIndex) {
+    run(text.slice(last, m.index));
+    if (m[1] !== undefined) run(m[1], ' b="1"');
+    else if (m[2] !== undefined) run(m[2], ' i="1"');
+    else run(m[3] ?? m[4]);
+  }
+  run(text.slice(last));
+  return out.join("");
+}
+/** A slide's Markdown body as PowerPoint paragraphs: bullets keep their indent, other lines stand without a bullet. */
+function pptBody(markdown: string): string {
+  const paras: string[] = [];
+  for (const raw of markdown.split("\n")) {
+    if (!raw.trim() || /^\s*\|?\s*:?-{3,}/.test(raw)) continue;
+    const bullet = /^(\s*)(?:[-*+]|\d+[.)])\s+(.*)$/.exec(raw);
+    if (bullet) {
+      const level = Math.min(4, Math.floor(bullet[1].replace(/\t/g, "    ").length / 2));
+      paras.push(`<a:p>${level ? `<a:pPr lvl="${level}"/>` : ""}${pptRuns(bullet[2].replace(/^\[[ xX]\]\s+/, ""))}</a:p>`);
+      continue;
+    }
+    const line = /^\s*\|.*\|\s*$/.test(raw) ? raw.trim().slice(1, -1).split("|").map((c) => c.trim()).join("   ·   ") : raw.trim().replace(/^#{1,6}\s+/, "").replace(/^>\s?/, "");
+    paras.push(`<a:p><a:pPr marL="0" indent="0"><a:buNone/></a:pPr>${pptRuns(line)}</a:p>`);
+  }
+  return paras.join("") || "<a:p><a:endParaRPr lang=\"en-US\"/></a:p>";
+}
+const THEME = (name: string) =>
+  `${HEAD}<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="${name}"><a:themeElements><a:clrScheme name="Talqava"><a:dk1><a:srgbClr val="1A1A1A"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="44546A"/></a:dk2><a:lt2><a:srgbClr val="F2F2F2"/></a:lt2><a:accent1><a:srgbClr val="2E7D5B"/></a:accent1><a:accent2><a:srgbClr val="ED7D31"/></a:accent2><a:accent3><a:srgbClr val="A5A5A5"/></a:accent3><a:accent4><a:srgbClr val="FFC000"/></a:accent4><a:accent5><a:srgbClr val="5B9BD5"/></a:accent5><a:accent6><a:srgbClr val="70AD47"/></a:accent6><a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme>` +
+  `<a:fontScheme name="Talqava"><a:majorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>` +
+  `<a:fmtScheme name="Talqava"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst>` +
+  `<a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst>` +
+  `<a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst>` +
+  `<a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`;
+const LEVELS = (sizes: number[], bullet: boolean) =>
+  sizes.map((sz, i) => `<a:lvl${i + 1}pPr marL="${bullet ? 228600 + i * 457200 : 0}" indent="${bullet ? -228600 : 0}" algn="l">${bullet ? '<a:buFont typeface="Arial"/><a:buChar char="&#8226;"/>' : "<a:buNone/>"}<a:defRPr sz="${sz}"><a:solidFill><a:schemeClr val="tx1"/></a:solidFill><a:latin typeface="+mn-lt"/></a:defRPr></a:lvl${i + 1}pPr>`).join("");
+const TITLE_AT: [number, number, number, number] = [838200, 365125, 10515600, 1325563];
+const BODY_AT: [number, number, number, number] = [838200, 1825625, 10515600, 4351338];
+
+/** A deck as a PowerPoint file. */
+export function toPptx(title: string, slides: PptSlide[]): Buffer {
+  const list = slides.length ? slides : [{ title, body: "", notes: "" }];
+  const blank = '<a:p><a:endParaRPr lang="en-US"/></a:p>';
+  const P = "application/vnd.openxmlformats-officedocument.presentationml";
+  const entries: { name: string; data: string }[] = [
+    {
+      name: "[Content_Types].xml",
+      data: `${HEAD}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="${P}.presentation.main+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="${P}.slideMaster+xml"/><Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="${P}.slideLayout+xml"/><Override PartName="/ppt/notesMasters/notesMaster1.xml" ContentType="${P}.notesMaster+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/><Override PartName="/ppt/theme/theme2.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>${list.map((_, i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="${P}.slide+xml"/><Override PartName="/ppt/notesSlides/notesSlide${i + 1}.xml" ContentType="${P}.notesSlide+xml"/>`).join("")}<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>`,
+    },
+    { name: "_rels/.rels", data: `${HEAD}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/officeDocument" Target="ppt/presentation.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>` },
+    { name: "docProps/core.xml", data: `${HEAD}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>${xml(title)}</dc:title><dc:creator>Talqava</dc:creator></cp:coreProperties>` },
+    {
+      name: "ppt/presentation.xml",
+      data: `${HEAD}<p:presentation ${NS}><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:notesMasterIdLst><p:notesMasterId r:id="rId2"/></p:notesMasterIdLst><p:sldIdLst>${list.map((_, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 4}"/>`).join("")}</p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+    },
+    { name: "ppt/_rels/presentation.xml.rels", data: rels([["rId1", "slideMaster", "slideMasters/slideMaster1.xml"], ["rId2", "notesMaster", "notesMasters/notesMaster1.xml"], ["rId3", "theme", "theme/theme1.xml"], ...list.map((_, i): [string, string, string] => [`rId${i + 4}`, "slide", `slides/slide${i + 1}.xml`])]) },
+    { name: "ppt/theme/theme1.xml", data: THEME("Talqava") },
+    { name: "ppt/theme/theme2.xml", data: THEME("Talqava notes") },
+    {
+      name: "ppt/slideMasters/slideMaster1.xml",
+      data: `${HEAD}<p:sldMaster ${NS}><p:cSld><p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg><p:spTree>${GROUP}${shape(2, "Title Placeholder 1", 'type="title"', blank, TITLE_AT)}${shape(3, "Text Placeholder 2", 'type="body" idx="1"', blank, BODY_AT)}</p:spTree></p:cSld>${CLRMAP}<p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle><a:lvl1pPr algn="l"><a:buNone/><a:defRPr sz="4000" b="1"><a:solidFill><a:schemeClr val="tx1"/></a:solidFill><a:latin typeface="+mj-lt"/></a:defRPr></a:lvl1pPr></p:titleStyle><p:bodyStyle>${LEVELS([2800, 2400, 2000, 1800, 1800], true)}</p:bodyStyle><p:otherStyle>${LEVELS([1800], false)}</p:otherStyle></p:txStyles></p:sldMaster>`,
+    },
+    { name: "ppt/slideMasters/_rels/slideMaster1.xml.rels", data: rels([["rId1", "slideLayout", "../slideLayouts/slideLayout1.xml"], ["rId2", "theme", "../theme/theme1.xml"]]) },
+    {
+      name: "ppt/slideLayouts/slideLayout1.xml",
+      data: `${HEAD}<p:sldLayout ${NS} type="obj" preserve="1"><p:cSld name="Title and Content"><p:spTree>${GROUP}${shape(2, "Title 1", 'type="title"', blank)}${shape(3, "Content Placeholder 2", 'idx="1"', blank)}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
+    },
+    { name: "ppt/slideLayouts/_rels/slideLayout1.xml.rels", data: rels([["rId1", "slideMaster", "../slideMasters/slideMaster1.xml"]]) },
+    {
+      name: "ppt/notesMasters/notesMaster1.xml",
+      data: `${HEAD}<p:notesMaster ${NS}><p:cSld><p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg><p:spTree>${GROUP}${shape(2, "Notes Placeholder 1", 'type="body" sz="quarter" idx="1"', blank, [685800, 4400550, 5486400, 3600450])}</p:spTree></p:cSld>${CLRMAP}<p:notesStyle>${LEVELS([1200], false)}</p:notesStyle></p:notesMaster>`,
+    },
+    { name: "ppt/notesMasters/_rels/notesMaster1.xml.rels", data: rels([["rId1", "theme", "../theme/theme2.xml"]]) },
+  ];
+  list.forEach((s, i) => {
+    const n = i + 1;
+    entries.push(
+      { name: `ppt/slides/slide${n}.xml`, data: `${HEAD}<p:sld ${NS}><p:cSld><p:spTree>${GROUP}${shape(2, "Title 1", 'type="title"', `<a:p>${pptRuns(s.title || "Untitled slide")}</a:p>`)}${shape(3, "Content Placeholder 2", 'idx="1"', pptBody(s.body))}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>` },
+      { name: `ppt/slides/_rels/slide${n}.xml.rels`, data: rels([["rId1", "slideLayout", "../slideLayouts/slideLayout1.xml"], ["rId2", "notesSlide", `../notesSlides/notesSlide${n}.xml`]]) },
+      {
+        name: `ppt/notesSlides/notesSlide${n}.xml`,
+        data: `${HEAD}<p:notes ${NS}><p:cSld><p:spTree>${GROUP}${shape(2, "Notes Placeholder 1", 'type="body" idx="1"', s.notes.trim() ? s.notes.trim().split("\n").filter((l) => l.trim()).map((l) => `<a:p>${pptRuns(l.trim())}</a:p>`).join("") : blank)}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>`,
+      },
+      { name: `ppt/notesSlides/_rels/notesSlide${n}.xml.rels`, data: rels([["rId1", "notesMaster", "../notesMasters/notesMaster1.xml"], ["rId2", "slide", `../slides/slide${n}.xml`]]) },
+    );
+  });
+  return zip(entries);
+}
+
+/** The slides of a PowerPoint file: each slide's title, its text as Markdown, and its speaker notes. */
+export function fromPptx(buffer: Buffer): { title: string; slides: PptSlide[] } {
+  const files = unzip(buffer);
+  const read = (name: string) => files.get(name)?.().toString("utf8");
+  const pres = read("ppt/presentation.xml");
+  const presRels = read("ppt/_rels/presentation.xml.rels");
+  if (!pres || !presRels) throw new Error("That does not look like a PowerPoint file (.pptx).");
+  const targets = (relsXml: string, base: string) => new Map([...relsXml.matchAll(/<Relationship\b[^>]*>/g)].map((m) => [/\bId="([^"]+)"/.exec(m[0])?.[1] ?? "", { type: /\bType="[^"]*\/([^"/]+)"/.exec(m[0])?.[1] ?? "", path: resolvePart(base, /\bTarget="([^"]+)"/.exec(m[0])?.[1] ?? "") }]));
+  const order = [...pres.matchAll(/<p:sldId\b[^>]*\br:id="([^"]+)"/g)].map((m) => m[1]);
+  const byId = targets(presRels, "ppt");
+  /** A paragraph's words, with bold and italic kept. */
+  const paraText = (p: string) =>
+    [...p.matchAll(/<a:r\b[^>]*>([\s\S]*?)<\/a:r>|<a:br\b[^>]*\/?>/g)]
+      .map((m) => {
+        if (m[1] === undefined) return " ";
+        const t = unxml([...m[1].matchAll(/<a:t\b[^>]*>([\s\S]*?)<\/a:t>/g)].map((x) => x[1]).join(""));
+        if (!t.trim()) return t;
+        const props = /<a:rPr\b[^>]*>/.exec(m[1])?.[0] ?? "";
+        return /\bb="1"/.test(props) ? `**${t.trim()}**${/\s$/.test(t) ? " " : ""}` : /\bi="1"/.test(props) ? `*${t.trim()}*${/\s$/.test(t) ? " " : ""}` : t;
+      })
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim();
+  const paragraphs = (xmlText: string) => [...xmlText.matchAll(/<a:p\b[^>]*>([\s\S]*?)<\/a:p>/g)].map((m) => ({ text: paraText(m[1]), level: Number(/<a:pPr\b[^>]*\blvl="(\d)"/.exec(m[1])?.[1] ?? 0), plain: /<a:buNone\/>/.test(m[1]) })).filter((p) => p.text);
+  const slides: PptSlide[] = [];
+  for (const rid of order.slice(0, 500)) {
+    const part = byId.get(rid)?.path;
+    const sld = part && read(part);
+    if (!sld) continue;
+    let title = "";
+    const body: string[] = [];
+    // Shapes and tables in the order they stand on the slide.
+    for (const m of sld.matchAll(/<p:sp\b[^>]*>[\s\S]*?<\/p:sp>|<a:tbl\b[^>]*>[\s\S]*?<\/a:tbl>/g)) {
+      const block = m[0];
+      if (block.startsWith("<a:tbl")) {
+        const rows = [...block.matchAll(/<a:tr\b[^>]*>([\s\S]*?)<\/a:tr>/g)].map((r) => [...r[1].matchAll(/<a:tc\b[^>]*>([\s\S]*?)<\/a:tc>/g)].map((c) => paragraphs(c[1]).map((p) => p.text).join(" ").replace(/\|/g, "/")));
+        if (rows.length) body.push("", `| ${rows[0].join(" | ")} |`, `| ${rows[0].map(() => "---").join(" | ")} |`, ...rows.slice(1).map((r) => `| ${r.join(" | ")} |`), "");
+        continue;
+      }
+      const ph = /<p:ph\b[^>]*>/.exec(block)?.[0] ?? "";
+      if (/type="(dt|ftr|sldNum)"/.test(ph)) continue;
+      const paras = paragraphs(block);
+      if (/type="(title|ctrTitle)"/.test(ph) && !title) title = paras.map((p) => p.text).join(" ").replace(/\*\*/g, "");
+      else if (/type="subTitle"/.test(ph) || !ph) body.push(...paras.map((p) => p.text), "");
+      else body.push(...paras.map((p) => (p.plain ? p.text : `${"  ".repeat(p.level)}- ${p.text}`)));
+    }
+    let notes = "";
+    const sldRels = read(part.replace(/([^/]+)$/, "_rels/$1.rels"));
+    const notesPart = sldRels && [...targets(sldRels, part.replace(/\/[^/]+$/, "")).values()].find((t) => t.type === "notesSlide")?.path;
+    const notesXml = notesPart && read(notesPart);
+    if (notesXml) notes = [...notesXml.matchAll(/<p:sp\b[^>]*>[\s\S]*?<\/p:sp>/g)].filter((s) => /<p:ph\b[^>]*type="body"/.test(s[0])).flatMap((s) => paragraphs(s[0]).map((p) => p.text)).join("\n");
+    slides.push({ title: title || "Untitled slide", body: body.join("\n").replace(/\n{3,}/g, "\n\n").trim(), notes });
+  }
+  if (!slides.length) throw new Error("That PowerPoint file has no slides Talqava can read.");
+  const core = read("docProps/core.xml");
+  return { title: unxml(/<dc:title>([\s\S]*?)<\/dc:title>/.exec(core ?? "")?.[1] ?? "").trim(), slides };
+}
+/** A part's path from a relationship target, which may be relative to the part that names it. */
+function resolvePart(base: string, target: string): string {
+  if (target.startsWith("/")) return target.slice(1);
+  const out = base.split("/").filter(Boolean);
+  for (const seg of target.split("/")) {
+    if (seg === "..") out.pop();
+    else if (seg && seg !== ".") out.push(seg);
+  }
+  return out.join("/");
+}

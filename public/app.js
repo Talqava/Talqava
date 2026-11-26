@@ -7726,7 +7726,7 @@ async function slidesView() {
   fill(
     col,
     h("div", { class: "officehome" }, h("h1", {}, "Slides"), h("p", { class: "lead" }, "Presentations: each slide is a title, a few points and notes for the presenter. Write them yourself, or have an agent draft them from a document, a sheet or a note.")),
-    h("div", { class: "row wrap" }, h("button", { class: "primary", onclick: make }, "+ New slides")),
+    h("div", { class: "row wrap" }, h("button", { class: "primary", onclick: make }, "+ New slides"), h("button", { onclick: () => importOfficeFile(".pptx", col) }, "Import a PowerPoint file")),
     org.members.length ? h("form", { class: "card form officeask", onsubmit: (e) => (e.preventDefault(), ask()) }, h("b", {}, "Or ask an agent to draft them"), from, h("div", { class: "row wrap" }, what, who, h("button", {}, "Give the task")), h("p", { class: "note small" }, "Private files are not offered here: an agent cannot read them.")) : null,
     decks.length
       ? h("div", { class: "card officetable" }, h("table", {}, h("thead", {}, h("tr", {}, ["Name", "Slides", "Last change", "Who can read it"].map((t) => h("th", { scope: "col" }, t)))), h("tbody", {}, decks.map((f) => h("tr", {}, h("td", {}, h("button", { class: "plain link", onclick: () => open(f.id) }, f.title)), h("td", {}, f.summary.split(":")[0]), h("td", {}, `${f.updatedBy} · ${officeDay(f.updatedAt)}`), h("td", {}, officeWho(f)))))))
@@ -7869,7 +7869,7 @@ async function renderDeck(col, id) {
         { class: "wsdoc" },
         h("nav", { class: "wstrail note small" }, h("button", { class: "plain link", onclick: () => ((ui.ws.open = null), slidesView()) }, "Slides")),
         h("div", { class: "wshead" }, title),
-        h("div", { class: "row wrap decktools" }, h("button", { class: "primary", onclick: () => presentDeck(slides, at) }, "Present"), h("button", { onclick: () => move(-1) }, "Move earlier"), h("button", { onclick: () => move(1) }, "Move later"), h("button", { class: "danger", onclick: remove }, "Delete slide"), h("button", { onclick: printDeck }, "Print or save as PDF"), status),
+        h("div", { class: "row wrap decktools" }, h("button", { class: "primary", onclick: () => presentDeck(slides, at) }, "Present"), h("button", { onclick: () => move(-1) }, "Move earlier"), h("button", { onclick: () => move(1) }, "Move later"), h("button", { class: "danger", onclick: remove }, "Delete slide"), h("button", { onclick: printDeck }, "Print or save as PDF"), h("button", { onclick: () => downloadFrom(`workspace/pages/${id}/pptx`, `${page.title}.pptx`, ui.body) }, "PowerPoint file (.pptx)"), status),
         waiting,
         h("div", { class: "deckwork" }, rail, h("div", { class: "deckmain" }, face, h("label", {}, "Slide title", sTitle), h("label", {}, "On the slide", sBody), h("label", {}, "Speaker notes", sNotes))),
       ),
