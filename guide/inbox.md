@@ -8,13 +8,13 @@ The Inbox is your short list of decisions. Anything that needs your yes waits he
 
 - **Waiting on you**: everything that needs your decision: steps to allow, plans to approve, questions an agent asked before starting, finished work to accept or send back, code changes to review, suggested page changes, proposed positions, reminders, problems and budget stops. Each one is a card with its buttons on it. The green number is how many there are.
 - **Updates**: reports and progress from your team. The grey number is how many you have not read. Nothing here needs you.
-- **Done**: what you have put away.
+- **Archive**: what you have put away.
 
 **Search**, on the right, looks across all three.
 
 **Waiting on you** shows one card for each decision: a small label saying what kind it is, the question in plain words, who is asking and for which task, then the buttons. The newest is at the top. When nothing is waiting, the page says so and lists what your team is working on.
 
-**Updates** and **Done** show a list on the left and the message you clicked on the right: the agent's full report, the cost, and a box to reply.
+**Updates** and **Archive** show a list on the left. Click a message to read it on the right: the agent's full report, the cost, and a box to reply. Clicking it marks it read; a message you have not read is in bold with a green dot. At the top of an open message: **Mark unread**, **Delete** and **Archive**.
 
 ## Key ideas
 
@@ -30,7 +30,7 @@ The Inbox is your short list of decisions. Anything that needs your yes waits he
 - **Suggested change**: an agent wants to edit a page in your Workspace.
 - **Proposal**: a lead suggests adding a new position to your organization.
 - A note when a chat is waiting for your approval.
-- A **briefing** you switched on, such as the morning news or the Monday plan. It arrives under **Updates**, marked **Briefing**, with **Pause** and **Change** at its top. See [Routines](schedules.md).
+- A **briefing** you switched on, such as the morning news or the Monday plan. It arrives under **Updates**, marked **Briefing**, with **Pause** and **Edit** at its top. See [Routines](schedules.md).
 - **Daily check-in from your leads**: once a day, for every group, what moved since yesterday morning, what is stuck or waiting on you, and what is next, each with a link to its task. It is built from your tasks, so it costs nothing. Switch it off under **Settings → Leads' daily check-in**.
 - **… is not working**: an AI service you connected stopped working, with what is wrong.
 
@@ -38,7 +38,7 @@ Work handed between agents doesn't send you separate messages. Its progress show
 
 **Replying continues the work.** Replying to a finished task asks the agent to carry on, using its budget. You can't reply while it is still working.
 
-**Putting a message away never deletes the task.** **Looks good** and **Put away** only move the message to **Done**. The task and its work stay on the Tasks page.
+**Archiving or deleting a message never deletes the task.** **Archive** moves the message to the **Archive** tab. **Delete** removes it from the Inbox; an **Undo** button shows for a few seconds, and deleted messages are removed for good after 30 days. Either way the task and its work stay on the Tasks page.
 
 ## How to…
 
@@ -51,7 +51,7 @@ Work handed between agents doesn't send you separate messages. Its progress show
 
 **Read an update**
 1. Open **Updates** and click a line. The report opens on the right and is marked read.
-2. Press **Looks good** to move it to **Done**, or leave it.
+2. Press **Archive** to move it to the **Archive** tab, **Delete** to remove it, or **Mark unread** to keep it bold for later.
 
 **Reply to an agent**
 1. Open a finished task's message under **Updates**.
@@ -74,11 +74,11 @@ Work handed between agents doesn't send you separate messages. Its progress show
 **See the cost or open the full task**
 1. In the message, click **See the receipt** or **Open the task**.
 
-**Put a problem away**
-1. A card for something that failed, with nothing left to decide, has **Put away** at the bottom. It moves the card to **Done**; the task is kept.
+**Archive a problem**
+1. A card for something that failed, with nothing left to decide, has **Archive** at the bottom. It moves the card to the **Archive** tab; the task is kept.
 
-**Bring something back from Done**
-1. Open **Done**, click the message, and press **Move back**.
+**Bring something back from Archive**
+1. Open **Archive**, click the message, and press **Move back**.
 
 **Rename an agent**
 1. Open one of its messages under **Updates** and click **Rename** next to its name.
@@ -95,7 +95,7 @@ Work handed between agents doesn't send you separate messages. Its progress show
 
 - **Waiting on you** is the only tab that needs you. If its number is gone, you are up to date.
 - Search looks across all three tabs.
-- Press **Looks good** on updates you have read to keep the list short. They stay findable under **Done**.
+- Press **Archive** on updates you have read to keep the list short. They stay findable under **Archive**.
 
 ## If something goes wrong
 

@@ -34,7 +34,9 @@ A briefing is a routine that is already written: a report an agent sends to your
 
 A briefing is sent by the position whose job it suits, for example your Bookkeeper for overdue invoices. If that agent could not search the web or use your connected services, switching the briefing on gives it that ability, and the list says so first.
 
-**Pause, change or switch one off.** On its card: **Pause**, **Send one now**, or **Switch off**. In the Inbox, an open briefing has **Pause** and **Change** at its top. A briefing also shows in the list of routines below, where you can change its time. To change a list or an answer, switch the briefing off and on again.
+**Edit one.** Press **Edit** on its card to change its answer (or its list of names and dates) and when it arrives. The change applies from the next one; press **Send one now** to see it straight away.
+
+**Pause or switch one off.** On its card: **Pause**, **Send one now**, or **Switch off**. In the Inbox, an open briefing has **Pause** and **Edit** at its top.
 
 **What to keep in mind.** Rules and deadlines and the Month-end pack are reminders and summaries, not legal, tax or accounting advice: confirm with your accountant. A briefing that reads a service can only report what that service holds.
 

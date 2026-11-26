@@ -2020,7 +2020,7 @@ const waitsOnYou = (m) => m.label === "needs" || m.label === "failed";
 const INBOX_TABS = [
   ["waiting", "Waiting on you", (m, k) => waitsOnYou(m) && !k.archived && !k.deletedAt],
   ["updates", "Updates", (m, k) => !waitsOnYou(m) && !k.archived && !k.deletedAt],
-  ["done", "Done", (m, k) => k.archived && !k.deletedAt],
+  ["done", "Archive", (m, k) => k.archived && !k.deletedAt],
 ];
 /** What kind of decision a waiting message is, in a few words. */
 function waitingKind(m) {
@@ -2115,7 +2115,7 @@ function renderInbox() {
         h("div", { class: "inboxcardtop" }, m.bot ? keycap(m.bot, 28, "", m.bot.type) : h("span", { class: "sysavatar", "aria-hidden": "true" }, "T"), h("div", { class: "grow" }, h("span", { class: `inboxkind ${m.label}` }, waitingKind(m)), h("b", {}, title), h("span", { class: "note small" }, meta)), h("span", { class: "note small inboxwhen" }, shortWhen(m.at))),
         h("div", { class: "inboxcardbody" }, body, reply),
         // A problem with nothing left to decide can be put away.
-        m.label === "failed" || m.kind === "task" ? h("div", { class: "inboxcardfoot" }, h("span", { class: "grow" }), h("button", { class: "plain link small", title: "Move it to Done. The task and its work are kept.", onclick: put }, "Put away")) : null,
+        m.label === "failed" || m.kind === "task" ? h("div", { class: "inboxcardfoot" }, h("span", { class: "grow" }), h("button", { class: "plain link small", title: "Move it to Archive. The task and its work are kept.", onclick: put }, "Archive")) : null,
       );
       return node;
     };
@@ -2140,8 +2140,8 @@ function renderInbox() {
   // ----- updates, done and search: a list on the left, the message on the right -----
   ui.mailJump = false;
   const wide = window.matchMedia("(min-width: 900px)").matches;
-  let open = shown.find((m) => m.id === ui.mailOpen) ?? null;
-  if (!open && wide && shown.length) open = shown[0];
+  // Nothing opens by itself: a message is read when the owner clicks it.
+  const open = shown.find((m) => m.id === ui.mailOpen) ?? null;
   const row = (m) =>
     h(
       "button",
@@ -2152,7 +2152,7 @@ function renderInbox() {
   const listKey = JSON.stringify([ui.mailNote, tab, words, open?.id, shown.map((m) => [m.id, m.subject, m.at, m.label, isUnread(m), agentName(m.bot)])]);
   if (listKey !== ui.mailListKey) {
     ui.mailListKey = listKey;
-    const empty = words.length ? "Nothing matches that search." : tab === "updates" ? "No updates yet. When your team finishes or reports on work, it shows here." : "Nothing is put away yet. Press Looks good on an update to move it here.";
+    const empty = words.length ? "Nothing matches that search." : tab === "updates" ? "No updates yet. When your team finishes or reports on work, it shows here." : "Nothing is archived yet. Press Archive on an update to move it here.";
     fill(ui.mailList, ui.mailNote ? h("div", { class: "banner error" }, ui.mailNote) : null, words.length ? h("p", { class: "note small" }, `${shown.length} result${shown.length === 1 ? "" : "s"} across the Inbox`) : null, shown.length ? h("div", { class: "inboxrows" }, shown.map(row)) : h("div", { class: "inboxcalm" }, h("span", { class: "note" }, empty)));
   }
   ui.mailNote = null;
@@ -2164,8 +2164,7 @@ function renderInbox() {
   if (readKey === ui.mailReadKey && ui.mailRead.dataset.id === (open?.id ?? "")) return;
   ui.mailReadKey = readKey;
   ui.mailRead.dataset.id = open?.id ?? "";
-  if (!open) return fill(ui.mailRead);
-  if (isUnread(open) && wide) mailMark([open.id], { read: true });
+  if (!open) return fill(ui.mailRead, shown.length && wide ? h("div", { class: "inboxpick" }, h("b", {}, "Click a message to read it."), h("span", { class: "note small" }, ((n) => (n ? `${n} not read yet.` : "You have read them all."))(shown.filter(isUnread).length))) : null);
   const parts = readMail(open);
   const put = markOf(open).archived;
   const brief = briefingFor(open);
@@ -2177,11 +2176,21 @@ function renderInbox() {
       h("button", { class: "plain small inboxback", onclick: () => ((ui.mailOpen = null), renderInbox()) }, "← Back"),
       brief ? h("span", { class: "briefmark", title: `${brief.name}: ${brief.when}` }, "Briefing") : null,
       brief?.on?.enabled ? h("button", { class: "plain link small", title: "Stop sending it until you switch it back on, under Tasks › Routines", onclick: () => attempt(async () => (await api("PATCH", `jobs/${brief.on.job}`, { enabled: false }), toast(`${brief.name} is paused. Switch it back on under Tasks › Routines.`), await loadMail(), renderInbox())) }, "Pause") : null,
-      brief ? h("button", { class: "plain link small", onclick: () => go("jobs") }, "Change") : null,
+      brief?.on ? h("button", { class: "plain link small", title: "Change its answer or when it arrives", onclick: () => briefingEdit(brief).then(async (ok) => ok && (await loadMail(), renderInbox())) }, "Edit") : null,
       h("span", { class: "grow" }),
+      h("button", { class: "plain link small", title: "Show it as not read yet", onclick: () => ((ui.mailOpen = null), (ui.mailReadKey = null), mailMark([open.id], { read: false })) }, "Mark unread"),
+      h("button", {
+        class: "small",
+        title: "Delete this message. The task and its work are kept.",
+        onclick: () => {
+          const id = open.id;
+          ui.mailOpen = null;
+          mailMark([id], { deleted: true }).then(() => toast("Deleted. The task and its work are kept.", { label: "Undo", run: () => mailMark([id], { deleted: false }) }));
+        },
+      }, "Delete"),
       put
         ? h("button", { class: "small", title: "Move it back to Updates", onclick: () => mailMark([open.id], { archived: false }) }, "Move back")
-        : h("button", { class: "small primary", title: "Move it to Done. The task and its work are kept.", onclick: () => ((ui.mailOpen = null), mailMark([open.id], { archived: true, read: true })) }, waitsOnYou(open) ? "Put away" : "Looks good"),
+        : h("button", { class: "small primary", title: "Move it to Archive. The task and its work are kept.", onclick: () => ((ui.mailOpen = null), mailMark([open.id], { archived: true, read: true })) }, "Archive"),
     ),
     parts.slice(1),
   );
@@ -6862,6 +6871,7 @@ function briefingGallery(host, data, col) {
         on
           ? [
               on.enabled ? h("button", { class: "small", onclick: () => act(() => api("PATCH", `jobs/${on.job}`, { enabled: false }), `${b.name} is paused.`) }, "Pause") : h("button", { class: "small primary", onclick: () => act(() => api("PATCH", `jobs/${on.job}`, { enabled: true }), `${b.name} is on again.`) }, "Switch back on"),
+              h("button", { class: "small", title: b.ask ? "Change its answer and when it arrives" : "Change when it arrives", onclick: () => briefingEdit(b).then((ok) => ok && again()) }, "Edit"),
               h("button", { class: "small", title: "Send one now", onclick: () => act(() => api("POST", `jobs/${on.job}/run`, {}), "One is on its way to your Inbox.") }, "Send one now"),
               h("button", { class: "plain link small", onclick: () => confirm(`Switch ${b.name} off for good? You can switch it on again later.`) && act(() => api("DELETE", `jobs/briefings/${b.id}`), `${b.name} is switched off.`) }, "Switch off"),
             ]
@@ -6889,6 +6899,40 @@ function briefingGallery(host, data, col) {
   );
 }
 
+/** The times a briefing can arrive, in plain words, as the routine's timing. */
+const BRIEF_TIMES = [
+  ["0 7 * * *", "Every day at 7:00"], ["30 7 * * *", "Every day at 7:30"], ["0 8 * * *", "Every day at 8:00"], ["0 17 * * *", "Every day at 5:00 pm"], ["0 18 * * *", "Every day at 6:00 pm"],
+  ["30 7 * * 1-5", "Weekdays at 7:30"], ["0 8 * * 1-5", "Weekdays at 8:00"], ["0 9 * * 1-5", "Weekdays at 9:00"], ["30 17 * * 1-5", "Weekdays at 5:30 pm"],
+  ["0 8 * * 1", "Mondays at 8:00"], ["0 9 * * 1", "Mondays at 9:00"], ["0 9 * * 2", "Tuesdays at 9:00"], ["0 9 * * 4", "Thursdays at 9:00"], ["0 10 * * 5", "Fridays at 10:00"], ["0 15 * * 5", "Fridays at 3:00 pm"], ["0 16 * * 5", "Fridays at 4:00 pm"], ["0 9 * * 6", "Saturdays at 9:00"],
+  ["0 8 1 * *", "The 1st of each month at 8:00"], ["0 9 1 * *", "The 1st of each month at 9:00"], ["0 8 2 * *", "The 2nd of each month at 8:00"], ["0 9 1 1,4,7,10 *", "The 1st of January, April, July and October"],
+];
+
+/** Editing a briefing that is on: its one answer (or its list), and when it arrives. */
+async function briefingEdit(b) {
+  const topic = !b.ask ? null : b.ask.list ? h("textarea", { id: "briefing-edit-topic", rows: 7, placeholder: b.ask.placeholder, maxlength: 4000, "aria-label": b.ask.label }, b.ask.value || "") : h("input", { id: "briefing-edit-topic", value: b.ask.value || "", placeholder: b.ask.placeholder, maxlength: 300, "aria-label": b.ask.label });
+  const now = b.on?.schedule || b.schedule;
+  const times = BRIEF_TIMES.some(([v]) => v === now) ? BRIEF_TIMES : [[now, "As set under your routines"], ...BRIEF_TIMES];
+  const time = h("select", { id: "briefing-edit-time", "aria-label": "When it arrives" }, times.map(([v, label]) => h("option", { value: v, selected: v === now }, label)));
+  const body = h(
+    "div",
+    { class: "composeform briefdialog" },
+    topic ? h("label", {}, b.ask.label, topic, h("span", { class: "note small" }, b.ask.list ? "One on each line: a name, a comma, then the date." : b.ask.required ? "Say it in a few words." : "Leave it empty to follow your mission.")) : null,
+    h("label", {}, "When it arrives", time),
+    h("p", { class: "note small" }, "The change applies from the next one. Press Send one now on the card to see it straight away."),
+  );
+  const got = await libDialog(`Edit ${b.name}`, body, [["Save", () => ({ topic: topic?.value.trim() ?? b.ask?.value ?? "", schedule: time.value }), true]]);
+  if (!got) return false;
+  if (b.ask?.required && !got.topic) return (toast(`${b.name} needs an answer.`), false);
+  try {
+    await api("PATCH", `jobs/briefings/${b.id}`, got);
+    toast(`${b.name} is changed.`);
+    return true;
+  } catch (err) {
+    toast(err.message);
+    return false;
+  }
+}
+
 /** Switching a briefing on: at most one question, and what an owner wants to know before saying yes. */
 async function briefingOn(b) {
   if (!b.sender) return (toast("A briefing is sent by someone on your team. Set up your team first, under Team."), false);
@@ -6899,7 +6943,7 @@ async function briefingOn(b) {
     "div",
     { class: "composeform briefdialog" },
     h("p", { class: "note" }, b.about),
-    topic ? h("label", {}, b.ask.label, topic, h("span", { class: "note small" }, b.ask.list ? "A name, a comma, then the date. You can change the list later by switching it off and on again." : b.ask.required ? "Say it in a few words." : org.mission ? "Leave it empty to follow your mission." : "Say it in a few words.")) : null,
+    topic ? h("label", {}, b.ask.label, topic, h("span", { class: "note small" }, b.ask.list ? "A name, a comma, then the date. You can change the list later with Edit." : b.ask.required ? "Say it in a few words." : org.mission ? "Leave it empty to follow your mission." : "Say it in a few words.")) : null,
     h(
       "div",
       { class: "brieffacts" },

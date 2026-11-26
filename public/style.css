@@ -2003,6 +2003,8 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .briefstate.on { background: var(--accent); color: var(--on-accent, #04130a); }
 .briefabout, .briefcard .note { margin: 0; }
 .brieffoot { margin-top: 6px; gap: 8px; }
+.briefdialog label { display: grid; gap: 5px; align-items: start; }
+.briefdialog textarea, .briefdialog input, .briefdialog select { width: 100%; }
 .brieffacts { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; }
 .brieffact { display: flex; justify-content: space-between; gap: 14px; }
 .brieffact span { color: var(--muted); }
@@ -2051,6 +2053,7 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 /* The older mailbox styles hide .mailread until a message is open; here the pane is always shown beside the list. */
 .inbox2 .inboxread { display: block; }
 .inbox2 .inboxread:empty { display: none; }
+.inboxpick { display: grid; gap: 4px; justify-items: center; text-align: center; padding: 60px 16px; }
 .inboxreadtools { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
 .inboxback { display: none; }
 .inboxcalm { display: grid; gap: 6px; justify-items: center; text-align: center; padding: 40px 12px 14px; }
