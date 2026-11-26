@@ -67,6 +67,9 @@ test("an agent's change to a document waits for the owner, and an agent can save
   assert.match(await run({ action: "list" }), /Weekly report \(document in Reports\)/);
   await assert.rejects(run({ action: "file", title: "No place", markdown: "x" }), /kind: "document"/);
   assert.equal(workspace.office(orgs.active()).files.some((f) => f.title === "Weekly report" && f.kind === "doc"), true);
+  // An agent's short finding goes to the notebook kept for agents' notes, whatever folder it names.
+  assert.match(await run({ action: "file", kind: "note", folder: "Elsewhere", title: "Flour price rose", markdown: "Up 8% at the mill." }), /Saved as the note “Flour price rose” .* in the notebook From agents/);
+  assert.equal(workspace.office(orgs.active()).files.some((f) => f.title === "Flour price rose" && f.kind === "note" && f.folder === "From agents"), true);
 });
 
 test("a note can become a document or a Workspace page, keeping its text, history and who may see it", () => {
