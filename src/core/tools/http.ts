@@ -1,6 +1,7 @@
 // HTTP calls with stored secrets. The model writes {{secret:NAME}}; the value
 // is filled in here, outside its view, and only for the host the secret is tied to.
 import { clip, defineTool } from "../tooling.ts";
+import { webRules } from "./page.ts";
 import type { MaybePromise, Secret, Tool } from "../types.ts";
 
 type Secrets = Record<string, Secret>;
@@ -53,12 +54,34 @@ export function httpTool(getSecrets: () => MaybePromise<Secrets>): Tool {
       for (const [key, value] of Object.entries(input.headers ?? {})) headers[key] = fillSecrets(value, host, secrets);
       const body = input.body === undefined ? undefined : fillSecrets(input.body, host, secrets);
 
-      const response = await fetch(url, {
-        method: input.method,
-        headers,
-        body: ["GET", "HEAD"].includes(input.method) ? undefined : body,
-        signal: AbortSignal.any([AbortSignal.timeout(60_000), signal]),
-      });
+      // Redirects are followed by hand, one hop at a time, so that a key bound to one host is never carried to
+      // another, and so that an organization's approved sites hold for every hop, not only the first address.
+      let target = url;
+      let method = input.method;
+      let sendHeaders: Record<string, string> = headers;
+      let sendBody = ["GET", "HEAD"].includes(method) ? undefined : body;
+      let response: Response;
+      for (let hop = 0; ; hop++) {
+        const at = target.hostname.toLowerCase();
+        if (BLOCKED_HOSTS.test(at)) throw new Error(`Requests to ${at} are not allowed.`);
+        if (webRules.allowed && !webRules.allowed(at)) throw new Error(`${at} is not one of the sites this organization approves, so the request was not sent${hop ? " (the first address redirected there)" : ""}.`);
+        response = await fetch(target, { method, headers: sendHeaders, body: sendBody, redirect: "manual", signal: AbortSignal.any([AbortSignal.timeout(60_000), signal]) });
+        const location = response.headers.get("location");
+        if (!(response.status >= 300 && response.status < 400 && location)) break;
+        if (hop >= 5) throw new Error("Too many redirects.");
+        const next = new URL(location, target);
+        if (!["http:", "https:"].includes(next.protocol)) throw new Error("Only http and https URLs are supported.");
+        if (next.origin !== target.origin) {
+          // Another site: nothing that was meant for the first one goes along.
+          sendHeaders = {};
+          sendBody = undefined;
+          method = "GET";
+        } else if (response.status === 303 || ((response.status === 301 || response.status === 302) && method === "POST")) {
+          method = "GET";
+          sendBody = undefined;
+        }
+        target = next;
+      }
       let text = await response.text();
       for (const secret of Object.values(secrets)) {
         if (secret.value) text = text.split(secret.value).join("[secret]");
