@@ -59,7 +59,7 @@ import { ROLES, ROLE_WORDS, mayDo, people } from "./people.ts";
 import type { Person } from "./people.ts";
 import { projects } from "./projects.ts";
 import { connectCatalog, connectorLabel, disconnectCatalog, listCatalog } from "./connector-catalog.ts";
-import { changeRules, checkConnections, connectService, listServices, removeConnection, updateConnection } from "./connector-kit.ts";
+import { changeRules, checkConnections, connectionProblems, connectService, listServices, removeConnection, updateConnection } from "./connector-kit.ts";
 import "./services/index.ts";
 import { installKit, listKits, previewKit, runPlaybook, undoKit } from "./kits.ts";
 import { connectLangfuse, langfuseIntegration, recordStep, removeLangfuse } from "./langfuse.ts";
@@ -1263,7 +1263,8 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL) {
   // The gateway to AI models: every service Talqava can connect, and the ones that are.
   if (parts[0] === "gateway") {
     if (req.method === "GET" && !parts[1]) return send(res, 200, await gatewayState());
-    if (req.method === "GET" && parts[1] === "problems") return send(res, 200, serviceProblems());
+    // What has stopped working: AI services, and connections to other services whose key is no longer accepted.
+    if (req.method === "GET" && parts[1] === "problems") return send(res, 200, [...serviceProblems(), ...connectionProblems()]);
     if (req.method === "POST" && parts[1] === "check") return send(res, 200, await attempt(async () => (await refreshHealth(true), serviceProblems())));
     if (req.method === "POST" && parts[1] === "find-local") return send(res, 200, await attempt(() => findLocal()));
     if (req.method === "PUT" && parts[1] === "backups") return send(res, 200, await attempt(() => setBackups(body.backups)));
@@ -1882,6 +1883,9 @@ export function start() {
   // Each connected service is checked now and every few hours, so a dead key is found before a task fails.
   void refreshHealth().catch(() => {});
   setInterval(() => void refreshHealth().catch(() => {}), 3600 * 1000).unref();
+  // Connections to other services are checked a few minutes after starting and then every six hours.
+  setTimeout(() => void checkConnections().catch(() => {}), 180_000).unref();
+  setInterval(() => void checkConnections().catch(() => {}), 6 * 3600 * 1000).unref();
   // Quests that were under way when the app last closed carry on.
   quests
     .resumeAll()

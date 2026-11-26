@@ -170,19 +170,38 @@ export function removeConnection(connectionId: string): { ok: true } {
 
 /** Checks each saved connection with its service again and records whether it still works. */
 export async function checkConnections(): Promise<PublicConnection[]> {
-  const all = saved();
-  for (const c of all) {
+  for (const c of saved()) {
+    let problem: string | undefined;
     try {
       await serviceOf(c.service).check(c.values);
-      delete c.problem;
     } catch (err) {
       // A service that cannot be reached right now is not a broken key: only a refusal marks the connection.
-      if ((err as { refused?: boolean }).refused) c.problem = (err as Error).message;
+      if (!(err as { refused?: boolean }).refused) continue;
+      problem = (err as Error).message;
     }
-    c.checkedAt = new Date().toISOString();
+    mark(c.id, problem);
   }
+  return saved().map(view);
+}
+
+/** Records that a connection stopped working, or works again. Read fresh each time, so nothing saved meanwhile is lost. */
+function mark(connectionId: string, problem: string | undefined): void {
+  const all = saved();
+  const c = all.find((x) => x.id === connectionId);
+  if (!c) return;
+  const was = c.problem;
+  if (problem) c.problem = problem;
+  else delete c.problem;
+  c.checkedAt = new Date().toISOString();
   store(all);
-  return all.map(view);
+  if (problem && !was) audit({ actor: "system", actorName: serviceOf(c.service).name, kind: "integration", action: `${serviceOf(c.service).name} stopped accepting its key`, detail: `${c.label}: ${problem}` });
+}
+
+/** Connections that no longer work, for the owner's Inbox and Home: which, why, and where to fix it. */
+export function connectionProblems(): { id: string; name: string; problem: string; integration: string }[] {
+  return saved()
+    .filter((c) => c.problem)
+    .map((c) => ({ id: `connection:${c.id}`, name: `${serviceOf(c.service).name} (${c.label})`, problem: c.problem!, integration: `service:${c.service}` }));
 }
 
 const which = (service: string, account: unknown): Connection => {
@@ -223,7 +242,16 @@ export function serviceTools(): Tool[] {
           async run(input) {
             const connection = which(def.id, input.account);
             if (action.kind !== "read" && connection.rule === "read") throw new Error(`On ${def.name} (${connection.label}) the owner lets agents read only. Say in your report what you would change, and leave it to them.`);
-            const out = await action.run(connection, input);
+            let out: string;
+            try {
+              out = await action.run(connection, input);
+            } catch (err) {
+              // A refusal while an agent works means the key stopped being accepted: the owner is told, not only the agent.
+              // A refusal may only mean the key lacks one permission, so the sign-in itself is checked before saying so.
+              if ((err as { refused?: boolean }).refused) await def.check(connection.values).catch((again) => (again as { refused?: boolean }).refused && mark(connection.id, (again as Error).message));
+              throw err;
+            }
+            if (connection.problem) mark(connection.id, undefined);
             if (action.kind !== "read") audit({ actor: "system", actorName: def.name, kind: "integration", action: `An agent used ${def.name}: ${action.summary.toLowerCase()}`, detail: `${connection.label} · ${out.slice(0, 160)}` });
             return out.length > 30_000 ? `${out.slice(0, 30_000)}\n… (cut short; ask for less at a time)` : out;
           },

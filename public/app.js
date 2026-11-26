@@ -2261,7 +2261,7 @@ function readMail(m) {
       );
     } else if (n.kind === "chat") fill(body, h("p", {}, `The chat “${n.c.title}” is waiting for you to approve a step.`), h("button", { class: "primary", onclick: () => go("chat", n.c.id) }, "Open the chat"));
     else if (n.kind === "monthly") fill(body, h("p", {}, `I have spent ${money(n.bot.month.spent)} of my ${money(n.bot.month.limit)} monthly budget, so I won't start new work until you raise it or the month turns.`), h("button", { class: "primary", onclick: () => go("bot", n.bot.id) }, "Raise my budget"));
-    else if (n.kind === "service") fill(body, h("p", {}, `${n.p.name} stopped working: ${n.p.problem}`), h("p", { class: "note small" }, "Tasks on its models will fail, or go to a backup model if you set one, until it is fixed. A new key usually fixes it."), h("button", { class: "primary", onclick: () => ((ui.integration = "ai-models"), go("integrations")) }, "Open AI models"));
+    else if (n.kind === "service") fill(body, h("p", {}, `${n.p.name} stopped working: ${n.p.problem}`), h("p", { class: "note small" }, n.p.integration ? "Agents cannot use it until it is fixed. Make a new key in the service and connect again; the account keeps its settings." : "Tasks on its models will fail, or go to a backup model if you set one, until it is fixed. A new key usually fixes it."), h("button", { class: "primary", onclick: () => ((ui.integration = n.p.integration ?? "ai-models"), go("integrations")) }, n.p.integration ? "Open the connection" : "Open AI models"));
     else if (n.kind === "total") fill(body, h("p", {}, "All your agents together have reached this month's budget. No agent starts new work until you raise it or the month turns."), h("button", { class: "primary", onclick: () => go("team") }, "Change the budget"));
     else fill(body, h("p", {}, m.snippet), h("button", { class: "primary", onclick: () => go("quest", q.id) }, n.kind === "review" ? "Review the changes" : "Open the task"));
     return [tools, h("h2", { class: "readsubject" }, m.subject, h("span", { class: `mlabel ${m.label}` }, LABEL_WORDS[m.label])), from, body];
@@ -3918,6 +3918,7 @@ async function servicePage(col, again, id) {
       h("div", { class: "row" }, h("div", { class: "grow" }, h("b", {}, c.label), h("div", { class: "note small" }, `Connected ${new Date(c.addedAt).toLocaleDateString()}`)), h("span", { class: `chip ${c.problem ? "bad" : "on"}` }, c.problem ? "Needs attention" : "Connected")),
       c.problem ? h("div", { class: "banner error" }, `${c.problem} Make a new key and connect again below; the account keeps its settings.`) : null,
       h("label", {}, "What agents may do with this account", rule),
+      h("p", { class: "note small" }, c.checkedAt ? `Last checked ${new Date(c.checkedAt).toLocaleString()}. Talqava checks every few hours that the key still works. ` : "", h("button", { type: "button", class: "plain link", onclick: () => act(() => api("POST", "integrations/services/check"), "Checked.") }, "Check now")),
       h("div", { class: "row" }, h("button", { class: "plain danger", onclick: () => confirm(`Disconnect ${svc.name} (${c.label})? Agents can no longer use it, and its key is forgotten. Nothing in ${svc.name} is changed.`) && act(() => api("DELETE", `integrations/services/connections/${c.id}`), "Disconnected.") }, "Disconnect")),
     );
   };

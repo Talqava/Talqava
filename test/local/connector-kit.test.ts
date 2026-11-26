@@ -107,9 +107,18 @@ test("a connection that stops working is marked, and an unreachable service is n
   state.asanaDown = true;
   let all = await K.checkConnections();
   assert.match(all.find((c) => c.service === "asana")!.problem ?? "", /Asana refused that/);
+  assert.deepEqual(K.connectionProblems().map((p) => [p.name, p.integration]), [["Asana (Ada (ada@example.com))", "service:asana"]], "the owner is told which connection, and where to fix it");
   state.asanaDown = false;
   all = await K.checkConnections();
   assert.equal(all.find((c) => c.service === "asana")!.problem, undefined);
+  assert.deepEqual(K.connectionProblems(), []);
+  // A refusal while an agent is working marks the connection too, and the next call that works clears it.
+  state.asanaDown = true;
+  await assert.rejects(run("asana__list_tasks", { project: "9" }), /Asana refused that/);
+  assert.equal(K.connectionProblems().length, 1);
+  state.asanaDown = false;
+  await run("asana__list_tasks", { project: "9" });
+  assert.deepEqual(K.connectionProblems(), []);
   const real = process.env.TALQAVA_ASANA_API;
   process.env.TALQAVA_ASANA_API = "http://127.0.0.1:9";
   all = await K.checkConnections();
