@@ -1368,6 +1368,50 @@ test("before starting, an agent checks it has what the task needs, asks the owne
 });
 
 
+test("an agent that lacks an ability the task needs says so, and one press switches it on and starts the task", { timeout: 30_000 }, async () => {
+  const quests = await import("../../src/local/quests.ts");
+  const crew = await import("../../src/local/crew.ts");
+  const R = await import("../../src/local/readiness.ts");
+  store.saveConfig({ checkFirst: true });
+  script.length = 0;
+  (mock as { route?: unknown }).route = undefined;
+  const server = (await import("node:http")).createServer(app.handle).listen(0, "127.0.0.1");
+  await new Promise((r) => server.once("listening", r));
+  const base = `http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}/api`;
+  const post = async (route: string) => ((r) => r.json().then((data) => ({ status: r.status, data })))(await fetch(`${base}/${route}`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }));
+  try {
+    const saved = crew.saveBot("news-reader", { name: "News Reader", type: "scout", instructions: "Write the morning digest.", powers: ["memory"], group: "Research", monthly: 9, approvals: "ask" });
+    // It asks for the web, for commands (never offered by one press) and for an ability it already has.
+    script.push(say('{"ready": false, "missing": ["Access to the live web"], "questions": [], "switch_on": ["Web", "shell", "memory", "teleport"], "plan": "Read the headlines"}'));
+    const asked = await quests.quests.start({ bot: saved, text: "Write today's news digest." });
+    assert.equal(asked.status, "asking");
+    assert.deepEqual(quests.questStore.get(asked.id)!.grant, ["web"]);
+    const said = JSON.stringify(store.conversations.get(asked.id)!.messages[1].content);
+    assert.match(said, /You can fix this with one press/);
+    assert.match(said, /search the web and read web pages/);
+    assert.deepEqual((await (await fetch(`${base}/quests/${asked.id}`)).json()).grant, [{ id: "web", words: "search the web and read web pages" }]);
+    // One press: the agent keeps everything else about it, gains the ability, and the task starts.
+    script.push(say("Done: five headlines."));
+    const pressed = await post(`conversations/${asked.id}/grant`);
+    assert.equal(pressed.status, 200);
+    assert.deepEqual(pressed.data.powers, ["memory", "web"]);
+    const now = crew.findBot("news-reader");
+    assert.deepEqual([now.powers, now.group, now.monthly, now.instructions.trim(), now.approvals], [["memory", "web"], "Research", 9, "Write the morning digest.", saved.approvals]);
+    for (let i = 0; i < 50 && quests.questStore.get(asked.id)?.status !== "done"; i++) await new Promise((r) => setTimeout(r, 20));
+    const done = quests.questStore.get(asked.id)!;
+    assert.deepEqual([done.status, done.grant, done.bot.powers], ["done", undefined, ["memory", "web"]]);
+    assert.equal((await post(`conversations/${asked.id}/grant`)).status, 409, "nothing is waiting any more");
+    // An ability that is only named, with nothing else missing, is still a reason to ask.
+    assert.deepEqual(R.GRANTABLE.includes("shell") || R.GRANTABLE.includes("files") || R.GRANTABLE.includes("browser"), false);
+  } finally {
+    server.close();
+    store.saveConfig({ checkFirst: false });
+    try {
+      crew.removeBot("news-reader");
+    } catch {}
+  }
+});
+
 test("agents start from the library passages that match their task (never private ones) and can read every saved skill", { timeout: 30_000 }, async () => {
   const { orgs } = await import("../../src/local/orgs.ts");
   const market = await import("../../src/local/marketplace.ts");

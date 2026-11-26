@@ -86,3 +86,46 @@ test("the owner's account is never changed by the directory", () => {
   S.disableScim();
   assert.equal(S.scimSettings().on, false);
 });
+
+test("groups from the directory give roles: the highest among a person's groups, and the usual role when none does", () => {
+  S.enableScim({ role: "member" });
+  const add = (email: string) => call("POST", "Users", { userName: email, displayName: email.split("@")[0], active: true }).body.id as string;
+  const [bo, cy, di] = [add("bo@example.com"), add("cy@example.com"), add("di@example.com")];
+  const roleOf = (id: string) => people.fromDirectory(id)!.role;
+  // Microsoft Entra ID creates a group without members, then adds them with PATCH.
+  const finance = call("POST", "Groups", { schemas: ["urn:ietf:params:scim:schemas:core:2.0:Group"], displayName: "Finance managers", externalId: "g-1" });
+  assert.equal(finance.status, 201);
+  assert.equal(call("POST", "Groups", { displayName: "finance MANAGERS" }).status, 409);
+  assert.equal(call("GET", 'Groups?filter=displayName eq "Finance managers"').body.totalResults, 1);
+  const fid = finance.body.id;
+  assert.equal(call("PATCH", `Groups/${fid}`, { Operations: [{ op: "Add", path: "members", value: [{ value: bo }, { value: cy }, { value: "nobody" }] }] }).body.members.length, 2);
+  assert.deepEqual([roleOf(bo), roleOf(cy)], ["member", "member"], "until a group is given a role, groups change nobody");
+  assert.deepEqual(S.directoryGroups(), [{ name: "Finance managers", people: 2, role: null }]);
+  assert.throws(() => S.setGroupRoles({ "Finance managers": "owner" }), /owner/);
+  S.setGroupRoles({ "Finance managers": "manager" });
+  assert.deepEqual([roleOf(bo), roleOf(cy), roleOf(di)], ["manager", "manager", "member"]);
+  // Okta sends the whole group with PUT; a second group gives a higher role to one of them.
+  const admins = call("POST", "Groups", { displayName: "IT admins", members: [{ value: bo }, { value: di }] }).body.id;
+  S.setGroupRoles({ "IT admins": "admin" });
+  assert.deepEqual([roleOf(bo), roleOf(cy), roleOf(di)], ["admin", "manager", "admin"]);
+  // Leaving a group takes its role away again.
+  call("PATCH", `Groups/${admins}`, { Operations: [{ op: "remove", path: `members[value eq "${bo}"]` }] });
+  assert.equal(roleOf(bo), "manager");
+  call("PUT", `Groups/${fid}`, { displayName: "Finance managers", members: [{ value: cy }] });
+  assert.equal(roleOf(bo), "member", "in no group that gives a role: the role for new people");
+  assert.equal(call("DELETE", `Groups/${admins}`).status, 204);
+  assert.equal(roleOf(di), "member");
+  // The owner is never given a role by a group, and a removed person leaves their groups.
+  call("PATCH", `Groups/${fid}`, { Operations: [{ op: "add", path: "members", value: [{ value: owner.id }] }] });
+  assert.equal(people.fromDirectory(owner.id)!.role, "owner");
+  call("DELETE", `Users/${cy}`);
+  assert.deepEqual(call("GET", `Groups/${fid}`).body.members.map((m: any) => m.value), [owner.id]);
+  // A new token keeps the groups and their roles; taking the last role away puts people back.
+  S.enableScim({ role: "member" });
+  assert.equal(S.directoryGroups()[0].role, "manager");
+  call("PATCH", `Groups/${fid}`, { Operations: [{ op: "add", path: "members", value: [{ value: di }] }] });
+  assert.equal(roleOf(di), "manager");
+  S.setGroupRoles({ "Finance managers": "" });
+  assert.equal(roleOf(di), "member");
+  assert.equal(call("GET", "ResourceTypes").body.totalResults, 2);
+});

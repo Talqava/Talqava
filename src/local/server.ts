@@ -28,7 +28,7 @@ import type { Config, ProviderConfig } from "./store.ts";
 import { CAUTION_TOOLS, localRunSpec } from "./tools.ts";
 import { closeConnectors } from "./connectors.ts";
 import { resolveModel, splitRef } from "./models.ts";
-import { botId, loadCrew, removeBot, saveBot } from "./crew.ts";
+import { botId, grantPowers, loadCrew, removeBot, saveBot } from "./crew.ts";
 import { addMarketBot, addPack, addTeam, buildStructure, installStatus, loadMarketplace, loadTeams, onTeam, previewMarketBot, previewTeam, undoMarketUpdate, updateMarketBot } from "./marketplace.ts";
 import { assignRule, requestRule, orgs, groupModelOf } from "./orgs.ts";
 import { orgMemory } from "./orgmemory.ts";
@@ -53,7 +53,7 @@ import { describeGuardrails, guardrails, guardrailsFrom, noteStuck } from "./gua
 import { securityOverview, securityReport } from "./securitycenter.ts";
 import { backupStatus, makeBackup, nightlyBackup, restoreTo, setBackup, testRestore } from "./backup.ts";
 import { finishSso, setSso, sso, ssoPublic, startSso } from "./sso.ts";
-import { disableScim, enableScim, handleScim, scimAuthorized, scimSettings } from "./scim.ts";
+import { directoryGroups, disableScim, enableScim, handleScim, scimAuthorized, scimSettings, setGroupRoles } from "./scim.ts";
 import { changes, type WaitingChange } from "./twoadmins.ts";
 import { RETENTION_CHOICES, findPerson, retention, retentionFrom, sweep } from "./retention.ts";
 import { REVIEW_EVERY_DAYS, alerts, feedStatus, reviews, setFeed, startAuditFeed } from "./auditfeed.ts";
@@ -77,6 +77,7 @@ import { PRIORITIES, work } from "./work.ts";
 import { goals } from "./goals.ts";
 import { findTemplate, loadTemplates } from "./templates.ts";
 import { chainBudget, chainCost, chainOf, chainSize, journal, questStore, quests, rootOf, whyOf } from "./quests.ts";
+import { GRANTABLE, powerWords } from "./readiness.ts";
 import type { Quest } from "./quests.ts";
 import { currentBranch, repoRoot } from "./git.ts";
 
@@ -746,6 +747,8 @@ function questSummary(quest: Quest) {
     outcome: quest.outcome ?? null,
     changedFiles: quest.changedFiles ?? null,
     note: quest.note ?? null,
+    // Abilities it asked for before starting, in plain words, for the one-press button.
+    grant: quest.status === "asking" && quest.grant?.length ? quest.grant.map((id) => ({ id, words: powerWords(id) })) : null,
     // Which exit stopped it, and what it left for whoever carries on.
     stop: quest.stop ?? null,
     handover: quest.handover ?? null,
@@ -961,7 +964,8 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
     if (route === "GET people" && parts[1] === "sso") return send(res, 200, { sso: ssoPublic(), redirect: `${req.headers["x-forwarded-proto"] === "https" ? "https" : "http"}://${req.headers.host}/api/sso/callback` });
     if (route === "PUT people" && parts[1] === "sso") return send(res, 200, await tryIt(() => setSso(body.issuer ? body : null)));
     // Directory sync: its state, switching it on (which shows the token once), and switching it off.
-    if (route === "GET people" && parts[1] === "directory") return send(res, 200, { ...scimSettings(), address: `${req.headers["x-forwarded-proto"] === "https" ? "https" : "http"}://${req.headers.host}/api/scim/v2` });
+    if (route === "PUT people" && parts[1] === "directory" && parts[2] === "groups") return send(res, 200, await tryIt(async () => setGroupRoles(body.roles)));
+    if (route === "GET people" && parts[1] === "directory") return send(res, 200, { ...scimSettings(), groups: directoryGroups(), address: `${req.headers["x-forwarded-proto"] === "https" ? "https" : "http"}://${req.headers.host}/api/scim/v2` });
     if (route === "POST people" && parts[1] === "directory") return send(res, 200, await tryIt(async () => enableScim(body)));
     if (route === "DELETE people" && parts[1] === "directory") return send(res, 200, await tryIt(async () => disableScim()));
     if (route === "POST people" && !parts[1]) return send(res, 200, await tryIt(() => people.add(body, me)));
@@ -1134,6 +1138,21 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
       }
       await engine.startRun(id, text);
       return send(res, 200, { ok: true });
+    }
+    // One press on an agent's "before I start" message: switch on the abilities it asked for, and start the task.
+    if (action === "grant" && req.method === "POST") {
+      const quest = questStore.get(id);
+      if (!quest || quest.status !== "asking" || !quest.grant?.length) throw new HttpError(409, "This task is not waiting for an ability to be switched on.");
+      if (engine.isRunning(id)) throw new HttpError(409, "The agent is still working. Stop it first.");
+      const add = quest.grant.filter((p) => GRANTABLE.includes(p));
+      const bot = grantPowers(quest.bot.id, add);
+      // The task holds its own copy of the agent, so that copy gets the abilities too.
+      questStore.save({ ...quest, bot: { ...quest.bot, powers: bot.powers }, grant: undefined });
+      audit({ ...requestActor(req), kind: "agent", task: id, action: `Switched on for the ${bot.title || bot.name}: ${add.map(powerWords).join("; ")}`, detail: "Asked for by the agent before starting a task" });
+      const blocked = budgetBlock(bot);
+      if (blocked) throw new HttpError(409, blocked);
+      await engine.startRun(id, `I have switched this on for you: ${add.map(powerWords).join("; ")}. Go ahead with the task. For anything else you asked that I have not answered, use your own judgment and say what you assumed.`);
+      return send(res, 200, { ok: true, powers: bot.powers });
     }
     if (action === "stop" && req.method === "POST") {
       if (questStore.get(id)) quests.stop(id);

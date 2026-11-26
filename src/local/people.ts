@@ -450,6 +450,16 @@ export const people = {
     save();
     return view(p);
   },
+  /** Sets a person's role from the directory's groups. Never the owner's. A changed role ends their sessions. */
+  directoryRole(id: string, role: Role): boolean {
+    const s = load();
+    const p = s.people.find((x) => x.id === id);
+    if (!p || p.role === "owner" || role === "owner" || p.role === role) return false;
+    p.role = role;
+    s.sessions = s.sessions.filter((x) => x.person !== id);
+    save();
+    return true;
+  },
   /** Removes a person on the directory's word, and ends their sessions. Never the owner. */
   directoryRemove(id: string): void {
     const s = load();
