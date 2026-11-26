@@ -1986,6 +1986,59 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .areatab.on { background: var(--raised); border-color: var(--line2, var(--line)); font-weight: 600; }
 .railfold { width: 100%; text-align: left; background: transparent; border: 0; cursor: pointer; font: inherit; }
 /* Home. */
+/* ---------- the Inbox: three lists, decisions answered in place ---------- */
+.inbox2 { max-width: 1040px; width: 100%; margin: 0 auto; padding: 22px 24px 60px; display: grid; gap: 14px; align-content: start; }
+.inboxhead { display: grid; gap: 10px; }
+.inboxhead h1 { margin: 0; font-size: 28px; letter-spacing: -0.03em; }
+.inboxbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.inboxtabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.inboxtab { border: 1px solid transparent; border-radius: 999px; padding: 6px 14px; min-height: 0; background: none; color: var(--soft); display: inline-flex; align-items: center; gap: 7px; }
+.inboxtab:hover { border-color: var(--line); background: none; }
+.inboxtab.on { background: var(--panel); border-color: var(--line2); color: var(--text); font-weight: 600; }
+.inboxcount { font: 600 11px var(--mono); background: var(--accent); color: var(--on-accent, #04130a); border-radius: 999px; padding: 1px 7px; }
+.inboxcount.quiet { background: var(--line); color: var(--soft); }
+.inboxfind { margin-left: auto; width: 200px; max-width: 100%; }
+.inboxpanes { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; align-items: start; }
+.inbox2.deciding .inboxpanes { grid-template-columns: minmax(0, 1fr); }
+.inbox2.deciding .inboxread { display: none; }
+.inbox2.deciding .inboxlist { display: grid; gap: 12px; max-width: 760px; }
+.inboxcard { border: 1px solid var(--warn, #ffb020); border-radius: 14px; background: var(--panel); overflow: hidden; }
+.inboxcard.open { box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn, #ffb020) 25%, transparent); }
+.inboxcardtop { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px 8px; }
+.inboxcardtop .grow { display: grid; gap: 2px; min-width: 0; }
+.inboxcardtop b { font-size: 15px; overflow-wrap: anywhere; }
+.inboxkind { font: 600 10.5px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--warn, #ffb020); }
+:root[data-theme="light"] .inboxkind { color: #8a5a00; }
+.inboxkind.failed { color: var(--bad-ink, #b3261e); }
+.inboxwhen { white-space: nowrap; }
+.inboxcardbody { padding: 0 16px 14px 56px; display: grid; gap: 10px; max-height: 420px; overflow-y: auto; }
+.inboxcardbody .readbody { padding: 0; }
+.inboxcardbody .readbody > p:first-child { margin-top: 0; }
+.inboxcardbody .askcard { margin: 0; border-color: var(--line); background: none; }
+.inboxcardfoot { display: flex; padding: 6px 16px 10px; }
+.inboxrows { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; display: grid; }
+.inboxrow { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; min-height: 0; }
+.inboxrow:last-child { border-bottom: 0; }
+.inboxrow .grow { display: grid; gap: 1px; min-width: 0; }
+.inboxrow .grow > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inboxrow b { font-weight: 500; }
+.inboxrow.unread b { font-weight: 700; }
+.inboxrow.unread::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+.inboxrow:hover, .inboxrow.open { background: color-mix(in srgb, var(--accent) 9%, transparent); border-color: var(--line); }
+.inboxread { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); min-width: 0; }
+.inboxread:empty { display: none; }
+.inboxreadtools { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.inboxback { display: none; }
+.inboxcalm { display: grid; gap: 6px; justify-items: center; text-align: center; padding: 40px 12px 14px; }
+.inboxcalm b { font: 600 20px var(--round, var(--sans)); }
+.inboxcalmmark { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 22px; font-weight: 700; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent-ink, var(--accent)); }
+.calmrows { max-width: 520px; width: 100%; margin: 0 auto; }
+@media (max-width: 899px) {
+  .inboxpanes { grid-template-columns: minmax(0, 1fr); }
+  .inbox2:not(.reading) .inboxread, .inbox2.reading .inboxlist { display: none; }
+  .inboxback { display: inline-flex; }
+  .inboxcardbody { padding-left: 16px; }
+}
 /* ---------- an agent asks before a step: one card, one clear button ---------- */
 .askcard { border: 1px solid var(--warn, #ffb020); border-radius: 14px; background: color-mix(in srgb, var(--warn, #ffb020) 7%, var(--panel)); margin: 10px 0; overflow: hidden; display: grid; }
 .askcardhead { display: flex; align-items: center; gap: 10px; padding: 12px 16px 6px; }

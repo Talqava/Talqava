@@ -1984,7 +1984,7 @@ const LABEL_WORDS = { needs: "Needs you", failed: "Problem", working: "In progre
 function syncInboxCount() {
   if (!ui.inboxCount) return;
   if (!state.mail && !ui.mailLoading) ui.mailLoading = loadMail().then(() => syncInboxCount());
-  const n = mailMessages().filter((m) => !markOf(m).archived && !markOf(m).deletedAt && isUnread(m)).length;
+  const n = mailMessages().filter((m) => waitsOnYou(m) && !markOf(m).archived && !markOf(m).deletedAt).length;
   ui.inboxCount.hidden = !n;
   ui.inboxCount.textContent = String(n);
   renderRecent();
@@ -2002,130 +2002,172 @@ async function mailMark(ids, set) {
   syncInboxCount();
 }
 
+/** The Inbox's three lists. A message is in exactly one: it waits on the owner, it is news, or it is put away. */
+const waitsOnYou = (m) => m.label === "needs" || m.label === "failed";
+const INBOX_TABS = [
+  ["waiting", "Waiting on you", (m, k) => waitsOnYou(m) && !k.archived && !k.deletedAt],
+  ["updates", "Updates", (m, k) => !waitsOnYou(m) && !k.archived && !k.deletedAt],
+  ["done", "Done", (m, k) => k.archived && !k.deletedAt],
+];
+/** What kind of decision a waiting message is, in a few words. */
+function waitingKind(m) {
+  const need = { approval: "Needs your yes", plan: "Plan to approve", asking: "A question before starting", taskreview: "Finished work to review", review: "Changes to review", check: "Did not pass its check", failed: "Could not finish", budget: "Stopped at its budget", chat: "A chat is waiting", monthly: "Monthly budget reached", total: "Monthly budget reached", service: "A service is not working" };
+  const own = { pagechange: "Suggested change", rowchange: "Table change", proposal: "Proposed position", reminder: "Reminder" };
+  return m.kind === "need" ? (need[m.need.kind] ?? "Needs you") : (own[m.kind] ?? (m.label === "failed" ? "Needs a look" : "Needs you"));
+}
+
 function inboxView() {
   ui.body.className = "body";
   ui.log = null;
-  ui.mailSel ??= new Set();
-  ui.mailFolder ??= "inbox";
+  ui.mailTab ??= "waiting";
   ui.mailBody ??= {};
   ui.mailDraft ??= {};
   ui.mailListKey = ui.mailReadKey = null;
   // The search box is made once, so typing is never interrupted when new messages arrive.
-  const find = h("input", { type: "search", class: "mailfind", placeholder: "Search mail: a name, a task, any word", value: ui.mailFind ?? "", "aria-label": "Search mail" });
+  const find = h("input", { type: "search", class: "inboxfind", placeholder: "Search…", value: ui.mailFind ?? "", "aria-label": "Search the Inbox" });
   find.addEventListener("input", () => ((ui.mailFind = find.value), (ui.mailOpen = null), renderInbox()));
-  const sort = h("select", { class: "mailsort", "aria-label": "Sort", onchange: (e) => ((ui.mailSort = e.target.value), renderInbox()) }, [["newest", "Newest first"], ["oldest", "Oldest first"], ["unread", "Unread first"], ["sender", "Sender A to Z"]].map(([v, t]) => h("option", { value: v, selected: v === (ui.mailSort ?? "newest") }, t)));
-  ui.mailSide = h("nav", { class: "mailside", "aria-label": "Mail folders" });
-  ui.mailBulk = h("div", { class: "mailbulk" });
-  ui.mailList = h("div", { class: "maillist", role: "list" });
-  ui.mailRead = h("article", { class: "mailread" });
-  ui.inbox = h("div", { class: "mail" }, ui.mailSide, h("div", { class: "mailmain" }, h("div", { class: "mailtop" }, find, sort), ui.mailBulk, h("div", { class: "mailpanes" }, ui.mailList, ui.mailRead)));
-  fill(ui.body, h("main", { class: "center flush" }, ui.inbox));
+  ui.mailTabs = h("div", { class: "inboxtabs", role: "tablist", "aria-label": "Inbox" });
+  ui.mailList = h("div", { class: "inboxlist" });
+  ui.mailRead = h("article", { class: "inboxread mailread" });
+  ui.inbox = h("div", { class: "inbox2" }, h("div", { class: "inboxhead" }, h("h1", {}, "Inbox"), h("div", { class: "inboxbar" }, ui.mailTabs, find)), h("div", { class: "inboxpanes" }, ui.mailList, ui.mailRead));
+  fill(ui.body, h("main", { class: "center" }, ui.inbox));
+  // Opened from elsewhere on one message: show the list it is in.
+  ui.mailJump = Boolean(ui.mailOpen);
   renderInbox();
   Promise.all([loadCrew(), loadMail()]).then(() => state.view === "inbox" && (renderInbox(), syncInboxCount()));
 }
 
 function renderInbox() {
   if (state.view !== "inbox" || !ui.mailList) return;
-  const all = mailMessages().filter((m) => !markOf(m).purged);
-  const folder = MAIL_FOLDERS.find(([id]) => id === ui.mailFolder) ?? MAIL_FOLDERS[0];
+  const all = mailMessages().filter((m) => !markOf(m).purged && !markOf(m).deletedAt);
   const words = (ui.mailFind ?? "").toLowerCase().split(/\s+/).filter(Boolean);
   const haystack = (m) => `${agentName(m.bot)} ${agentRole(m.bot)} ${m.subject} ${m.snippet}`.toLowerCase();
-  const sorters = {
-    newest: (a, b) => String(b.at).localeCompare(String(a.at)),
-    oldest: (a, b) => String(a.at).localeCompare(String(b.at)),
-    unread: (a, b) => Number(isUnread(b)) - Number(isUnread(a)) || String(b.at).localeCompare(String(a.at)),
-    sender: (a, b) => agentName(a.bot).localeCompare(agentName(b.bot)) || String(b.at).localeCompare(String(a.at)),
-  };
-  // A search looks in every folder but Trash, as mail apps do.
-  const shown = all.filter((m) => (words.length ? !markOf(m).deletedAt : folder[2](m, markOf(m))) && words.every((w) => haystack(m).includes(w))).sort(sorters[ui.mailSort ?? "newest"]);
-  for (const id of [...ui.mailSel]) if (!shown.some((m) => m.id === id)) ui.mailSel.delete(id);
-  const open = shown.find((m) => m.id === ui.mailOpen) ?? all.find((m) => m.id === ui.mailOpen) ?? null;
+  const inTab = (id) => all.filter((m) => INBOX_TABS.find(([x]) => x === id)[2](m, markOf(m)));
+  if (ui.mailJump && ui.mailOpen) {
+    const target = all.find((m) => m.id === ui.mailOpen);
+    if (target) ui.mailTab = INBOX_TABS.find(([, , test]) => test(target, markOf(target)))?.[0] ?? ui.mailTab;
+  }
+  const tab = INBOX_TABS.some(([id]) => id === ui.mailTab) ? ui.mailTab : "waiting";
+  const newest = (x, y) => String(y.at).localeCompare(String(x.at));
+  const shown = (words.length ? all.filter((m) => words.every((w) => haystack(m).includes(w))) : inTab(tab)).sort(newest);
+  const who = (m) => (m.bot ? agentName(m.bot) : "Talqava");
+  const refresh = async () => (await Promise.all([loadQuests(), refreshList(), loadCrew(), loadMail()]), renderInbox(), syncInboxCount());
 
-  // ----- the folders -----
-  const compose = h("button", { class: "primary compose", onclick: () => composeMail() }, "Compose");
+  // ----- the three tabs -----
+  const waiting = inTab("waiting").length;
+  const unread = inTab("updates").filter(isUnread).length;
   fill(
-    ui.mailSide,
-    compose,
-    MAIL_FOLDERS.map(([id, label, test]) => {
-      const inIt = all.filter((m) => test(m, markOf(m)));
-      const count = id === "inbox" || id === "needs" ? inIt.filter(isUnread).length : id === "trash" ? 0 : inIt.length;
-      return h("button", { class: `mailfolder ${id === folder[0] && !words.length ? "on" : ""}`, "aria-current": id === folder[0] ? "page" : null, onclick: () => ((ui.mailFolder = id), (ui.mailOpen = null), ui.mailSel.clear(), (ui.mailFind = ""), document.querySelector(".mailfind") && (document.querySelector(".mailfind").value = ""), renderInbox()) }, h("span", { class: "grow" }, label), count ? h("b", {}, String(count)) : null);
-    }),
-    folder[0] === "trash" ? h("p", { class: "note small mailtrashnote" }, "Messages in Trash are removed after 30 days. Deleting a message never deletes the task or its work.") : null,
-  );
-
-  // ----- the bar above the list: select all, and what to do with the selection -----
-  const sel = shown.filter((m) => ui.mailSel.has(m.id));
-  const ids = sel.map((m) => m.id);
-  const allOn = shown.length > 0 && sel.length === shown.length;
-  const inTrash = folder[0] === "trash" && !words.length;
-  fill(
-    ui.mailBulk,
-    h("input", { type: "checkbox", class: "pick", "aria-label": "Select all", checked: allOn, onchange: () => (allOn ? ui.mailSel.clear() : shown.forEach((m) => ui.mailSel.add(m.id)), renderInbox()) }),
-    sel.length
-      ? [
-          h("span", { class: "note small" }, `${sel.length} selected`),
-          inTrash
-            ? [h("button", { class: "small", onclick: () => (ui.mailSel.clear(), mailMark(ids, { deleted: false })) }, "Restore"), h("button", { class: "small danger", onclick: () => confirm(`Delete ${sel.length} message${sel.length === 1 ? "" : "s"} forever?`) && (ui.mailSel.clear(), mailMark(ids, { purge: true })) }, "Delete forever")]
-            : [
-                folder[0] === "archive" ? h("button", { class: "small", onclick: () => (ui.mailSel.clear(), mailMark(ids, { archived: false })) }, "Move to Inbox") : h("button", { class: "small", onclick: () => (ui.mailSel.clear(), mailMark(ids, { archived: true })) }, "Archive"),
-                h("button", { class: "small", onclick: () => (ui.mailSel.clear(), (ui.mailOpen = ids.includes(ui.mailOpen) ? null : ui.mailOpen), mailMark(ids, { deleted: true })) }, "Delete"),
-                h("button", { class: "small", onclick: () => mailMark(ids, { read: true }) }, "Mark read"),
-                h("button", { class: "small", onclick: () => mailMark(ids, { read: false }) }, "Mark unread"),
-                h("button", { class: "small", onclick: () => mailMark(ids, { starred: !sel.every((m) => markOf(m).starred) }) }, sel.every((m) => markOf(m).starred) ? "Unsave" : "Save"),
-              ],
-        ]
-      : [
-          h("button", { class: "plain small", title: "Mark every message here as read", onclick: () => mailMark(shown.filter(isUnread).map((m) => m.id), { read: true }) }, "Mark all read"),
-          inTrash && shown.length ? h("button", { class: "plain small danger", onclick: () => confirm("Empty Trash? These messages are removed for good. Tasks and their work are kept.") && mailMark(shown.map((m) => m.id), { purge: true }) }, "Empty Trash") : null,
-        ],
-    h("span", { class: "grow" }),
-    h("span", { class: "note small" }, words.length ? `${shown.length} result${shown.length === 1 ? "" : "s"} in all mail` : `${shown.length} message${shown.length === 1 ? "" : "s"}`),
-  );
-
-  // ----- the list -----
-  const row = (m) => {
-    const mark = markOf(m);
-    const unread = isUnread(m);
-    const node = h(
-      "div",
-      { class: `mailrow ${unread ? "unread" : ""} ${ui.mailOpen === m.id ? "open" : ""} ${ui.mailSel.has(m.id) ? "sel" : ""}`, role: "listitem", tabindex: "0", style: m.bot ? botStyle(m.bot) : "", onclick: () => openMail(m), onkeydown: (e) => e.key === "Enter" && e.target === node && openMail(m) },
-      h("input", { type: "checkbox", class: "pick", "aria-label": `Select ${m.subject}`, checked: ui.mailSel.has(m.id), onclick: (e) => e.stopPropagation(), onchange: (e) => (e.target.checked ? ui.mailSel.add(m.id) : ui.mailSel.delete(m.id), renderInbox()) }),
-      h("button", { class: `star ${mark.starred ? "on" : ""}`, "aria-label": mark.starred ? "Unsave" : "Save", "aria-pressed": String(Boolean(mark.starred)), title: mark.starred ? "Saved" : "Save", onclick: (e) => (e.stopPropagation(), mailMark([m.id], { starred: !mark.starred })) }, mark.starred ? "★" : "☆"),
-      m.bot ? keycap(m.bot, 28, "", m.bot.type) : h("span", { class: "sysavatar", "aria-hidden": "true" }, "T"),
-      h("span", { class: "msender" }, agentName(m.bot)),
-      h("span", { class: "msubject" }, h("b", {}, m.subject), h("span", { class: "msnippet" }, ` — ${String(m.snippet).replace(/\s+/g, " ").slice(0, 160)}`)),
-      h("span", { class: `mlabel ${m.label === "done" ? "empty" : m.label}` }, m.label === "done" ? "" : LABEL_WORDS[m.label]),
-      h("span", { class: "mtime" }, shortWhen(m.at)),
+    ui.mailTabs,
+    INBOX_TABS.map(([id, label]) =>
       h(
-        "span",
-        { class: "mhover" },
-        inTrash
-          ? h("button", { class: "plain small", onclick: (e) => (e.stopPropagation(), mailMark([m.id], { deleted: false })) }, "Restore")
-          : [
-              h("button", { class: "plain small", title: mark.archived ? "Move to Inbox" : "Archive", onclick: (e) => (e.stopPropagation(), mailMark([m.id], { archived: !mark.archived })) }, mark.archived ? "Inbox" : "Archive"),
-              h("button", { class: "plain small", title: "Delete", onclick: (e) => (e.stopPropagation(), ui.mailOpen === m.id && (ui.mailOpen = null), mailMark([m.id], { deleted: true })) }, "Delete"),
-              h("button", { class: "plain small", title: unread ? "Mark read" : "Mark unread", onclick: (e) => (e.stopPropagation(), mailMark([m.id], { read: unread })) }, unread ? "Read" : "Unread"),
-            ],
+        "button",
+        { class: `inboxtab ${id === tab && !words.length ? "on" : ""}`, role: "tab", "aria-selected": String(id === tab && !words.length), onclick: () => ((ui.mailTab = id), (ui.mailOpen = null), (ui.mailJump = false), (ui.mailFind = ""), ui.inbox.querySelector(".inboxfind") && (ui.inbox.querySelector(".inboxfind").value = ""), renderInbox()) },
+        label,
+        id === "waiting" && waiting ? h("span", { class: "inboxcount" }, String(waiting)) : id === "updates" && unread ? h("span", { class: "inboxcount quiet", title: "Not read yet" }, String(unread)) : null,
       ),
-    );
-    return node;
-  };
-  const listKey = JSON.stringify([ui.mailNote, folder[0], ui.mailOpen, shown.map((m) => [m.id, m.subject, m.snippet, m.at, m.label, isUnread(m), markOf(m).starred, markOf(m).archived, markOf(m).deletedAt, ui.mailSel.has(m.id), agentName(m.bot)])]);
-  const listChanged = listKey !== ui.mailListKey;
-  ui.mailListKey = listKey;
-  const empty = { inbox: "No messages. When you assign a task, the agent writes to you here.", starred: "Nothing saved. Press the star on a message to keep it here.", needs: "Nothing needs you right now.", working: "Nothing is in progress.", archive: "Nothing archived.", trash: "Trash is empty." };
-  if (listChanged) fill(ui.mailList, ui.mailNote ? h("div", { class: "banner error" }, ui.mailNote) : null, shown.length ? shown.map(row) : h("div", { class: "mailempty" }, h("b", {}, words.length ? "No messages match that search." : empty[folder[0]])));
-  ui.mailNote = null;
-  ui.inbox.classList.toggle("reading", Boolean(open));
+    ),
+  );
 
-  // ----- the open message (kept as it is while a reply is being typed) -----
-  if (open && ui.mailRead.contains(document.activeElement) && ui.mailRead.dataset.id === open.id) return;
-  const readKey = JSON.stringify([open?.id, open?.at, open?.label, open?.snippet, open && markOf(open), open?.q?.approvals?.length, open?.q?.activity?.name, open?.q?.chain, open && agentName(open.bot), ui.mailNote]);
+  // Typing an answer is never interrupted by a refresh.
+  const typing = ui.inbox.contains(document.activeElement) && /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName) && !document.activeElement.classList.contains("inboxfind");
+  const cardsMode = tab === "waiting" && !words.length;
+  ui.inbox.classList.toggle("deciding", cardsMode);
+
+  if (cardsMode) {
+    // ----- waiting on you: every decision is a card, answered in place -----
+    const key = JSON.stringify([ui.mailNote, shown.map((m) => [m.id, m.subject, m.snippet, m.at, m.label, m.q?.approvals?.length, m.q?.plan?.version, agentName(m.bot)])]);
+    if (key === ui.mailListKey || (typing && ui.mailListKey)) return;
+    ui.mailListKey = key;
+    ui.mailReadKey = null;
+    const card = (m) => {
+      const node = h("section", { class: `inboxcard ${ui.mailOpen === m.id ? "open" : ""}`, id: `inbox-${m.id.replace(/[^\w-]/g, "_")}`, style: m.bot ? botStyle(m.bot) : "" });
+      const act = (fn) => attempt(async () => (await fn(), await refresh()), node);
+      const put = () => mailMark([m.id], { archived: true, read: true });
+      const meta = [who(m), m.q && m.kind === "need" ? `for “${m.q.title}”` : ""].filter(Boolean).join(" · ");
+      let title = m.subject.replace(/^(Approval needed|Plan to approve|Needs your answer before starting|To review|Ready for your review|Did not pass its check|Could not finish|Stopped at its budget|Suggested change|Table change|Proposal|Reminder): /, "");
+      let body;
+      let reply = null;
+      if (m.kind === "need" && m.need.kind === "approval") {
+        const ap = m.need.approval;
+        title = stepWords(ap).ask;
+        body = approvalAsk(ap, { who: who(m), decide: (decision) => act(() => api("POST", `conversations/${m.q.id}/approvals/${ap.id}`, { decision })), extra: h("button", { class: "plain link small", onclick: () => go("quest", m.q.id) }, "Open the task") });
+        body.querySelector(".askcardhead")?.remove();
+      } else {
+        const parts = readMail(m);
+        body = parts[3];
+        reply = parts[4] ?? null;
+      }
+      fill(
+        node,
+        h("div", { class: "inboxcardtop" }, m.bot ? keycap(m.bot, 28, "", m.bot.type) : h("span", { class: "sysavatar", "aria-hidden": "true" }, "T"), h("div", { class: "grow" }, h("span", { class: `inboxkind ${m.label}` }, waitingKind(m)), h("b", {}, title), h("span", { class: "note small" }, meta)), h("span", { class: "note small inboxwhen" }, shortWhen(m.at))),
+        h("div", { class: "inboxcardbody" }, body, reply),
+        // A problem with nothing left to decide can be put away.
+        m.label === "failed" || m.kind === "task" ? h("div", { class: "inboxcardfoot" }, h("span", { class: "grow" }), h("button", { class: "plain link small", title: "Move it to Done. The task and its work are kept.", onclick: put }, "Put away")) : null,
+      );
+      return node;
+    };
+    const working = all.filter((m) => m.label === "working").sort(newest).slice(0, 5);
+    fill(
+      ui.mailList,
+      ui.mailNote ? h("div", { class: "banner error" }, ui.mailNote) : null,
+      shown.length
+        ? shown.map(card)
+        : [
+            h("div", { class: "inboxcalm" }, h("span", { class: "inboxcalmmark", "aria-hidden": "true" }, "✓"), h("b", {}, "Nothing is waiting on you."), h("span", { class: "note" }, working.length ? `Your team is working on ${working.length === 1 ? "1 thing" : `${working.length} things`}. A number appears on Inbox when one needs your yes.` : "When an agent needs your yes, it shows here.")),
+            working.length ? h("div", { class: "inboxrows calmrows" }, working.map((m) => h("button", { class: "plain inboxrow", onclick: () => ((ui.mailTab = "updates"), (ui.mailOpen = m.id), renderInbox()) }, m.bot ? keycap(m.bot, 22, "working", m.bot.type) : null, h("span", { class: "grow" }, h("b", {}, m.subject), h("span", { class: "note small" }, `${who(m)} · working`))))) : null,
+          ],
+    );
+    ui.mailNote = null;
+    fill(ui.mailRead);
+    if (ui.mailJump && ui.mailOpen) ui.mailList.querySelector(".inboxcard.open")?.scrollIntoView({ block: "nearest" });
+    ui.mailJump = false;
+    return;
+  }
+
+  // ----- updates, done and search: a list on the left, the message on the right -----
+  ui.mailJump = false;
+  const wide = window.matchMedia("(min-width: 900px)").matches;
+  let open = shown.find((m) => m.id === ui.mailOpen) ?? null;
+  if (!open && wide && shown.length) open = shown[0];
+  const row = (m) =>
+    h(
+      "button",
+      { class: `plain inboxrow ${isUnread(m) ? "unread" : ""} ${open?.id === m.id ? "open" : ""}`, style: m.bot ? botStyle(m.bot) : "", onclick: () => openMail(m) },
+      m.bot ? keycap(m.bot, 22, m.label === "working" ? "working" : "", m.bot.type) : h("span", { class: "sysavatar", "aria-hidden": "true" }, "T"),
+      h("span", { class: "grow" }, h("b", {}, m.subject), h("span", { class: "note small" }, [who(m), waitsOnYou(m) ? "waiting on you" : m.label === "working" ? "working" : "", shortWhen(m.at)].filter(Boolean).join(" · "))),
+    );
+  const listKey = JSON.stringify([ui.mailNote, tab, words, open?.id, shown.map((m) => [m.id, m.subject, m.at, m.label, isUnread(m), agentName(m.bot)])]);
+  if (listKey !== ui.mailListKey) {
+    ui.mailListKey = listKey;
+    const empty = words.length ? "Nothing matches that search." : tab === "updates" ? "No updates yet. When your team finishes or reports on work, it shows here." : "Nothing is put away yet. Press Looks good on an update to move it here.";
+    fill(ui.mailList, ui.mailNote ? h("div", { class: "banner error" }, ui.mailNote) : null, words.length ? h("p", { class: "note small" }, `${shown.length} result${shown.length === 1 ? "" : "s"} across the Inbox`) : null, shown.length ? h("div", { class: "inboxrows" }, shown.map(row)) : h("div", { class: "inboxcalm" }, h("span", { class: "note" }, empty)));
+  }
+  ui.mailNote = null;
+  ui.inbox.classList.toggle("reading", Boolean(open && ui.mailOpen));
+
+  // The open message is kept as it is while a reply is being typed.
+  if (open && typing && ui.mailRead.dataset.id === open.id) return;
+  const readKey = JSON.stringify([open?.id, open?.at, open?.label, open?.snippet, open && markOf(open), open?.q?.approvals?.length, open?.q?.activity?.name, open?.q?.chain, open && agentName(open.bot)]);
   if (readKey === ui.mailReadKey && ui.mailRead.dataset.id === (open?.id ?? "")) return;
   ui.mailReadKey = readKey;
   ui.mailRead.dataset.id = open?.id ?? "";
-  fill(ui.mailRead, open ? readMail(open) : h("div", { class: "mailpick" }, h("b", {}, "Select a message to read it."), h("span", { class: "note small" }, `${all.filter((m) => !markOf(m).archived && !markOf(m).deletedAt && isUnread(m)).length} unread in your Inbox.`)));
+  if (!open) return fill(ui.mailRead);
+  if (isUnread(open) && wide) mailMark([open.id], { read: true });
+  const parts = readMail(open);
+  const put = markOf(open).archived;
+  fill(
+    ui.mailRead,
+    h(
+      "div",
+      { class: "inboxreadtools" },
+      h("button", { class: "plain small inboxback", onclick: () => ((ui.mailOpen = null), renderInbox()) }, "← Back"),
+      h("span", { class: "grow" }),
+      put
+        ? h("button", { class: "small", title: "Move it back to Updates", onclick: () => mailMark([open.id], { archived: false }) }, "Move back")
+        : h("button", { class: "small primary", title: "Move it to Done. The task and its work are kept.", onclick: () => ((ui.mailOpen = null), mailMark([open.id], { archived: true, read: true })) }, waitsOnYou(open) ? "Put away" : "Looks good"),
+    ),
+    parts.slice(1),
+  );
 }
 
 function openMail(m) {

@@ -1,23 +1,20 @@
 # Inbox
 
-The Inbox is where your agents write to you. It works like email. Every task you give becomes a message thread from the agent doing it, and anything that needs your decision arrives as a message too. The number next to **Inbox** in the left-hand menu counts your unread messages.
+The Inbox is your short list of decisions. Anything that needs your yes waits here, and you answer it right in the list. Reports from your team sit beside it, to read when you want. The number next to **Inbox** in the menu counts what is waiting on you.
 
 ## What you'll see
 
-**Folders on the left**, under the **Compose** button:
+**Three tabs across the top:**
 
-- **Inbox**: everything not archived or deleted.
-- **Saved**: messages you starred.
-- **Needs you**: everything waiting on you, in one place: steps to allow, plans to approve, questions an agent asked before starting, finished work to accept or send back, code changes to review, suggested page changes, proposed positions, problems and budget stops. Each one has its buttons right in the message.
-- **In progress**: tasks still being worked on.
-- **Archive**: messages you put away.
-- **Trash**: deleted messages, removed after 30 days.
+- **Waiting on you**: everything that needs your decision: steps to allow, plans to approve, questions an agent asked before starting, finished work to accept or send back, code changes to review, suggested page changes, proposed positions, reminders, problems and budget stops. Each one is a card with its buttons on it. The green number is how many there are.
+- **Updates**: reports and progress from your team. The grey number is how many you have not read. Nothing here needs you.
+- **Done**: what you have put away.
 
-**Across the top**: a search box ("Search mail: a name, a task, any word") and a sort menu (**Newest first**, **Oldest first**, **Unread first**, **Sender A to Z**).
+**Search**, on the right, looks across all three.
 
-**The list**: one row per message, with a star, the sender, the subject, the start of the text, a label (**Needs you**, **Problem** or **In progress**) and the time. Hover over a row for quick **Archive**, **Delete** and **Read**/**Unread** buttons.
+**Waiting on you** shows one card for each decision: a small label saying what kind it is, the question in plain words, who is asking and for which task, then the buttons. The newest is at the top. When nothing is waiting, the page says so and lists what your team is working on.
 
-**The open message**: the agent's full report, the cost, and buttons to answer or act.
+**Updates** and **Done** show a list on the left and the message you clicked on the right: the agent's full report, the cost, and a box to reply.
 
 ## Key ideas
 
@@ -40,78 +37,71 @@ Work handed between agents doesn't send you separate messages. Its progress show
 
 **Replying continues the work.** Replying to a finished task asks the agent to carry on, using its budget. You can't reply while it is still working.
 
-**Deleting a message never deletes the task.** Archive, Delete and Trash only tidy your Inbox. The task and its work stay on the Tasks page.
+**Putting a message away never deletes the task.** **Looks good** and **Put away** only move the message to **Done**. The task and its work stay on the Tasks page.
 
 ## How to…
 
-**Send a new task by message**
-1. Click **Compose**.
-2. Under **To**, choose a team (its lead shares the work out) or one agent.
-3. Write a **Subject** and the **Message**, saying what a good result looks like.
-4. Click **Send**. The work starts, or waits its turn if the agent is busy, and the reply arrives here.
-
-**Read a message**
-1. Click it in the list. It is marked read.
-2. Click **← Back** to return to the list.
+**Give a new task**
+1. Open **New** in the menu and ask there. The Inbox is for answers, not for starting work.
 
 **Answer an approval**
-1. Open the **Approval needed** message. It shows exactly what the agent wants to do.
-2. Click **Allow** or **Don't allow**, or **Open the task** to see more first. **Show the details** on the card opens the full step.
+1. On **Waiting on you**, find the card labelled **Needs your yes**. It says what the agent wants to do, in plain words.
+2. Click **Allow** or **Don't allow**, or **Open the task** to see more first. **Show the details** opens the full step.
+
+**Read an update**
+1. Open **Updates** and click a line. The report opens on the right and is marked read.
+2. Press **Looks good** to move it to **Done**, or leave it.
 
 **Reply to an agent**
-1. Open a finished task's message.
+1. Open a finished task's message under **Updates**.
 2. Write in the reply box and click **Send**, or press ⌘↵. The agent continues the task.
 
 **Continue a task that stopped at its budget**
-1. Open the message and reply "continue".
+1. On its card under **Waiting on you**, reply "continue".
 
 **Accept a suggested page change**
-1. Open the **Suggested change** message and read what would be added and removed.
+1. On the **Suggested change** card, read what would be added and removed.
 2. Click **Accept**, **Decline**, or **Open the page**. Nothing changes until you accept.
 
 **Answer a proposal for a new position**
-1. Open the **Proposal** message and read why the lead wants it.
+1. On the **Proposed position** card, read why the lead wants it.
 2. Click **Approve** or **Decline**. If you decline, you can say why, and the lead won't propose it again.
 
 **Raise a budget**
-1. Open the budget message and click **Raise my budget** (for one agent) or **Change the budget** (for all agents).
+1. On the budget card, click **Raise my budget** (for one agent) or **Change the budget** (for all agents).
 
 **See the cost or open the full task**
-1. In the open message, click **See the receipt** or **Open the task**.
+1. In the message, click **See the receipt** or **Open the task**.
 
-**Save, archive or delete**
-1. Click the star to save a message to **Saved**.
-2. Use **Archive** or **Delete** on the open message or the row.
-3. To act on several at once, tick their boxes and use the buttons above the list: **Archive**, **Delete**, **Mark read**, **Mark unread**, **Save**.
-4. **Mark all read** clears every unread message in the folder.
+**Put a problem away**
+1. A card for something that failed, with nothing left to decide, has **Put away** at the bottom. It moves the card to **Done**; the task is kept.
 
-**Restore or empty Trash**
-1. Open **Trash**, tick messages and click **Restore**, or **Delete forever**.
-2. **Empty Trash** removes everything in it for good. The tasks are kept.
+**Bring something back from Done**
+1. Open **Done**, click the message, and press **Move back**.
 
 **Rename an agent**
-1. Open one of its messages and click **Rename** next to its name.
+1. Open one of its messages under **Updates** and click **Rename** next to its name.
 2. Type a name and click **Save**. **Use job title** goes back to its job title.
 
 ### Approve a plan, answer a question, or accept work, from the Inbox
 
-1. Open **Needs you**.
+1. Open **Waiting on you**.
 2. **Plan to approve:** read the steps and the estimate, then press **Approve the plan**, or write what should change and press **Ask for changes**.
 3. **Needs your answer before starting:** read what the agent needs, write your answer and press **Send and start**. When what is missing is an ability the agent does not have, such as searching the web, the message says so and shows **Allow and start**: one press switches that ability on for the agent (the same as ticking it on the agent's page under **Agents**) and starts the task. Running commands, changing files and using a browser are never offered this way; you give those on the agent's page.
 4. **To review:** read the report, then press **Accept**, or write what should change and press **Send back with this comment**.
 
 ## Tips
 
-- Check **Needs you** first. It holds everything waiting on you.
-- Search looks in every folder except Trash.
-- Archive finished messages you've read to keep your Inbox short. They are still searchable.
+- **Waiting on you** is the only tab that needs you. If its number is gone, you are up to date.
+- Search looks across all three tabs.
+- Press **Looks good** on updates you have read to keep the list short. They stay findable under **Done**.
 
 ## If something goes wrong
 
 - **A message says the agent "left no report"**: open the task and look at the **Conversation** tab to see what it did.
 - **"Could not finish"**: the reason is in a red banner. Fix it, then retry the task from the Tasks page, or reply to ask the agent to try again.
 - **Parts of a task stopped**: the message says how many and whether the task reached its budget. The receipt shows which parts and what each cost. Reply "continue", or raise the budget per task in Settings.
-- **"Task #12 is waiting its turn"** after Compose: the agent is busy. It starts when it is free, highest priority first.
+- **"Task #12 is waiting its turn"** after giving a task: the agent is busy. It starts when it is free, highest priority first.
 
 ## Related guides
 
