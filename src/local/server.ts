@@ -271,7 +271,7 @@ async function runJob(job: Job): Promise<{ conversationId?: string; taskId?: str
   }
   if (briefing && job.owner && org && org.members.some((m) => m.bot === job.owner)) {
     // The agent's report is the briefing: it goes to the Inbox as an update, with nothing for the owner to review.
-    const item = work.create(org, { title: `${briefing.name} · ${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}`, description: briefingPrompt(briefing, job.topic ?? ""), owner: job.owner, createdBy: "owner", review: briefing.review === true });
+    const item = work.create(org, { title: `${briefing.name} · ${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}`, description: briefingPrompt(briefing, job.topic ?? ""), owner: job.owner, createdBy: "owner", review: briefing.review === true, direct: true });
     await jobs.update(job.id, { lastTaskId: item.id, lastConversationId: null });
     work.kick();
     return { taskId: item.id };

@@ -145,6 +145,8 @@ function db(orgId: string): DatabaseSync {
   goalsDb(orgId);
   // Pausing: when a task was paused, and which agents are paused (with the runs a pause stopped, to carry on later).
   if (!(d.prepare("select 1 from pragma_table_info('work_items') where name = 'paused'").get())) d.exec("alter table work_items add column paused text");
+  // A task that is to start straight away, with no plan to approve and no questions first (a briefing the owner switched on).
+  if (!(d.prepare("select 1 from pragma_table_info('work_items') where name = 'direct'").get())) d.exec("alter table work_items add column direct integer not null default 0");
   d.exec("create table if not exists agent_pauses (bot text primary key, at text not null, stopped text not null default '[]')");
   ready.add(d);
   return d;
@@ -336,7 +338,7 @@ let again = false;
 
 export const work = {
   /** A new task. It starts as soon as its owner is free, in priority order. */
-  create(org: Org, input: { title?: unknown; description?: unknown; owner: string; priority?: unknown; parent?: unknown; createdBy: string; review?: boolean; project?: string | null; handoff?: { conversation: string; by: string; text: string }; goal?: unknown; projectId?: unknown }): WorkItem {
+  create(org: Org, input: { title?: unknown; description?: unknown; owner: string; priority?: unknown; parent?: unknown; createdBy: string; review?: boolean; direct?: boolean; project?: string | null; handoff?: { conversation: string; by: string; text: string }; goal?: unknown; projectId?: unknown }): WorkItem {
     const d = db(org.id);
     const crew = bots();
     if (!crew.has(input.owner)) throw new Error("Choose an agent for the task.");
@@ -350,8 +352,8 @@ export const work = {
     const goal = input.goal ? goals.get(org, String(input.goal)).id : input.projectId ? null : (parent?.goal ?? null);
     const number = ((d.prepare("select max(number) n from work_items").get() as { n: number | null }).n ?? 0) + 1;
     const id = newId();
-    d.prepare("insert into work_items (id, number, title, description, priority, owner, parent, created_by, review, state, project, handoff, goal, project_id, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?)").run(
-      id, number, title, String(input.description ?? "").trim().slice(0, 20_000), priority, input.owner, parent?.id ?? null, input.createdBy, input.review === false ? 0 : 1, input.project ?? null, input.handoff ? JSON.stringify(input.handoff) : null, goal, projectId, now(), now(),
+    d.prepare("insert into work_items (id, number, title, description, priority, owner, parent, created_by, review, direct, state, project, handoff, goal, project_id, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'todo', ?, ?, ?, ?, ?, ?)").run(
+      id, number, title, String(input.description ?? "").trim().slice(0, 20_000), priority, input.owner, parent?.id ?? null, input.createdBy, input.review === false ? 0 : 1, input.direct ? 1 : 0, input.project ?? null, input.handoff ? JSON.stringify(input.handoff) : null, goal, projectId, now(), now(),
     );
     audit({ actor: input.createdBy === "owner" ? "owner" : input.createdBy, actorName: nameOf(org, input.createdBy, crew), kind: "task", action: `Created task #${number} for the ${nameOf(org, input.owner, crew)}`, detail: title });
     return this.get(org, id);
@@ -682,7 +684,7 @@ export const work = {
           // Taken off the queue before the run starts, so nothing starts it twice.
           d.prepare("update work_items set state = 'started', updated_at = ? where id = ?").run(now(), row.id);
           try {
-            const quest = await quests.start({ bot, text: briefOf(org, row, rows), title: row.title, project: row.project ?? undefined, parent: handoff ? { id: handoff.conversation, by: handoff.by } : undefined, item: row.id });
+            const quest = await quests.start({ bot, text: briefOf(org, row, rows), title: row.title, project: row.project ?? undefined, parent: handoff ? { id: handoff.conversation, by: handoff.by } : undefined, item: row.id, direct: Boolean((row as { direct?: number }).direct) });
             d.prepare("update work_items set quest = ?, updated_at = ? where id = ?").run(quest.id, now(), row.id);
             d.prepare("update work_comments set delivered = 1 where item = ? and author = 'owner'").run(row.id);
           } catch (err) {
