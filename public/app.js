@@ -1896,6 +1896,8 @@ function mailMessages() {
   const actionFor = new Set(needs.filter((n) => n.q && ACTION.has(n.kind)).map((n) => n.q));
   for (const q of own) {
     if (actionFor.has(q)) continue;
+    // A watching briefing that found nothing new answers with two words, and the owner is not disturbed.
+    if (!isLive(q) && /^\W*NOTHING NEW\W*$/i.test(String(q.said ?? ""))) continue;
     const live = isLive(q);
     const failed = q.status === "failed" || q.status === "budget" || (q.check && !q.check.passed) || (!live && q.chain?.stopped > 0);
     const label = q.approvals?.length || q.status === "asking" ? "needs" : failed ? "failed" : live ? "working" : "done";
@@ -6879,6 +6881,7 @@ function briefingGallery(host, data, col) {
       h("p", { class: "note small" }, `${b.when} · ${b.kind === "free" ? "Free: uses no AI model" : "Uses your AI model, usually a few cents each time"}${on && b.sender ? ` · sent by the ${b.sender.title}` : ""}`),
       b.needs?.length ? h("p", { class: `note small ${b.ready ? "" : "briefneeds"}` }, b.ready ? `Reads ${b.needs.filter((n) => n.connected).map((n) => n.name).join(" and ")}` : `Needs ${b.needs.map((n) => n.name).join(" or ")}`) : null,
       b.review ? h("p", { class: "note small" }, "Drafts for you; nothing is sent. It waits for your yes.") : null,
+      b.quiet ? h("p", { class: "note small" }, "Quiet unless there is something to say.") : null,
       on && b.ask?.value && !b.ask.list ? h("p", { class: "note small" }, `Watching: ${b.ask.value}`) : null,
       h(
         "div",
@@ -6916,6 +6919,7 @@ function briefingGallery(host, data, col) {
 
 /** The times a briefing can arrive, in plain words, as the routine's timing. */
 const BRIEF_TIMES = [
+  ["every 30m", "Every 30 minutes"], ["every 1h", "Every hour"], ["0 6 * * 1-5", "Weekdays at 6:00"], ["0 9 * * *", "Every day at 9:00"], ["0 17 * * 1-5", "Weekdays at 5:00 pm"], ["0 9 * * 0", "Sundays at 9:00"], ["0 9 * * 5", "Fridays at 9:00"],
   ["0 7 * * *", "Every day at 7:00"], ["30 7 * * *", "Every day at 7:30"], ["0 8 * * *", "Every day at 8:00"], ["0 17 * * *", "Every day at 5:00 pm"], ["0 18 * * *", "Every day at 6:00 pm"],
   ["30 7 * * 1-5", "Weekdays at 7:30"], ["0 8 * * 1-5", "Weekdays at 8:00"], ["0 9 * * 1-5", "Weekdays at 9:00"], ["30 17 * * 1-5", "Weekdays at 5:30 pm"],
   ["0 8 * * 1", "Mondays at 8:00"], ["0 9 * * 1", "Mondays at 9:00"], ["0 9 * * 2", "Tuesdays at 9:00"], ["0 9 * * 4", "Thursdays at 9:00"], ["0 10 * * 5", "Fridays at 10:00"], ["0 15 * * 5", "Fridays at 3:00 pm"], ["0 16 * * 5", "Fridays at 4:00 pm"], ["0 9 * * 6", "Saturdays at 9:00"],
@@ -6970,7 +6974,7 @@ async function briefingOn(b) {
       fact("Can it change anything?", b.kind === "free" ? "No. It only reads what Talqava holds." : b.review ? "No. It drafts; you decide what is sent." : "No. It reads and writes to you."),
       b.grants?.length ? fact("Also", `Lets your ${b.sender.title} ${b.grants.map((g) => (g === "web" ? "search the web" : g === "connectors" ? "use your connected services" : g)).join(" and ")}`) : null,
     ),
-    h("p", { class: "note small" }, b.kind === "free" && b.ask?.list ? "It writes to you only when something is near; otherwise it stays quiet." : "The first one arrives now, so you can see it."),
+    h("p", { class: "note small" }, b.quiet ? "It writes to you only when there is something to say; otherwise it stays quiet." : b.review ? "The first one arrives now. Reply to it with numbers to act: 1 send, 2 skip." : "The first one arrives now, so you can see it."),
   );
   const got = await libDialog(b.name, body, [["Switch on", () => ({ topic: topic?.value.trim() ?? "" }), true]]);
   if (!got) return false;

@@ -11,20 +11,24 @@ Routines let work happen by itself at set times: a morning news digest every wee
 
 ## Briefings
 
-A briefing is a routine that is already written: a report an agent sends to your Inbox. **Start a briefing**, at the top of this page, lists 34 of them in seven groups. Click a group's name to open it.
+A briefing is a routine that is already written: a report an agent sends to your Inbox. **Start a briefing**, at the top of this page, lists 50 of them in seven groups. Click a group's name to open it.
 
-- **Your own work** (free): Monday plan, Friday wrap-up, End-of-day wrap, Weekly goals check. Built from your tasks and goals.
-- **The outside world** (needs only web search): Morning news, Competitor watch, Rules and deadlines, Supplier price watch, Review replies, Blog post idea, Learning digest.
-- **Money**: Overdue invoices, Bills due this week, Weekly cash check, Subscription watch and Month-end pack read Xero. Yesterday's sales reads Square, Shopify or WooCommerce.
-- **Customers**: Inbox triage (Gmail or Outlook), Unanswered customers (Zendesk or Freshdesk), New leads (HubSpot, Pipedrive or Typeform), Follow-up reminders (HubSpot or Pipedrive), Quiet customers (Shopify, Square or WooCommerce).
+- **Your own work**: Monday plan, Friday wrap-up, End-of-day wrap, Weekly goals check and Agenda for each project are free, built from your tasks and goals. Weekly roundup of your chats and Meeting notes to actions use your AI model.
+- **The outside world**: Morning news, Competitor watch, Rules and deadlines, Supplier price watch, Review replies, Blog post idea, Learning digest, Mentions watch, New video digest, Search ranking check, Idea log and Trending projects digest need only web search. **Website down alert** and **Page change watch** are free: Talqava looks at the address itself, with no AI model.
+- **Money**: Overdue invoices, Bills due this week, Weekly cash check, Subscription watch and Month-end pack read Xero. Yesterday's sales reads Square, Shopify or WooCommerce. Receipts to a list reads Gmail or Outlook.
+- **Customers**: Inbox triage (Gmail or Outlook), Unanswered customers (Zendesk or Freshdesk), New leads (HubSpot, Pipedrive or Typeform), Follow-up reminders (HubSpot or Pipedrive), Quiet customers (Shopify, Square or WooCommerce), New signup prospecting and Proposal first draft (HubSpot or Pipedrive), After-hours holding replies (Gmail, Outlook, Zendesk, Freshdesk or Telegram).
 - **Marketing**: Newsletter draft and Social posts for the week (from what Talqava knows of your business), Campaign results (Mailchimp or Brevo).
-- **Running the business**: Meeting prep, Tomorrow's day and Travel check (Google Calendar), Stock running low (Shopify, WooCommerce or Square), Open issues digest (GitLab, Jira, ClickUp, Asana, Trello or Todoist), Files tidy-up (free).
+- **Running the business**: Meeting prep, Tomorrow's day and Travel check (Google Calendar), Stock running low (Shopify, WooCommerce or Square), Open issues digest (GitLab, Jira, ClickUp, Asana, Trello or Todoist), Merge requests waiting (GitLab), Weekly review and plan (Google Calendar), Files tidy-up (free).
 - **People and renewals** (free): Renewals coming up and Birthdays and anniversaries work from a list you type; Policy review reminder looks at your Workspace pages.
 
 **Three kinds.**
 - **Free** briefings are put together by Talqava from what it already holds (your tasks, goals, files, or a list you typed). They use no AI model and cost nothing. Renewals, birthdays, the files tidy-up and the policy reminder write to you only when there is something to say.
 - **Researched** briefings are done by an agent with your AI model, usually for a few cents each time. They report; they change nothing.
-- **Drafting** briefings (Overdue invoices, Inbox triage, Review replies, Quiet customers, Newsletter draft, Social posts) write drafts for you. They never send, post or change anything. They arrive under **Waiting on you**, for you to read, accept or send back.
+- **Drafting** briefings (Overdue invoices, Inbox triage, Review replies, Quiet customers, Newsletter draft, Social posts, Meeting notes to actions, Weekly review and plan, New signup prospecting, After-hours holding replies, Proposal first draft) write drafts for you. They never send, post or change anything by themselves. They arrive under **Waiting on you**, for you to read, accept or send back.
+
+**Answer a drafting briefing by number.** Its items are numbered 1, 2, 3. Write what to do with each in the box on its card, for example `1 send, 2 skip, 3 make it shorter`, and press **Send back with this comment**. The agent does exactly that for those numbers. Anything that sends or changes something still asks for your yes.
+
+**Quiet unless there is something to say.** A card marked **Quiet** writes to you only when it matters: Website down alert (when your site stops loading, and again when it is back), Page change watch (when the page's words change, showing what was added and removed), Mentions watch, New video digest and Merge requests waiting (when there is something new), and the renewals, birthdays, tidy-up and policy reminders. So that silence never hides a fault, the two address watchers also write once a week to say they are still watching, and say so if the address cannot be read.
 
 **Switch one on**
 1. Press **Switch on** on its card. A card that says **Needs Xero** (or another service) shows **Connect … first** instead; connect the service, then come back.
