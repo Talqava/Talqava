@@ -113,3 +113,8 @@ test("slides go out as a PowerPoint file and come back: titles, bullets with the
   assert.deepEqual(read[0], { title: "First shown", body: "- **Bold point**\n  - Under it\n\n| A | B |\n| --- | --- |\n| 1 | 2 |", notes: "Say hello." });
   assert.deepEqual(read[1], { title: "Second in file", body: "A subtitle", notes: "" });
 });
+
+test("a chart line on a slide goes into a PowerPoint file as words, not as the raw line", () => {
+  const back = F.fromPptx(F.toPptx("Deck", [{ title: "Sales", body: "- Up again\n\n!chart pg_abc123 Sales by month", notes: "" }]));
+  assert.equal(back.slides[0].body, "- Up again\n(Chart: Sales by month)");
+});

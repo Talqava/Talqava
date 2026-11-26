@@ -96,6 +96,8 @@ Under the grid, press **+ Add a sheet**, **Rename** or **Remove this sheet**. Cl
 4. Press **Present** to show them full screen. Arrow keys or a click move on; **Esc** leaves.
 5. **Print or save as PDF** puts one slide on each page.
 
+To put a chart on a slide, press **Add a chart from a sheet** under the slide's text, choose the sheet and the chart, and press **Add to the slide**. The chart is read from the sheet each time the slide is shown, so it always matches the sheet's numbers. In a PowerPoint file it goes as a line of words naming the chart.
+
 To have an agent draft slides, use **Or ask an agent to draft them** on the Slides home screen: choose a document, sheet or note to build from, or describe the subject. An agent's change to slides you already have waits for you: **Look at them**, then **Accept** or **Decline**.
 
 ### Start from a template
@@ -184,7 +186,7 @@ Every file's side panel has the same parts in the same order: who can see it, ho
 
 ## What is not built yet
 
-- Slides: a chart linked to a sheet, pictures, and layouts other than a title with text.
+- Slides: pictures, and layouts other than a title with text.
 - Notes: voice memos written out, and searching the words in photos.
 
 ## Tips

@@ -2025,3 +2025,5 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .ihero .packicon.big { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 11px; font-size: 20px; font-weight: 700; }
 .checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px 14px; }
 .checks .check { display: flex; align-items: flex-start; gap: 8px; font-weight: 400; }
+.slidechart { margin: 0.4em 0; }
+.slidechart figcaption { margin-bottom: 0.3em; }
