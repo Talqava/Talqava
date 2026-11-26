@@ -1,6 +1,6 @@
 # AI models
 
-AI models is where you connect the AI services your agents think with: Claude, OpenAI, Google Gemini, Mistral, DeepSeek, Azure, Amazon Bedrock, Google Vertex AI, Portkey, a LiteLLM gateway and more than 20 others, or free models that run on your own computer. You pick a service, paste its key, and Talqava checks it and finds its models. Open it from **Integrations → AI models**.
+AI models is where you connect the AI services your agents think with: Claude, OpenAI, Google Gemini, Mistral, DeepSeek, Azure, Amazon Bedrock, Google Vertex AI, Portkey, a LiteLLM gateway and more than 20 others, or free models that run on your own computer. You pick a service, paste its key, and Talqava checks it and finds its models. Open it from **Connections → AI models**.
 
 ## What you'll see
 
@@ -13,7 +13,7 @@ AI models is where you connect the AI services your agents think with: Claude, O
 
 - **An AI service** is the company (or program on your computer) whose model does the thinking for your agents. Talqava itself is not an AI; it organizes the work.
 - **Why connect more than one.** Your whole team uses one model, but any agent can use a different one: a strong model for managers, a cheaper one for routine work. A second service also gives you backups.
-- **Backups keep work going.** If your main service is down, busy or out of credit, the first backup answers instead, then the next. Each switch is noted in the **Audit log**.
+- **Backups keep work going.** If your main service is down, busy or out of credit, the first backup answers instead, then the next. Each switch is noted in the **Activity log**.
 - **Keys stay on your computer.** A key is checked with its service before it is saved, kept on this computer, and only ever sent to that service. Agents never see it.
 - **Local models are free and private.** Programs such as Ollama or LM Studio run models on your own computer. Nothing leaves it, but they are usually slower and less capable than paid services, and you must download a model in the program before Talqava can use it.
 - **Prices are estimates.** Prices, sizes and whether a model can use tools come from two public lists of models, OpenRouter's and the LiteLLM project's, which need no account and are refreshed once a day. Your service's bill is the real figure.
@@ -22,7 +22,7 @@ AI models is where you connect the AI services your agents think with: Claude, O
 
 ### Connect an AI service
 
-1. Open **Integrations** and choose **AI models**.
+1. Open **Connections** and choose **AI models**.
 2. Find the service in its group and press **Connect**. A window opens with a link to where you get a key.
 3. Get a key from that service's website, copy it, and paste it in.
 4. Press **Connect**. Talqava says **Checking with…**, checks the key with the service and finds its models.
@@ -52,7 +52,7 @@ Agents work through tools, so choose a model that **Works for agents**. Agents y
 
 **A model for a group.** On the Organization page, open a group and choose **Model for its positions**: for example a strong model for leadership and a cheaper one for a whole department. The choices are your team's model and your backup models. An agent with a model of its own keeps it.
 
-**More than one key for a service.** Press **+ Key** beside a connected service to add another key for it (up to five). The keys take turns, and when one reaches the service's rate limit, the others keep going. With only one key, Talqava waits up to 20 seconds for the limit to pass; for a longer wait, your backup model takes over. Each switch or wait is noted in the audit log.
+**More than one key for a service.** Press **+ Key** beside a connected service to add another key for it (up to five). The keys take turns, and when one reaches the service's rate limit, the others keep going. With only one key, Talqava waits up to 20 seconds for the limit to pass; for a longer wait, your backup model takes over. Each switch or wait is noted in the activity log.
 
 For models on your computer, Talqava also shows each model's size and whether it fits in your computer's memory:
 - **Too big for this computer's memory**: it would be very slow or not run. Choose a smaller one (models with 4b or 3b in the name are small). Talqava asks before using it.
@@ -108,7 +108,7 @@ Without prices, only the step budget can stop a task. Set the context size to wh
 
 ## Related guides
 
-- [Integrations](integrations.md)
+- [Connections](integrations.md)
 - [Settings](settings.md) (testing a model, cost saving, approvals and budgets)
-- [Audit log](audit-log.md)
+- [Activity log](audit-log.md)
 - [Getting started](getting-started.md)

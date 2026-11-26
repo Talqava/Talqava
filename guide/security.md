@@ -28,10 +28,10 @@ Security is where you decide who can open Talqava, how they prove who they are, 
 | **Owner** | Everything, including people and security. There is one owner. |
 | **Administrator** | Everything except changing or removing the owner. |
 | **Manager** | Gives and approves work; changes the chart, budgets, routines and the Marketplace. No settings, connections or people. |
-| **Member** | Gives tasks, chats, approves steps, and edits pages, documents, notes and sheets. Cannot change the chart, budgets, settings or connections, or read the audit log. |
-| **Auditor** | Reads everything, including the audit log and who has access. Changes nothing. |
+| **Member** | Gives tasks, chats, approves steps, and edits pages, documents, notes and sheets. Cannot change the chart, budgets, settings or connections, or read the activity log. |
+| **Auditor** | Reads everything, including the activity log and who has access. Changes nothing. |
 
-These limits are enforced by the app itself. A person who tries something their role does not allow is told so, and the attempt is written in the audit log.
+These limits are enforced by the app itself. A person who tries something their role does not allow is told so, and the attempt is written in the activity log.
 
 **A second step.** With a second step on, signing in needs a 6-digit code from an authenticator app on the person's phone as well as the password. A stolen password alone is then not enough.
 
@@ -39,7 +39,7 @@ These limits are enforced by the app itself. A person who tries something their 
 
 **Wrong passwords lock the account.** After 5 wrong passwords an account is locked for 15 minutes. An administrator can set a new password to unlock it sooner.
 
-**The audit log names people.** Once people are set up, each entry in the **Audit log** says who did it and their role.
+**The activity log names people.** Once people are set up, each entry in the **Activity log** says who did it and their role.
 
 **Sensitivity levels decide what may reach an AI service.** Every page, document, note, sheet and Library document has a level: **Public**, **Internal** (the starting level), **Confidential** or **Restricted**. Under **Sensitive information** you decide, for each level, where it may be sent: any connected AI service, only approved services, only models on this computer, or no AI model at all. An agent whose AI service may not receive a level is not given those items; it is told why, so it says so in its report, and the attempt is logged. A **Restricted** item is also hidden from every agent you have not named on it. Until you change these rules, every level may go to any service, as before.
 
@@ -115,7 +115,7 @@ A page made inside a sensitive page starts at the same level. Tables follow thei
 1. Open **Security** and find **Sensitive information**.
 2. In the column **May leave through connected services**, untick a level, for example **Confidential**.
 
-From then on, a task that has read anything of that level sends nothing out for the rest of that task: it makes no change in a connected service or on your website, sends no data to a web address, types nothing into a web page and uses no connector you added. It can still read and do its work, and it puts what it would have sent in its report so you can send it yourself. Each attempt is in the audit log. Public information may always leave.
+From then on, a task that has read anything of that level sends nothing out for the rest of that task: it makes no change in a connected service or on your website, sends no data to a web address, types nothing into a web page and uses no connector you added. It can still read and do its work, and it puts what it would have sent in its report so you can send it yourself. Each attempt is in the activity log. Public information may always leave.
 
 The rule follows the whole task, not single sentences, because once an agent has read a page nothing can tell which words of a message came from it. Two limits: Memory is not counted as something a task has read, and a colleague the task hands work to starts fresh, so keep sensitive pages limited to the agents who need them.
 
@@ -176,7 +176,7 @@ It shows where things went and how much, never the content itself, and it is kep
 1. Under **Alerts and reviews**, press **Start a review**. Talqava lists every person and every agent with what each can do.
 2. For each line, press **Still right** or **Needs a change**, and add a note if you like.
 3. Make any changes on the usual pages (**People**, or the agent's page); marking a line only records your answer.
-4. Press **Finish the review**. It is recorded in the audit log, and the next one is due in 90 days.
+4. Press **Finish the review**. It is recorded in the activity log, and the next one is due in 90 days.
 
 ### Send events to your monitoring system
 
@@ -197,7 +197,7 @@ It shows where things went and how much, never the content itself, and it is kep
 
 From then on, when one administrator changes people, roles, sign-in rules, agent guardrails, sensitive-information rules, retention, backups or where the audit record is sent, the change does not happen yet. It appears for the other administrators under **Security changes waiting for a second administrator**, where a different administrator presses **Approve** (the change is then made) or **Decline**. The person who asked can **Withdraw** it.
 
-A waiting change lapses after a day or when Talqava restarts, and what it holds (such as a new password) is never written to disk while it waits. Switching this rule off also needs a second administrator. Asking, approving and declining are all in the audit log.
+A waiting change lapses after a day or when Talqava restarts, and what it holds (such as a new password) is never written to disk while it waits. Switching this rule off also needs a second administrator. Asking, approving and declining are all in the activity log.
 
 ### Have your company directory add and remove people (directory sync)
 
@@ -208,9 +208,9 @@ Use this when Talqava runs where your identity provider can reach it over the ne
 3. Copy the token (it is shown once) and the address. In your provider (Microsoft Entra ID, Okta or another that speaks SCIM 2.0), paste the address as the tenant URL and the token as the secret token.
 4. Assign people to Talqava in your provider.
 
-From then on, people your provider assigns are added here and sign in with the company account. A person removed or disabled there is switched off here: they are signed out at once and cannot sign in. The owner's account is never changed by the directory. Every change is in the audit log as "The company directory".
+From then on, people your provider assigns are added here and sign in with the company account. A person removed or disabled there is switched off here: they are signed out at once and cannot sign in. The owner's account is never changed by the directory. Every change is in the activity log as "The company directory".
 
-**Roles from groups.** When your provider also sends groups, they appear under **Roles from the directory's groups**, and you choose the role each one gives: Member, Auditor, Manager or Administrator. A person in several groups gets the highest role among them; someone in no group that gives a role gets the role for new people. Until you choose a role for at least one group, groups change nobody's role. A changed role signs the person out so that it takes effect, and is in the audit log. A group never gives the owner's role.
+**Roles from groups.** When your provider also sends groups, they appear under **Roles from the directory's groups**, and you choose the role each one gives: Member, Auditor, Manager or Administrator. A person in several groups gets the highest role among them; someone in no group that gives a role gets the role for new people. Until you choose a role for at least one group, groups change nobody's role. A changed role signs the person out so that it takes effect, and is in the activity log. A group never gives the owner's role.
 
 This has not yet been tried against a real provider.
 
@@ -234,7 +234,7 @@ This needs at least two people under **People and sign-in**.
 2. Tick the people who may approve that kind. With nobody ticked, anyone who may approve today still may.
 3. Tick **Two people must approve** to make the step wait until a second, different person approves. Either of them can refuse it.
 
-Such a step is approved each time, never "always". The first approval of a two-person step is in the audit log, and it lapses after a day or when Talqava restarts. A named approver whose account is gone is not waited for. These rules cover steps that already ask you; whether a step asks is set by **When an agent wants to change something** and on each agent. Talqava has no step that moves money.
+Such a step is approved each time, never "always". The first approval of a two-person step is in the activity log, and it lapses after a day or when Talqava restarts. A named approver whose account is gone is not waited for. These rules cover steps that already ask you; whether a step asks is set by **When an agent wants to change something** and on each agent. Talqava has no step that moves money.
 
 ### Let only approved Marketplace items be added
 
@@ -247,7 +247,7 @@ Such a step is approved each time, never "always". The first approval of a two-p
 1. Under **Agent guardrails**, type an amount in **Most one task may spend** or a number of minutes in **Longest one task may run**.
 2. Leave a box empty for no extra cap. An agent with a lower budget of its own keeps it.
 3. To limit the whole organization, type an amount in **Most all tasks together may spend in a day**. When today's tasks have spent it, nothing more starts until the next day or until you raise it; a task already running is stopped when it reaches what is left. Chats with the assistant are not counted towards it, but they are held back too once it is reached.
-4. To have an agent paused when it keeps getting stuck, type a number in **Pause an agent after its work got stuck this many times in an hour**. Stuck means a task was stopped for repeating the same step or failing at every step. The pause is in the audit log and under **Refused by these rules**; nothing is lost, and you resume the agent from **Tasks**.
+4. To have an agent paused when it keeps getting stuck, type a number in **Pause an agent after its work got stuck this many times in an hour**. Stuck means a task was stopped for repeating the same step or failing at every step. The pause is in the activity log and under **Refused by these rules**; nothing is lost, and you resume the agent from **Tasks**.
 5. To stop agents deleting in connected services altogether, set **Deleting in a connected service** to **Never**. Otherwise a deletion always asks you first.
 
 ### Stop every agent at once
@@ -284,6 +284,6 @@ Such a step is approved each time, never "always". The first approval of a two-p
 
 ## Related guides
 
-- [Audit log](audit-log.md)
+- [Activity log](audit-log.md)
 - [Organization](organization.md)
 - [Settings](settings.md)

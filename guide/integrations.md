@@ -1,10 +1,10 @@
-# Integrations
+# Connections
 
-Integrations connect Talqava to the tools your business already uses, so your agents can work where the work is. Today there are six: **AI models** for the AI services your agents think with, **OpenRouter** for hundreds of models through one account, **Git and GitHub** for code and documents kept in repositories, **Connectors and AI apps** for using your team from Claude and for giving agents tools from other services, **API keys for other services**, and **Langfuse** for seeing your agents' costs in Langfuse if you use it. Each one says plainly what agents can and cannot do with it.
+Connections connect Talqava to the tools your business already uses, so your agents can work where the work is. Today there are six: **AI models** for the AI services your agents think with, **OpenRouter** for hundreds of models through one account, **Git and GitHub** for code and documents kept in repositories, **Connectors and AI apps** for using your team from Claude and for giving agents tools from other services, **API keys for other services**, and **Langfuse** for seeing your agents' costs in Langfuse if you use it. Each one says plainly what agents can and cannot do with it.
 
 ## What you'll see
 
-- **Integrations** at the top, with a **search box**: type a service's name, or what you want to do, such as "email" or "invoice".
+- **Connections** at the top, with a **search box**: type a service's name, or what you want to do, such as "email" or "invoice".
 - **Everything**, **Connected**, **Available** and **Coming** buttons, each with a count, to show only those.
 - **Category buttons**, from **Email and calendar** to **Advanced**, to show one kind of service.
 - A card for each service with its name, a one-line status, a short summary of what agents could do with it, and a badge: **Connected**, **Not set up**, **Unavailable** or **Coming**.
@@ -74,7 +74,7 @@ A repository is a folder of code or documents with a full history of changes. Th
 
 ### Connect your WordPress website
 
-1. Open **Integrations** and press **WordPress** (under **Websites**).
+1. Open **Connections** and press **WordPress** (under **Websites**).
 2. In your WordPress site, open **Users › Profile**, scroll to **Application Passwords**, type the name Talqava and press **Add New Application Password**. Copy the password it shows.
 3. Back in Talqava, type your site's address and your WordPress user name, paste the application password, and press **Check and connect**. Talqava checks it with your site before saving.
 4. Choose **What agents may do on this site**:
@@ -98,7 +98,7 @@ To ask for one post or one change by hand, give a task in your own words, such a
 
 These services are built into Talqava and all work the same way.
 
-1. Open **Integrations** and choose the service, for example **WooCommerce**.
+1. Open **Connections** and choose the service, for example **WooCommerce**.
 2. Read **What agents can do**: what they can read, what they can change, and what they can delete (deleting always asks you first).
 3. Sign in:
    - **Asana, HubSpot, Typeform, Trello, Zendesk, GitLab, Xero, Todoist and ClickUp** sign in through your browser. The page shows **Sign in to** the service first. The service asks for an app registered with it; you register your own once, following the numbered steps on the page, then press the button and approve in the browser. The tab says **Connected**. For Trello you copy only its public API key; there is no token to copy.
@@ -148,7 +148,7 @@ On a connected account of a built-in service:
 
 ### Start a task when something happens (a new order, email, booking or form answer)
 
-1. Open the service under **Integrations** and, on the connected account, open **When something happens**.
+1. Open the service under **Connections** and, on the connected account, open **When something happens**.
 2. Choose the event, the agent that should handle it, and say what the agent should do each time.
 3. Press **Start watching**.
 
@@ -162,7 +162,7 @@ What the service sends, such as the words of an email, is given to the agent as 
 
 These sign in through your browser instead of a pasted key. Google and Microsoft ask for an app registered with them; you register your own once (about ten minutes, free), and it stays yours. The service's page in Talqava lists the exact steps.
 
-1. Open **Integrations** and choose the service, for example **Gmail**.
+1. Open **Connections** and choose the service, for example **Gmail**.
 2. Follow the numbered steps to register your app, then paste its **Client ID** (and, for Google, its **Client secret**).
 3. Press **Sign in**. Your browser opens the service; approve, and the tab says **Connected**. Go back to Talqava.
 4. Choose what agents may do with the account, as for any built-in service.
@@ -202,7 +202,7 @@ A connector that runs as a program on your computer is added further down the sa
 ### Send your agents' costs to Langfuse (optional)
 
 1. In your Langfuse project, open **Settings → API keys** and create a pair.
-2. In Talqava, open **Integrations → Langfuse**, choose where your Langfuse is (Europe, United States, Japan, or your own address), paste the public and secret keys, and press **Connect**. Talqava checks them with Langfuse first.
+2. In Talqava, open **Connections → Langfuse**, choose where your Langfuse is (Europe, United States, Japan, or your own address), paste the public and secret keys, and press **Connect**. Talqava checks them with Langfuse first.
 3. From then on, every model call your agents make is sent there, grouped by task: the model, tokens, cost, time and which agent. What was said is never sent.
 4. Press **Disconnect** to stop.
 
@@ -242,5 +242,5 @@ So agents can call a service that has no integration of its own, without seeing 
 - [Settings](settings.md) (AI models, connectors, API keys)
 - [Agents](work-in-progress.md)
 - [Tasks](tasks.md)
-- [Audit log](audit-log.md)
+- [Activity log](audit-log.md)
 - [Getting started](getting-started.md)

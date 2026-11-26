@@ -49,8 +49,8 @@ async function github(pathname: string): Promise<any> {
     headers: { accept: "application/vnd.github+json", "user-agent": "talqava-agents", ...(token ? { authorization: `Bearer ${token}` } : {}) },
     signal: AbortSignal.timeout(30_000),
   });
-  if (res.status === 404) throw new Error("GitHub could not find that repository. If it is private, add a GITHUB_TOKEN key for api.github.com under Integrations → API keys.");
-  if (res.status === 401 || res.status === 403) throw new Error("GitHub refused the request. Check the GITHUB_TOKEN key under Integrations → API keys, or wait if the rate limit was reached.");
+  if (res.status === 404) throw new Error("GitHub could not find that repository. If it is private, add a GITHUB_TOKEN key for api.github.com under Connections → API keys.");
+  if (res.status === 401 || res.status === 403) throw new Error("GitHub refused the request. Check the GITHUB_TOKEN key under Connections → API keys, or wait if the rate limit was reached.");
   if (!res.ok) throw new Error(`GitHub returned an error (${res.status}).`);
   return res.json();
 }

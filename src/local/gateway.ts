@@ -354,7 +354,7 @@ export interface ConnectInput {
 export async function connect(serviceId: string, input: ConnectInput): Promise<{ provider: string; models: number; note?: string }> {
   const service = serviceOf(serviceId);
   if (!service) throw new Error("There is no such AI service in the list.");
-  if (service.ownSetup) throw new Error(`${service.name} has its own sign-in under Integrations.`);
+  if (service.ownSetup) throw new Error(`${service.name} has its own sign-in under Connections.`);
   const key = String(input.key ?? "").trim() || undefined;
   const cfg = getConfig();
   const id = service.id === "custom" ? customId(String(input.name ?? ""), cfg) : providerIdFor(service, cfg);

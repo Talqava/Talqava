@@ -371,7 +371,7 @@ function siteCalls(site: WordPressSite) {
 
 const siteFor = (which: unknown): WordPressSite => {
   const all = sites();
-  if (!all.length) throw new Error("No WordPress site is connected. The owner connects one under Integrations.");
+  if (!all.length) throw new Error("No WordPress site is connected. The owner connects one under Connections.");
   const want = String(which ?? "").trim().toLowerCase();
   const site = want ? all.find((s) => s.id === want || s.name.toLowerCase() === want || new URL(s.url).host === want) : all.length === 1 ? all[0] : undefined;
   if (!site) throw new Error(`Say which site: ${all.map((s) => `${s.name} (${s.id})`).join(", ")}.`);

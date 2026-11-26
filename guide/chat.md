@@ -51,8 +51,8 @@ A new chat opens with a greeting and a few ideas to start from.
 4. If you type without @, choose **Ask in a new chat** to start a chat with it.
 
 **Answer an approval**
-1. The chat shows what the agent wants to do.
-2. Click **Allow once**, **Always allow** it in this chat, or **Don't allow**.
+1. The chat shows a card with the agent's question in plain words, such as "Send data to api.example.com?" or "Gmail: send email?", and one line on what exactly. **Show the details** opens the full step.
+2. Click **Allow**, or **Don't allow**. Nothing happens until you do. **Always allow … in this chat**, under the card, lets it take that kind of step without asking for the rest of the chat.
 
 **Stop a reply**
 1. While the chat is working, the **Send** button reads **Stop**. Click it.

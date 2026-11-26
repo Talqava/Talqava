@@ -49,7 +49,7 @@ A playbook is one known process: **Month-end close**, **Hiring** or **Client onb
 2. Press **See what it can do** to read what it can read and change, then paste a key you make in that service and press **Check the key and connect**.
 3. **Not available yet** says which services cannot be connected yet, and why.
 
-See [Integrations](integrations.md) for the details.
+See [Connections](integrations.md) for the details.
 
 ### Add a page pack to your Workspace
 

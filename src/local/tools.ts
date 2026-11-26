@@ -742,7 +742,7 @@ function unguardedRunSpec(jobs: JobBook) {
           ? [`This task is about the repository ${path.basename(quest.project)}. You cannot read or change its files yourself; hand the parts that need the code to a colleague who can.`]
           : cfg.projects.length
             ? [`No repository is attached to this task. The owner has connected ${cfg.projects.map((p) => path.basename(p)).join(", ")}. If the task needs the code, do not search for it and do not hand out work: stop and tell the owner to choose the repository in the Repository box on the Work in progress page and assign the task again.`]
-            : ["No repository is connected. If the task needs code that you cannot see, do not hand out work: stop and tell the owner to connect the repository under Integrations, then assign the task again."];
+            : ["No repository is connected. If the task needs code that you cannot see, do not hand out work: stop and tell the owner to connect the repository under Connections, then assign the task again."];
       const org = orgs.active();
       const role = rolePrompt(bot, org);
       const onChart = Boolean(memberOf(org, bot.id));

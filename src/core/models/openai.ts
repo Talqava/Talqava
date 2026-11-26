@@ -344,7 +344,7 @@ export class OpenAICompatibleModel implements Model {
     }
     if (!response.ok || !response.body) {
       const detail = (await response.text().catch(() => "")).slice(0, 300);
-      if (response.status === 401 || response.status === 403) throw new ModelError(`${providerName} rejected the API key. Connect it again under Integrations → AI models.`, response.status);
+      if (response.status === 401 || response.status === 403) throw new ModelError(`${providerName} rejected the API key. Connect it again under Connections → AI models.`, response.status);
       if (response.status === 402) throw new ModelError(`${providerName} says the account has no credit left. Add credit on the ${providerName} website, or choose another model. ${detail}`.trim(), 402);
       if (response.status === 404) throw new ModelError(`${providerName} does not know the model "${model}". ${detail}`.trim(), 404);
       if (response.status === 429) throw new ModelError(`${providerName} is busy or the account's rate limit was reached${keys.length > 1 ? ` on all ${keys.length} keys` : ""}. ${detail}`.trim(), 429);

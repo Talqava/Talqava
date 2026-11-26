@@ -1,7 +1,7 @@
 // The MCP integration, both ways round. Outward: Talqava is an MCP server
 // (src/local/mcp.ts), so Claude and other AI apps can see the person's team,
 // give it work and read the results. Inward: connectors, the MCP servers of
-// other services whose tools the agents may use (set under Integrations → MCP).
+// other services whose tools the agents may use (set under Connections → MCP).
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";

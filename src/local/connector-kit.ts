@@ -325,7 +325,7 @@ export function connectionProblems(): { id: string; name: string; problem: strin
 const allowed = (c: Connection, agent?: string) => !agent || !c.agents?.length || c.agents.includes(agent);
 const which = (service: string, account: unknown, agent?: string): Connection => {
   const mine = saved().filter((c) => c.service === service && allowed(c, agent));
-  if (!mine.length) throw new Error(`${serviceOf(service).name} is not connected. The owner connects it under Integrations.`);
+  if (!mine.length) throw new Error(`${serviceOf(service).name} is not connected. The owner connects it under Connections.`);
   const want = String(account ?? "").trim().toLowerCase();
   const found = want ? mine.find((c) => c.id === want || c.label.toLowerCase() === want) : mine.length === 1 ? mine[0] : undefined;
   if (!found) throw new Error(`Say which account: ${mine.map((c) => c.label).join(", ")}.`);
@@ -531,7 +531,7 @@ async function tokenCall(def: ServiceDef, form: Record<string, string>, asked: R
 export async function finishBrowserSignIn(state: unknown, code: unknown, problem?: unknown): Promise<PublicConnection> {
   const p = pending.get(String(state ?? ""));
   pending.delete(String(state ?? ""));
-  if (!p || Date.now() - p.at > 600_000) throw new Error("That sign-in was not started here, or it took longer than ten minutes. Start it again from Integrations.");
+  if (!p || Date.now() - p.at > 600_000) throw new Error("That sign-in was not started here, or it took longer than ten minutes. Start it again from Connections.");
   const def = serviceOf(p.service);
   if (problem || !code) throw new Error(problem === "access_denied" ? `You did not approve the sign-in, so ${def.name} was not connected.` : `${def.name} did not complete the sign-in${problem ? ` (${String(problem).slice(0, 80)})` : ""}.`);
   if (def.browser!.kind === "fragment") throw new Error(`${def.name} did not complete the sign-in.`);
@@ -549,7 +549,7 @@ export const awaitsFragment = (state: unknown): boolean => ((p) => Boolean(p && 
 export async function finishFragmentSignIn(state: unknown, token: unknown): Promise<PublicConnection> {
   const p = pending.get(String(state ?? ""));
   pending.delete(String(state ?? ""));
-  if (!p || Date.now() - p.at > 600_000) throw new Error("That sign-in was not started here, or it took longer than ten minutes. Start it again from Integrations.");
+  if (!p || Date.now() - p.at > 600_000) throw new Error("That sign-in was not started here, or it took longer than ten minutes. Start it again from Connections.");
   const def = serviceOf(p.service);
   const given = String(token ?? "").trim();
   if (def.browser?.kind !== "fragment" || !given) throw new Error(`You did not approve the sign-in, so ${def.name} was not connected.`);
@@ -582,7 +582,7 @@ const renewing = new Map<string, Promise<Connection>>();
 async function fresh(c: Connection): Promise<Connection> {
   const def = serviceOf(c.service);
   if (!def.browser || !c.values.expires_at || Number(c.values.expires_at) - Date.now() > 60_000) return c;
-  if (!c.values.refresh_token) throw Object.assign(new Error(`The sign-in to ${def.name} (${c.label}) has run out. The owner signs in again under Integrations.`), { refused: true });
+  if (!c.values.refresh_token) throw Object.assign(new Error(`The sign-in to ${def.name} (${c.label}) has run out. The owner signs in again under Connections.`), { refused: true });
   const running = renewing.get(c.id);
   if (running) return running;
   const work = (async () => {

@@ -143,7 +143,7 @@ test("in the running app: nothing without signing in, and a role's limits are en
     const mel = (await call("POST", "login", { email: "mel@example.com", password: "mel's long password" })).cookie;
     const aud = (await call("POST", "login", { email: "aud@example.com", password: "aud's long password" })).cookie;
 
-    // A member reads work but cannot change settings, see people or read the audit log.
+    // A member reads work but cannot change settings, see people or read the activity log.
     assert.equal((await call("GET", "work", undefined, mel)).status, 200);
     const refused = await call("PUT", "settings", { checkIn: false }, mel);
     assert.equal(refused.status, 403);
@@ -154,7 +154,7 @@ test("in the running app: nothing without signing in, and a role's limits are en
     // An auditor reads everything and changes nothing.
     assert.equal((await call("GET", "audit", undefined, aud)).status, 200);
     assert.equal((await call("POST", "workspace/pages", { title: "Nope" }, aud)).status, 403);
-    // The audit log names who did what, and never holds a password.
+    // The activity log names who did what, and never holds a password.
     const log = JSON.stringify((await call("GET", "audit", undefined, owner)).body);
     assert.match(log, /Added a person: Mel as member/);
     assert.match(log, /Ada \(Owner\)/);

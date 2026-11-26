@@ -1,5 +1,5 @@
 // The integrations directory: every service Talqava connects to or plans to, filed under plain categories, each with
-// one line on what agents could do with it. The Integrations page is drawn from this, so a person can find any
+// one line on what agents could do with it. The Connections page is drawn from this, so a person can find any
 // service in one place and see honestly whether it is connected, available or still coming.
 //
 // A "coming" entry promises nothing about how it will connect: that is checked against the service's own

@@ -1,14 +1,14 @@
-# Audit log
+# Activity log
 
-The Audit log is a complete record of what happens in Talqava: every change you make and every action each agent takes. For each one it shows who did it, what they did, whether it worked and what it cost. It is kept on your computer, and keys and passwords are never written into it.
+The Activity log is a complete record of what happens in Talqava: every change you make and every action each agent takes. For each one it shows who did it, what they did, whether it worked and what it cost. It is kept on your computer, and keys and passwords are never written into it.
 
 ## What you'll see
 
-- **Audit log** at the top, with an **Export CSV** button on the right.
+- **Activity log** at the top, with an **Export CSV** button on the right.
 - A row of filters:
   - A search box: **Search: a command, a file, a task…**
   - **Who**: **Everyone**, **You**, **All agents**, or one agent by name.
-  - **Kind**: **Everything**, **Tasks**, **Agent actions**, **Approvals**, **Spending**, **Problems**, **Library**, **Settings**, **Integrations**, **Organization**, **Chats** or **Inbox**.
+  - **Kind**: **Everything**, **Tasks**, **Agent actions**, **Approvals**, **Spending**, **Problems**, **Library**, **Settings**, **Connections**, **Organization**, **Chats** or **Inbox**.
   - **When**: **All time**, **Last 24 hours**, **Last 7 days** (the starting choice) or **Last 30 days**.
 - Four totals for what the filters show: the number of **operations**, how many were **by agents**, how many **did not work**, and how much was **spent**.
 - The list itself, newest first. Each line shows the time, who did it (you, an agent, or Talqava itself), the kind, what was done and, if it cost money, the cost. Lines that did not work are marked with **✕** and highlighted.
@@ -17,7 +17,7 @@ Click a line to open it. You see the full detail (for example the exact command 
 
 ## Key ideas
 
-- **Why it matters.** Agents act for you. The audit log lets you check exactly what they did, when, and at what cost, so nothing happens out of sight.
+- **Why it matters.** Agents act for you. The activity log lets you check exactly what they did, when, and at what cost, so nothing happens out of sight.
 - **What is recorded.** Your own changes (settings, your organization, the library, integrations), each tool an agent uses, each approval it asks for and your answer, every problem, and what each run cost. When a backup model takes over because your main AI service is down, that switch is recorded too.
 - **Who "Talqava" is.** Some lines are by the app itself rather than by you or an agent, for example an automatic step.
 - **Secrets stay out.** Anything that looks like a key, token or password is hidden before a line is saved.
@@ -30,7 +30,7 @@ Click a line to open it. You see the full detail (for example the exact command 
 
 ### See what one agent did this week
 
-1. Open **More** at the bottom of the menu, then the **Audit log** tab.
+1. Open **More** at the bottom of the menu, then the **Activity log** tab.
 2. Under **Who**, choose the agent.
 3. Leave **When** on **Last 7 days**.
 4. Click any line to see the detail.
@@ -78,5 +78,5 @@ Click a line to open it. You see the full detail (for example the exact command 
 - [Settings](settings.md) (approvals, budgets and backup models)
 - [Tasks](tasks.md)
 - [Inbox](inbox.md)
-- [Integrations](integrations.md)
+- [Connections](integrations.md)
 - [Getting started](getting-started.md)

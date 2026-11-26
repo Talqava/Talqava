@@ -344,7 +344,7 @@ const AREAS = {
   tasks: { name: "Tasks", views: [["tasks", "Tasks"], ["projects", "Projects"], ["jobs", "Routines"]], also: { project: "projects" } },
   team: { name: "Team", views: [["home", "Agents"], ["team", "Organization"], ["market", "Marketplace"]], also: { quest: "home", bot: "home", marketbot: "market" } },
   files: { name: "Files", views: [["office", "Office"], ["docs", "Documents"], ["sheets", "Sheets"], ["slides", "Slides"], ["notes", "Notes"], ["workspace", "Workspace"], ["library", "Library"], ["memory", "Memory"], ["skills", "Skills"]] },
-  more: { name: "More", views: [["integrations", "Integrations"], ["security", "Security"], ["audit", "Audit log"], ["settings", "Settings"]] },
+  more: { name: "More", views: [["integrations", "Connections"], ["security", "Security"], ["audit", "Activity log"], ["settings", "Settings"]] },
 };
 /** The tab a page belongs under: itself, or the page it was opened from (a task under Agents, a project under Projects). */
 const tabOf = (area, view) => AREAS[area].also?.[view] ?? view;
@@ -430,7 +430,7 @@ function renderRail() {
     h(
       "div",
       { class: "railgroup railend" },
-      place("more", "More", "Integrations, security, the audit log and settings", "settings"),
+      place("more", "More", "Connections, security, the activity log and settings", "settings"),
       h("button", { class: "railitem", onclick: () => showGuide(guideFor(v) ?? "getting-started"), title: "How to use Talqava, page by page" }, icon("guide"), h("span", { class: "grow" }, "Help")),
       state.me?.person ? h("button", { class: "railitem", onclick: () => attempt(async () => (await api("POST", "logout"), (state.me = null), showLogin())), title: `Signed in as ${state.me.person.name} (${state.me.role.name})` }, icon("security"), h("span", { class: "grow" }, "Sign out")) : null,
     ),
@@ -518,7 +518,7 @@ function renderTop() {
       bots
         ? h(
             "div",
-            { class: "repo", title: state.project || "Tasks work in the workspace folder. Connect repositories under Integrations → Git." },
+            { class: "repo", title: state.project || "Tasks work in the workspace folder. Connect repositories under Connections → Git." },
             h("span", { class: "repolabel" }, "Repository"),
             repo,
             state.project && state.crew?.branch ? [h("span", { class: "on" }, "on"), state.crew.branch] : null,
@@ -566,9 +566,9 @@ const COMMANDS = [
   ["Security: rules for agents (guardrails)", () => ((ui.securityTab = "agents"), go("security"))],
   ["Security: alerts, reviews and retention", () => ((ui.securityTab = "watching"), go("security"))],
   ["Security: backups", () => ((ui.securityTab = "backups"), go("security"))],
-  ["Audit log", () => go("audit")],
-  ["Integrations: AI models", () => ((ui.integration = "ai-models"), go("integrations"))],
-  ["Integrations: connectors", () => ((ui.integration = "mcp"), go("integrations"))],
+  ["Activity log", () => go("audit")],
+  ["Connections: AI models", () => ((ui.integration = "ai-models"), go("integrations"))],
+  ["Connections: connectors", () => ((ui.integration = "mcp"), go("integrations"))],
   ["Settings", () => go("settings")],
   ["User guide", () => showGuide(guideFor(state.view) ?? "getting-started")],
 ];
@@ -1067,26 +1067,63 @@ function clearStream() {
   ui.stream = null;
 }
 
+/** A step an agent asks about, in plain words: the question to put to the owner, and one line on what exactly. */
+function stepWords(approval) {
+  const name = approval.name;
+  const input = approval.input ?? {};
+  const cut = (v, n = 160) => ((t) => (t.length > n ? `${t.slice(0, n)}…` : t))(String(v ?? "").replace(/\s+/g, " ").trim());
+  if (name === "bash") return { ask: "Run a command on this computer?", what: cut(input.command) };
+  if (name === "str_replace_based_edit_tool") return { ask: input.command === "view" ? "Read a file?" : "Change a file?", what: cut(input.path) };
+  if (name === "http_request") {
+    let host = "";
+    try {
+      host = new URL(String(input.url)).hostname;
+    } catch {}
+    return { ask: /^(GET|HEAD)$/i.test(String(input.method ?? "GET")) ? `Read from ${host || "a web address"}?` : `Send data to ${host || "a web address"}?`, what: cut(`${input.method || "GET"} ${input.url || ""}`) };
+  }
+  if (name === "browser") return { ask: "Use the browser?", what: cut(`${input.action || ""} ${input.url || input.target || ""}`) };
+  if (name === "assign_task") return { ask: "Hand part of the work to someone else?", what: cut(`to ${input.to || "an agent"}: ${input.task || ""}`) };
+  // A connected service's step is named "<service>__<what it does>".
+  const [service, action] = name.split("__");
+  const said = Object.entries(input)
+    .filter(([, v]) => v !== null && v !== "" && typeof v !== "object")
+    .slice(0, 4)
+    .map(([k, v]) => `${k.replace(/_/g, " ")}: ${cut(v, 70)}`)
+    .join(" · ");
+  if (action) return { ask: `${service[0].toUpperCase()}${service.slice(1)}: ${action.replace(/_/g, " ")}?`, what: said };
+  return { ask: `Use ${NAMES[name] || name}?`, what: summarize(name, input) ? cut(summarize(name, input)) : said };
+}
+
+/**
+ * The card an agent's question is shown as, wherever it appears: who asks, the question in plain words, one line on
+ * what exactly, the full details folded away, and one clear button. Nothing happens until the owner presses it.
+ */
+function approvalAsk(approval, { who, bot = null, decide, always = "", extra = null, id = "" }) {
+  const words = stepWords(approval);
+  const full = approval.name === "bash" ? String(approval.input?.command ?? "") : JSON.stringify(approval.input ?? {}, null, 2);
+  return h(
+    "section",
+    { class: "askcard", ...(id ? { id } : {}), role: "group", "aria-label": `${who} asks: ${words.ask}` },
+    h("div", { class: "askcardhead" }, bot ? keycap(bot, 24, "", bot.type) : null, h("div", { class: "grow" }, h("b", {}, words.ask), h("span", { class: "note small" }, `${who} is asking before doing this.`))),
+    words.what ? h("p", { class: "askcardwhat" }, words.what) : null,
+    approval.reason ? h("p", { class: "note small" }, approval.reason) : null,
+    h("details", { class: "askcardmore" }, h("summary", {}, "Show the details"), h("pre", {}, full)),
+    h(
+      "div",
+      { class: "askcardfoot" },
+      h("span", { class: "note small grow" }, "Nothing happens until you say so."),
+      extra,
+      h("button", { class: "plain", onclick: () => decide("deny") }, "Don't allow"),
+      h("button", { class: "primary", onclick: () => decide("allow") }, "Allow"),
+    ),
+    always && !approval.reason ? h("button", { class: "plain link small askcardalways", onclick: () => decide("always") }, always) : null,
+  );
+}
+
 function addApproval(approval) {
   if (document.getElementById(`approval-${approval.id}`)) return;
   const decide = (decision) => attempt(() => api("POST", `conversations/${state.convId}/approvals/${approval.id}`, { decision }));
-  const detail = approval.name === "bash" ? approval.input.command : JSON.stringify(approval.input, null, 2);
-  add(
-    h(
-      "div",
-      { class: "approval", id: `approval-${approval.id}` },
-      h("strong", {}, `${speaker()} wants to use: ${NAMES[approval.name] || approval.name}`),
-      approval.reason ? h("div", { class: "note" }, approval.reason) : null,
-      h("pre", {}, detail),
-      h(
-        "div",
-        { class: "row" },
-        h("button", { class: "primary", onclick: () => decide("allow") }, "Allow once"),
-        approval.reason ? null : h("button", { onclick: () => decide("always") }, `Always allow ${NAMES[approval.name] || approval.name} in this chat`),
-        h("button", { class: "danger", onclick: () => decide("deny") }, "Don't allow"),
-      ),
-    ),
-  );
+  add(approvalAsk(approval, { who: speaker(), bot: chatBotOf(), decide, always: `Always allow ${NAMES[approval.name] || approval.name.replace(/__/g, ": ").replace(/_/g, " ")} in this chat`, id: `approval-${approval.id}` }));
 }
 
 // ---------- agents' tiles (drawn further down) and the app's accent ----------
@@ -1696,7 +1733,7 @@ function questCard(q) {
     q.status === "running" ? h("div", { class: "scanline", "aria-hidden": "true" }, h("span")) : null,
     h("div", { class: "head" }, h("b", {}, q.title), keycap(q.bot, 28, mood(q), q.bot.type)),
     approval
-      ? h("div", { class: "now wait" }, `◌ ${q.bot.name} wants to use ${NAMES[approval.name] || approval.name}`)
+      ? h("div", { class: "now wait" }, `◌ ${q.bot.name} asks: ${stepWords(approval).ask}`)
       : h("div", { class: "now" }, `● ${q.bot.name} · step ${q.steps || 1}${q.budget?.steps ? ` of up to ${q.budget.steps}` : ""} · ${doing}`),
     approval ? h("pre", {}, approval.name === "bash" ? approval.input.command : JSON.stringify(approval.input, null, 2)) : showOutput ? h("pre", {}, showOutput.trim()) : null,
     approval?.reason || (q.readOutside && q.status === "running")
@@ -1706,9 +1743,9 @@ function questCard(q) {
       ? h(
           "div",
           { class: "row" },
-          h("button", { class: "primary", onclick: decide(approval, "allow") }, "Allow once"),
-          approval.reason ? null : h("button", { onclick: decide(approval, "always") }, "Always, for this task"),
-          h("button", { class: "danger", onclick: decide(approval, "deny") }, "Deny"),
+          h("button", { class: "primary", onclick: decide(approval, "allow") }, "Allow"),
+          h("button", { onclick: decide(approval, "deny") }, "Don't allow"),
+          approval.reason ? null : h("button", { class: "plain link small", onclick: decide(approval, "always") }, "Always, for this task"),
         )
       : null,
     h(
@@ -2244,7 +2281,7 @@ function readMail(m) {
     if (n.kind === "approval") {
       const a = n.approval;
       const decide = (decision) => act(() => api("POST", `conversations/${q.id}/approvals/${a.id}`, { decision }));
-      fill(body, h("p", {}, `I want to use ${NAMES[a.name] || a.name} for “${q.title}”. Is that all right?`), h("pre", {}, a.name === "bash" ? a.input.command : JSON.stringify(a.input, null, 2)), h("div", { class: "row" }, h("button", { class: "primary", onclick: () => decide("allow") }, "Allow once"), h("button", { class: "danger", onclick: () => decide("deny") }, "Don't allow"), h("button", { class: "plain", onclick: () => go("quest", q.id) }, "Open the task")));
+      fill(body, h("p", {}, `For “${q.title}”:`), approvalAsk(a, { who: roleOf(q.bot.id)?.title || q.bot.name, bot: q.bot, decide, extra: h("button", { class: "plain link small", onclick: () => go("quest", q.id) }, "Open the task") }));
     } else if (n.kind === "plan") fill(body, planCard(q, () => act(async () => {})), h("button", { class: "plain small", onclick: () => go("quest", q.id) }, "Open the task"));
     else if (n.kind === "asking") {
       const answer = h("textarea", { rows: 4, placeholder: "Your answer. The task starts once you send it.", "aria-label": "Answer" });
@@ -2282,7 +2319,7 @@ function readMail(m) {
   const report = h("div", { class: "md readreport" }, q.said ? renderMarkdown(q.said) : null);
   mailFullText(q).then((text) => text && report.isConnected && fill(report, renderMarkdown(text)));
   const approvals = (q.approvals ?? []).map((a) =>
-    h("div", { class: "readapproval" }, h("b", {}, `May I use ${NAMES[a.name] || a.name}?`), h("pre", {}, a.name === "bash" ? a.input.command : JSON.stringify(a.input, null, 2)), h("div", { class: "row" }, h("button", { class: "primary small", onclick: () => act(() => api("POST", `conversations/${q.id}/approvals/${a.id}`, { decision: "allow" })) }, "Allow once"), h("button", { class: "danger small", onclick: () => act(() => api("POST", `conversations/${q.id}/approvals/${a.id}`, { decision: "deny" })) }, "Don't allow"))),
+    approvalAsk(a, { who: roleOf(q.bot.id)?.title || q.bot.name, bot: q.bot, decide: (decision) => act(() => api("POST", `conversations/${q.id}/approvals/${a.id}`, { decision })) }),
   );
   const parts = q.chain?.tasks > 1 ? `${q.chain.finished} of ${q.chain.tasks - 1} parts done${q.chain.working ? `, ${q.chain.working} under way` : ""}${q.chain.stopped ? `, ${q.chain.stopped} stopped` : ""}` : "";
   fill(
@@ -2811,7 +2848,7 @@ function renderOrg() {
       h("p", { class: "note small" }, g.leadChosen ? "You chose this lead." : "Picked from the chart: the position at the top of the group. Choose one to keep it."),
       h("label", {}, "Purpose", goal),
       h("label", {}, "Model for its positions", groupModel),
-      h("p", { class: "note small" }, "For example, a strong model for leadership and a cheaper one for a whole department. An agent with a model of its own keeps it. Add more choices as backup models under Integrations → AI models."),
+      h("p", { class: "note small" }, "For example, a strong model for leadership and a cheaper one for a whole department. An agent with a model of its own keeps it. Add more choices as backup models under Connections → AI models."),
       h("label", {}, "Monthly budget, all its positions together ($)", budget),
       h("p", { class: `note small ${groupState(g) === "stopped" ? "loudnote" : ""}` }, [
         `Spent this month: ${money(org.groupSpend?.[g.id] ?? 0)}.`,
@@ -3003,7 +3040,7 @@ function renderOrg() {
       h("div", { class: "viewswitch", role: "group", "aria-label": "View" }, views.map(([id, label]) => h("button", { class: o.view === id ? "on" : "", "aria-pressed": String(o.view === id), onclick: () => ((o.view = id), renderOrg()) }, label))),
       members.length ? h("button", { class: "small", title: "Positions that would help your mission, to accept or skip", onclick: () => (org.mission ? suggestNow() : orgSettings()) }, "Suggest positions") : null,
       h("button", { class: "small", disabled: !o.undo.length, title: o.undo.length ? `Undo: ${o.undo.at(-1).label} (Cmd-Z)` : "Nothing to undo", onclick: () => orgUndo() }, "Undo"),
-      h("button", { class: "plain small", title: "Every change is recorded in the audit log", onclick: () => ((ui.audit = { kind: "organization", actor: "", since: "30", q: "" }), go("audit")) }, "History"),
+      h("button", { class: "plain small", title: "Every change is recorded in the activity log", onclick: () => ((ui.audit = { kind: "organization", actor: "", since: "30", q: "" }), go("audit")) }, "History"),
     ),
     // Always there, so screen readers announce each change as it is made.
     h("div", { class: o.note ? "banner" : "", role: "status", "aria-live": "polite" }, o.note ? [o.note, o.undo.length && o.noteUndoes ? h("button", { class: "plain small", onclick: () => orgUndo() }, "Undo") : null] : null),
@@ -3596,8 +3633,8 @@ async function libraryView() {
   if (ui.libraryQuery) search();
 }
 
-// ---------- the audit log: every operation, by you and by each agent ----------
-const AUDIT_KINDS = [["", "Everything"], ["task", "Tasks"], ["tool", "Agent actions"], ["approval", "Approvals"], ["spend", "Spending"], ["problem", "Problems"], ["library", "Library"], ["settings", "Settings"], ["integration", "Integrations"], ["organization", "Organization"], ["workspace", "Workspace"], ["chat", "Chats"], ["inbox", "Inbox"]];
+// ---------- the activity log: every operation, by you and by each agent ----------
+const AUDIT_KINDS = [["", "Everything"], ["task", "Tasks"], ["tool", "Agent actions"], ["approval", "Approvals"], ["spend", "Spending"], ["problem", "Problems"], ["library", "Library"], ["settings", "Settings"], ["integration", "Connections"], ["organization", "Organization"], ["workspace", "Workspace"], ["chat", "Chats"], ["inbox", "Inbox"]];
 const AUDIT_SINCE = [["", "All time"], ["1", "Last 24 hours"], ["7", "Last 7 days"], ["30", "Last 30 days"]];
 
 async function auditView() {
@@ -3634,7 +3671,7 @@ async function auditView() {
     .catch(() => {});
   const pick = (key, options, label) => h("select", { "aria-label": label, onchange: (e) => ((f[key] = e.target.value), again()) }, options.map(([v, t]) => h("option", { value: v, selected: v === f[key] }, t)));
   const who = pick("actor", [["", "Everyone"], ["owner", "You"], ["agents", "All agents"], ...bots.map((b) => [b.id, b.title || b.name])], "Who");
-  const find = h("input", { type: "search", placeholder: "Search: a command, a file, a task…", value: f.q, "aria-label": "Search the audit log" });
+  const find = h("input", { type: "search", placeholder: "Search: a command, a file, a task…", value: f.q, "aria-label": "Search the activity log" });
   find.addEventListener("keydown", (e) => e.key === "Enter" && ((f.q = find.value.trim()), again()));
   const spent = data.entries.reduce((n, e) => n + (e.kind === "spend" && e.cost ? e.cost : 0), 0);
   const problems = data.entries.filter((e) => e.ok === false || e.kind === "problem").length;
@@ -3677,7 +3714,7 @@ async function auditView() {
   fill(
     col,
     sealBox,
-    h("div", { class: "row" }, h("div", { class: "grow" }, h("h1", {}, "Audit log"), h("p", { class: "lead" }, "Every operation, by you and by each agent: what was done, to what, whether it worked, and what it cost. Kept on this computer; keys and passwords are never written down.")), h("button", { onclick: csv, disabled: !data.entries.length }, "Export CSV")),
+    h("div", { class: "row" }, h("div", { class: "grow" }, h("h1", {}, "Activity log"), h("p", { class: "lead" }, "Every operation, by you and by each agent: what was done, to what, whether it worked, and what it cost. Kept on this computer; keys and passwords are never written down.")), h("button", { onclick: csv, disabled: !data.entries.length }, "Export CSV")),
     h("div", { class: "auditfilters" }, find, who, pick("kind", AUDIT_KINDS, "Kind"), pick("since", AUDIT_SINCE, "When")),
     h("div", { class: "auditstats" }, [[String(data.total), `operation${data.total === 1 ? "" : "s"}`], [String(byAgent), "by agents"], [String(problems), "did not work"], [money(spent), "spent"]].map(([n, t]) => h("div", {}, h("b", {}, n), h("span", {}, t)))),
     data.entries.length ? h("div", { class: "auditlist" }, data.entries.map(row)) : h("div", { class: "card quiet" }, h("b", {}, "Nothing recorded for these filters."), h("span", { class: "note" }, " Everything you and your agents do from now on is recorded here.")),
@@ -3706,14 +3743,14 @@ const integrationMark = (id) => {
 };
 const STATE_WORDS = { connected: ["Connected", "on"], "needs-setup": ["Not set up", ""], unavailable: ["Unavailable", "bad"], coming: ["Coming", ""] };
 
-/** What the pages under Integrations share: the settings they change, saved and then shown again. */
+/** What the pages under Connections share: the settings they change, saved and then shown again. */
 const connectionSaver = (col, again) => (patch) =>
   attempt(async () => {
     state.config = await api("PUT", "settings", patch);
     again();
   }, col);
 
-/** Integrations › AI models: every AI service, backups, and a service set up by hand. */
+/** Connections › AI models: every AI service, backups, and a service set up by hand. */
 function aiModelsPage(col, again) {
   const c = state.config;
   const save = connectionSaver(col, again);
@@ -3763,7 +3800,7 @@ function aiModelsPage(col, again) {
 
 }
 
-/** Integrations › API keys: keys for any other service agents call, each sent only to its own address. */
+/** Connections › API keys: keys for any other service agents call, each sent only to its own address. */
 function apiKeysPage(col, again) {
   const c = state.config;
   const save = connectionSaver(col, again);
@@ -3784,7 +3821,7 @@ function apiKeysPage(col, again) {
 
 }
 
-/** Under Integrations › Langfuse: send each model call's cost and tokens to the owner's own Langfuse project. */
+/** Under Connections › Langfuse: send each model call's cost and tokens to the owner's own Langfuse project. */
 async function langfusePage(col, again) {
   const info = await api("GET", "integrations/langfuse").catch(() => ({ state: "needs-setup" }));
   const status = h("p", { class: "note", role: "status" });
@@ -3894,7 +3931,7 @@ function connectorCatalog(cat, done) {
   ];
 }
 
-/** Integrations › any service built on the connector kit: what agents can do, connect an account, set the rule. One page for all. */
+/** Connections › any service built on the connector kit: what agents can do, connect an account, set the rule. One page for all. */
 async function servicePage(col, again, id) {
   const back = h("button", { class: "plain back", onclick: () => ((ui.integration = null), again()) }, "← All integrations");
   let d, svc;
@@ -4062,7 +4099,7 @@ async function servicePage(col, again, id) {
   );
 }
 
-/** Integrations › WordPress: connect a site, choose what agents may do there, and set up a blog post that writes itself. */
+/** Connections › WordPress: connect a site, choose what agents may do there, and set up a blog post that writes itself. */
 async function wordpressPage(col, again) {
   const back = h("button", { class: "plain back", onclick: () => ((ui.integration = null), again()) }, "← All integrations");
   let d;
@@ -4128,7 +4165,7 @@ async function wordpressPage(col, again) {
   );
 }
 
-/** Under Integrations › MCP: connectors added by hand, including ones that run as a program on this computer. */
+/** Under Connections › MCP: connectors added by hand, including ones that run as a program on this computer. */
 function connectorsByHand(col, again) {
   const c = state.config;
   const save = connectionSaver(col, again);
@@ -4243,7 +4280,7 @@ async function integrationsView() {
   if (ui.integrationCategory && !sections.some((x) => x.c === ui.integrationCategory)) ui.integrationCategory = "All";
   fill(
     col,
-    h("div", {}, h("h1", {}, "Integrations"), h("p", { class: "lead" }, "Connect the tools your business already uses, so your agents can work where the work is. Each integration says exactly what agents can and cannot do with it.")),
+    h("div", {}, h("h1", {}, "Connections"), h("p", { class: "lead" }, "Connect the tools your business already uses, so your agents can work where the work is. Each integration says exactly what agents can and cannot do with it.")),
     search,
     showPills,
     catPills,
@@ -4389,7 +4426,7 @@ function openrouterIntegrationPage(or, act, col, again) {
         { class: "card" },
         current
           ? h("div", {}, h("b", {}, `${current.name}`), h("p", { class: "note" }, `Every agent uses it, except agents you gave a model of their own. About ${current.free ? "nothing" : money(taskCost(current.prices))} for a typical task by one agent; the receipt of each task shows the real cost OpenRouter charged.`))
-          : h("div", {}, h("b", {}, `Your team uses ${state.config?.model?.startsWith("anthropic/") ? "Claude, through your Anthropic key" : state.config?.model || "the model set under AI models"}`), h("p", { class: "note" }, "Choose a model below to run your team on OpenRouter instead. You can switch back at any time under Integrations → AI models.")),
+          : h("div", {}, h("b", {}, `Your team uses ${state.config?.model?.startsWith("anthropic/") ? "Claude, through your Anthropic key" : state.config?.model || "the model set under AI models"}`), h("p", { class: "note" }, "Choose a model below to run your team on OpenRouter instead. You can switch back at any time under Connections → AI models.")),
         h("p", { class: "note small" }, "To give one agent its own model, open that agent, and under Model choose OpenRouter and the model. Cheaper models suit routine work; stronger ones suit managers and complex tasks."),
       ),
       h("div", { class: "row" }, search, sort),
@@ -6929,7 +6966,7 @@ function aiModelsSection(col) {
     return fill(
       wrap,
       h("strong", {}, "Backup models"),
-      h("p", { class: "note small" }, `If ${modelName(g.model)} cannot answer (its service is down, busy or out of credit), the first backup answers instead, then the next. Each switch is noted in the audit log.`),
+      h("p", { class: "note small" }, `If ${modelName(g.model)} cannot answer (its service is down, busy or out of credit), the first backup answers instead, then the next. Each switch is noted in the activity log.`),
       list.length
         ? h(
             "ol",
@@ -7069,7 +7106,7 @@ function aiModelsSection(col) {
 
 function settingsView() {
   const c = state.config;
-  const col = page("Settings", "How your agents work, what they may spend, and how Talqava looks. Connections to AI models and other services are under Integrations.");
+  const col = page("Settings", "How your agents work, what they may spend, and how Talqava looks. AI models and other services are connected under More › Connections.");
   const save = (patch) =>
     attempt(async () => {
       state.config = await api("PUT", "settings", patch);
@@ -7080,7 +7117,7 @@ function settingsView() {
   const select = (options, value) => h("select", {}, options.map(([id, label]) => h("option", { value: id, selected: id === value }, label)));
 
   if (needsKey(c)) {
-    col.append(h("div", { class: "banner" }, "To get started, connect an AI service: ", h("button", { class: "plain link", onclick: () => ((ui.integration = "ai-models"), go("integrations")) }, "Integrations → AI models"), ". Anthropic (Claude), OpenAI, Google Gemini and many more, or free models on this computer."));
+    col.append(h("div", { class: "banner" }, "To get started, connect an AI service: ", h("button", { class: "plain link", onclick: () => ((ui.integration = "ai-models"), go("integrations")) }, "Connections → AI models"), ". Anthropic (Claude), OpenAI, Google Gemini and many more, or free models on this computer."));
   }
 
   // The accent is a per-person choice, kept in this browser, so it changes at once without saving.
@@ -7170,12 +7207,12 @@ function settingsView() {
         ),
       },
       h("label", {}, "Name", name),
-      // The team's model is chosen in one place, under Integrations → AI models; here it is shown, and checked.
+      // The team's model is chosen in one place, under Connections → AI models; here it is shown, and checked.
       h(
         "div",
         { class: "row wrap" },
         h("span", { class: "grow" }, "Your team's model: ", h("b", {}, c.model.slice(c.model.indexOf("/") + 1)), ` · ${c.providers.find((p) => p.id === c.model.slice(0, c.model.indexOf("/")))?.name ?? ""}`),
-        h("button", { type: "button", class: "small", onclick: () => ((ui.integration = "ai-models"), go("integrations")) }, "Change it under Integrations → AI models"),
+        h("button", { type: "button", class: "small", onclick: () => ((ui.integration = "ai-models"), go("integrations")) }, "Change it under Connections → AI models"),
       ),
       h("div", { class: "row" }, checkButton),
       checkBox,
@@ -7209,7 +7246,7 @@ function settingsView() {
 
   col.append(
     h("h3", {}, "Connections"),
-    h("p", { class: "note" }, "AI models, repositories, connectors and keys for other services are under ", h("button", { class: "plain link", onclick: () => ((ui.integration = null), go("integrations")) }, "Integrations"), "."),
+    h("p", { class: "note" }, "AI models, repositories, connectors and keys for other services are under ", h("button", { class: "plain link", onclick: () => ((ui.integration = null), go("integrations")) }, "Connections"), "."),
   );
 
   // About Talqava, its licence, privacy policy, terms and other policies.
@@ -9444,7 +9481,7 @@ function sentSection() {
       d.items.length ? [h("h3", {}, `Pages and documents handed to an agent · ${d.items.length}`), h("p", { class: "note small" }, "What an agent reads becomes part of what its AI service receives."), table(["Title", "Level", "Read by", "Went to", "Time"], d.items.map((i) => h("tr", {}, h("td", {}, i.title), h("td", {}, LEVEL_NAMES[i.level] ?? "Internal"), h("td", {}, i.who), h("td", {}, i.to), h("td", {}, time(i.at)))))] : null,
       d.services.length ? [h("h3", {}, `Changes made in connected services and websites · ${d.services.length}`), table(["Where", "What", "Time"], d.services.map((x) => h("tr", {}, h("td", {}, x.to), h("td", {}, x.what), h("td", {}, time(x.at)))))] : null,
       d.web.length ? [h("h3", {}, `Websites agents called · ${d.web.length}`), table(["Site", "Times", "Used by"], d.web.map((w) => h("tr", {}, h("td", {}, w.host), h("td", {}, String(w.calls)), h("td", {}, w.agents.join(", ")))))] : null,
-      h("p", { class: "note small" }, "This lists where things went and how much, not the content itself. It is kept on this computer for 30 days. Reading from a connected service is not listed, only changes. Tools added from outside Talqava (connectors) appear in the audit log instead."),
+      h("p", { class: "note small" }, "This lists where things went and how much, not the content itself. It is kept on this computer for 30 days. Reading from a connected service is not listed, only changes. Tools added from outside Talqava (connectors) appear in the activity log instead."),
     );
   };
   draw();
@@ -9614,7 +9651,7 @@ function securityOpsSection(canEdit) {
           ? [
               h("p", { class: "note" }, `Started ${when(open.startedAt)} by ${open.startedBy}. Answer each line. Marking “Needs a change” only records it: make the change itself under People, or on the agent's page.`),
               open.items.map((i) => line(open, i)),
-              canEdit ? h("div", { class: "row" }, h("button", { class: "primary", onclick: () => act(() => api("POST", `security-ops/reviews/${open.id}/finish`), "Review finished and recorded in the audit log.") }, "Finish the review"), h("span", { class: "note small" }, `${open.items.filter((i) => i.decision).length} of ${open.items.length} answered`)) : null,
+              canEdit ? h("div", { class: "row" }, h("button", { class: "primary", onclick: () => act(() => api("POST", `security-ops/reviews/${open.id}/finish`), "Review finished and recorded in the activity log.") }, "Finish the review"), h("span", { class: "note small" }, `${open.items.filter((i) => i.decision).length} of ${open.items.length} answered`)) : null,
             ]
           : last && last.items.some((i) => i.decision === "change")
             ? h("div", {}, h("p", { class: "note small" }, "Marked “Needs a change” in the last review:"), h("ul", {}, last.items.filter((i) => i.decision === "change").map((i) => h("li", {}, h("b", {}, i.name), i.note ? ` · ${i.note}` : ""))))
@@ -9636,7 +9673,7 @@ function securityOpsSection(canEdit) {
         "form",
         { class: "card form", onsubmit: (e) => (e.preventDefault(), act(() => api("PUT", "security-ops/feed", { url: url.value, secret: secret.value || undefined }), url.value ? "Saved. Events are now sent as they happen." : "Stopped.")) },
         h("b", {}, "Send every event to your monitoring system"),
-        h("p", { class: "note small" }, "Each entry of the audit log is also sent, as it is written, to an address you give (a “webhook” or “HTTP collector” in Splunk, Microsoft Sentinel, Datadog and similar). That copy is outside this computer, so it cannot be quietly changed here. With a signing secret, each delivery carries a signature your system can check."),
+        h("p", { class: "note small" }, "Each entry of the activity log is also sent, as it is written, to an address you give (a “webhook” or “HTTP collector” in Splunk, Microsoft Sentinel, Datadog and similar). That copy is outside this computer, so it cannot be quietly changed here. With a signing secret, each delivery carries a signature your system can check."),
         url,
         secret,
         d.feed.url ? h("p", { class: `note small ${d.feed.lastError ? "bad" : ""}` }, d.feed.lastError ? `Last delivery failed: ${d.feed.lastError} ${d.feed.waiting} waiting to be sent again.` : `${d.feed.sent.toLocaleString()} events sent since Talqava started${d.feed.lastSentAt ? `, the last ${when(d.feed.lastSentAt)}` : ""}.`) : null,
@@ -9912,7 +9949,7 @@ function guardrailsSection(canEdit) {
               h("div", { class: "label" }, "Approved connected services"),
               data.connected.length
                 ? h("div", { class: "checks" }, data.connected.map((c) => h("label", { class: "check" }, h("input", { type: "checkbox", disabled: !canEdit, checked: g.services.includes(c.id), onchange: (e) => save({ services: e.target.checked ? [...g.services, c.id] : g.services.filter((x) => x !== c.id) }) }), " ", c.name)))
-                : h("p", { class: "note small" }, "No service is connected yet. Connect one under Integrations, then approve it here."),
+                : h("p", { class: "note small" }, "No service is connected yet. Connect one under Connections, then approve it here."),
               h("p", { class: "note small" }, "Agents get the tools of ticked services only. A service connected later is off until you tick it."),
             ]
           : null,

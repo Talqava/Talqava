@@ -13,8 +13,8 @@ export const ROLE_WORDS: Record<Role, { name: string; may: string }> = {
   owner: { name: "Owner", may: "Everything, including people, security and deleting the organization." },
   admin: { name: "Administrator", may: "Everything except removing or changing the owner." },
   manager: { name: "Manager", may: "Gives and approves work, changes the chart, budgets, routines and the Marketplace. No settings, connections or people." },
-  member: { name: "Member", may: "Gives tasks, chats, approves steps, and edits pages, documents and notes. Cannot change the chart, budgets, settings or connections, or read the audit log." },
-  auditor: { name: "Auditor", may: "Reads everything, including the audit log and who has access. Changes nothing." },
+  member: { name: "Member", may: "Gives tasks, chats, approves steps, and edits pages, documents and notes. Cannot change the chart, budgets, settings or connections, or read the activity log." },
+  auditor: { name: "Auditor", may: "Reads everything, including the activity log and who has access. Changes nothing." },
 };
 
 interface StoredPerson {
@@ -160,7 +160,7 @@ const MANAGER_AREAS = new Set(["orgs", "marketplace", "jobs", "goals", "crew", "
 
 /**
  * Whether a role may make a request. Reading is open to every role, except that only owners, administrators,
- * managers and auditors read the audit log and the list of people. An auditor changes nothing.
+ * managers and auditors read the activity log and the list of people. An auditor changes nothing.
  */
 export function mayDo(role: Role, method: string, area: string, sub = ""): boolean {
   if (area === "me" || area === "login" || area === "logout") return true;

@@ -42,7 +42,7 @@ One word for each thing, the same in every screen and guide.
 - **Private**: an item no agent can find or read.
 - **Role** (for people): Owner, Administrator, Manager, Member or Auditor; what a person may do.
 - **Second step**: a code from your phone, needed as well as your password.
-- **Audit log**: the record of everything people and agents did.
+- **Activity log**: the record of everything people and agents did.
 
 ## Connecting things
 

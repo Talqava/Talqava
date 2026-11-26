@@ -11,7 +11,7 @@ Talqava is developed by GR Investments LLC. "We" and "us" mean GR Investments LL
 Everything Talqava knows is stored in its data folder on your computer:
 
 - your organizations, positions and groups;
-- chats, tasks, their reports, receipts and the audit log;
+- chats, tasks, their reports, receipts and the activity log;
 - memory, skills and schedules;
 - workspace pages, Office documents, sheets and notes, their history and their tables;
 - library documents, and the text read from them;
@@ -39,9 +39,9 @@ Talqava sends information off your computer only to services you choose to use, 
 | Send the audit record to a monitoring system (Security) | Every audit entry: who did what, when, and what it cost. Never keys or passwords. | Only the address you give |
 | Press **Read the words in this picture** on a picture in the Library | That picture | Your team's AI service (a Claude model), once, when you press it |
 | Press **Read the words** on a picture attached to a note or document | That picture | Your team's AI service (a Claude model), once, when you press it |
-| Connect a built-in service: Shopify, WooCommerce, HubSpot, Mailchimp, Slack, Asana, Trello, Calendly, Typeform, Zendesk, GitLab, Xero, Pipedrive, Todoist, Jira, ClickUp, Freshdesk, Brevo, Telegram, Klaviyo or Square (Integrations) | The key you paste, and what an agent reads or changes there: orders, products and customers; contacts, companies and deals; audiences and the people in them; channel messages; tasks and cards; booked meetings; form answers; support tickets; issues and merge requests; invoices, bills, contacts and accounting reports; deals, people and organizations; to-dos; messages sent to your Telegram bot; payments, orders and items | Only that service (for WooCommerce, your own shop; for GitLab, gitlab.com or your company's own GitLab) |
-| Connect Gmail, Google Calendar, Google Drive, Outlook or OneDrive (Integrations) | Your own registered app's ID (and secret), the sign-in tokens, and what an agent reads or changes there: emails and drafts; calendar events; file names and the text of files it reads | Only Google or Microsoft |
-| Connect a WordPress site (Integrations) | Your user name and application password, and the posts and pages an agent reads, writes or changes | Only your own site |
+| Connect a built-in service: Shopify, WooCommerce, HubSpot, Mailchimp, Slack, Asana, Trello, Calendly, Typeform, Zendesk, GitLab, Xero, Pipedrive, Todoist, Jira, ClickUp, Freshdesk, Brevo, Telegram, Klaviyo or Square (Connections) | The key you paste, and what an agent reads or changes there: orders, products and customers; contacts, companies and deals; audiences and the people in them; channel messages; tasks and cards; booked meetings; form answers; support tickets; issues and merge requests; invoices, bills, contacts and accounting reports; deals, people and organizations; to-dos; messages sent to your Telegram bot; payments, orders and items | Only that service (for WooCommerce, your own shop; for GitLab, gitlab.com or your company's own GitLab) |
+| Connect Gmail, Google Calendar, Google Drive, Outlook or OneDrive (Connections) | Your own registered app's ID (and secret), the sign-in tokens, and what an agent reads or changes there: emails and drafts; calendar events; file names and the text of files it reads | Only Google or Microsoft |
+| Connect a WordPress site (Connections) | Your user name and application password, and the posts and pages an agent reads, writes or changes | Only your own site |
 | Add a connector (MCP server) | What an agent sends to that connector's tools | That connector's service |
 | Store a key for another service | The requests an agent makes to that service, with your key | That service only |
 | Use OpenRouter | The name "Talqava" and the address talqava.com, as OpenRouter asks apps to identify themselves. Nothing about you. | OpenRouter |
@@ -58,7 +58,7 @@ Each of these services handles what it receives under **its own privacy policy a
 
 - **Choose a local model** to keep everything on your computer.
 - **Mark documents and pages Private** to keep them from every AI agent and model.
-- **Remove a service** at any time under Integrations or Settings; Talqava stops sending anything to it.
+- **Remove a service** at any time under Connections or Settings; Talqava stops sending anything to it.
 - **Delete your data** by deleting the data folder (or an organization, a chat, a page or a document inside the app). There is no copy anywhere else for us to delete.
 
 ## Children

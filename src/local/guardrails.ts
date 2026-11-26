@@ -1,7 +1,7 @@
 // Agent guardrails: rules for the whole installation that sit above every agent's own settings. An agent, a manager
 // or a task can make things stricter than these, never looser. They are applied in one place, to every run, just
 // before it starts: tools the rules forbid are taken away, web tools are held to the approved sites, changes ask a
-// person when the rules say so, and spending and time are capped. Each refusal is written to the audit log.
+// person when the rules say so, and spending and time are capped. Each refusal is written to the activity log.
 import type { RunSpec, Tool } from "../core/index.ts";
 import { getConfig } from "./store.ts";
 import { audit } from "./audit.ts";
@@ -155,7 +155,7 @@ function onApprovedSites(tool: Tool, sites: string[], who: string): Tool {
 }
 
 /**
- * Applies the guardrails to a run that is about to start. `who` names the agent, for the audit log. With no
+ * Applies the guardrails to a run that is about to start. `who` names the agent, for the activity log. With no
  * guardrails set, the run is returned unchanged.
  */
 export function guard(spec: RunSpec, who: string, g: Guardrails = guardrails()): RunSpec {

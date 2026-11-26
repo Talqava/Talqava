@@ -106,8 +106,8 @@ const GUIDES = [
   ["library", "Library"],
   ["memory", "Memory"],
   ["skills", "Skills"],
-  ["audit-log", "Audit log"],
-  ["integrations", "Integrations"],
+  ["audit-log", "Activity log"],
+  ["integrations", "Connections"],
   ["ai-models", "AI models"],
   ["settings", "Settings and AI models"],
 ].map(([id, title]) => ({ id, title, file: `guide/${id}.md` }));
@@ -152,7 +152,7 @@ export const engine = new Engine({
 });
 quests.attach(engine);
 
-// ---------- the audit log: what the owner does and what each agent does ----------
+// ---------- the activity log: what the owner does and what each agent does ----------
 const TOOL_WORDS: Record<string, string> = { bash: "Ran a command", str_replace_based_edit_tool: "Worked on a file", web_search: "Searched the web", web_fetch: "Read a web page", http_request: "Called a web API", memory: "Used memory", skill: "Used a skill", schedule: "Scheduled work", browser: "Used the browser", conversation_search: "Searched past chats", code_execution: "Ran code", assign_task: "Handed work to a colleague", request_work: "Requested work from another department", escalate: "Took a decision to their lead", ask_colleague: "Asked a colleague", team_memory: "Used team memory", library: "Used the library" };
 const lastCost = new Map<string, number>();
 /** Who is behind a conversation: the agent doing a task, or the chat assistant. */
@@ -287,7 +287,7 @@ async function runJob(job: Job): Promise<{ conversationId?: string; taskId?: str
 function startFromEvent(h: Happening): void {
   const org = orgs.list().orgs.find((o) => o.id === h.watch.org);
   if (!org || !org.members.some((m) => m.bot === h.watch.bot)) {
-    audit({ actor: "system", actorName: h.service, kind: "problem", ok: false, action: `Something happened in ${h.service}, but no task was started`, detail: `${h.event} (${h.title}). The agent chosen for it is no longer on the organization chart. Choose another under Integrations.` });
+    audit({ actor: "system", actorName: h.service, kind: "problem", ok: false, action: `Something happened in ${h.service}, but no task was started`, detail: `${h.event} (${h.title}). The agent chosen for it is no longer on the organization chart. Choose another under Connections.` });
     return;
   }
   work.create(org, {
@@ -318,7 +318,7 @@ const notApproved = (key: string) => ({ error: "This organization only adds Mark
 function pictureReader(level: ReturnType<typeof levelOf>): { see: (picture: Buffer, mediaType: string) => Promise<string>; cost: () => number } {
   const cfg = getConfig();
   const provider = cfg.providers.find((p) => cfg.model.startsWith(`${p.id}/`));
-  if (provider?.kind !== "anthropic") throw new Error("Reading the words in a picture needs a Claude model as your team's model, because it can look at pictures. Choose one under Integrations › AI models.");
+  if (provider?.kind !== "anthropic") throw new Error("Reading the words in a picture needs a Claude model as your team's model, because it can look at pictures. Choose one under Connections › AI models.");
   if (!levelsForRun(cfg.model, cfg).has(level)) throw new Error(`This picture is marked ${LEVEL_WORDS[level].name}, and your rules do not let that level be sent to your team's AI service. Change its level, or the rule under Security.`);
   const model = resolveModel({ ...cfg, effort: "low" });
   let cost = 0;
@@ -332,7 +332,7 @@ function pictureReader(level: ReturnType<typeof levelOf>): { see: (picture: Buff
         )
         .catch((err) => {
           // No key yet: say what to do instead of the service's own wording.
-          throw /authentication method|api[- ]?key/i.test((err as Error).message) ? new Error("Your Claude key is missing or was not accepted. Add it under Integrations › AI models, then try again.") : err;
+          throw /authentication method|api[- ]?key/i.test((err as Error).message) ? new Error("Your Claude key is missing or was not accepted. Add it under Connections › AI models, then try again.") : err;
         });
       cost = reply.usage.cost ?? 0;
       noteModelCall(model.label, "You (reading a picture)", reply.usage.input);
@@ -579,7 +579,7 @@ async function updateSettings(body: any) {
 }
 
 // ---------- quests ----------
-/** A repository the user connected under Integrations → Git, or null. */
+/** A repository the user connected under Connections → Git, or null. */
 function projectOrNull(folder: string | null): string | null {
   return folder && getConfig().projects.includes(folder) ? folder : null;
 }
@@ -1169,7 +1169,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
       if (blocked) throw new HttpError(409, blocked);
       // Say plainly what is missing, instead of the model library's error about headers.
       if (!questStore.get(id) && getConfig().model.startsWith("anthropic/") && !publicConfig().hasApiKey) {
-        throw new HttpError(400, "No AI model is set up yet. Open Integrations → AI models and connect one: Anthropic (Claude), OpenAI, Gemini and many more, or a free model on this computer.");
+        throw new HttpError(400, "No AI model is set up yet. Open Connections → AI models and connect one: Anthropic (Claude), OpenAI, Gemini and many more, or a free model on this computer.");
       }
       await engine.startRun(id, text);
       return send(res, 200, { ok: true });
@@ -1357,7 +1357,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
       // With no repository chosen and exactly one connected, that one is meant: a task about "our repository" should find it.
       const onlyOne = !body.project && body.project !== "" && getConfig().projects.length === 1 ? getConfig().projects[0] : null;
       const project = body.project ? projectOrNull(String(body.project)) : onlyOne;
-      if (body.project && !project) throw new HttpError(400, "Connect that repository under Integrations → Git first.");
+      if (body.project && !project) throw new HttpError(400, "Connect that repository under Connections → Git first.");
       if (body.template) {
         // A core quest: its own bot unless another was chosen.
         try {
@@ -1430,7 +1430,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
       const cfg = getConfig();
       // Hand it to Claude: the default model if that is Claude, else Claude's strongest.
       const model = typeof body.model === "string" && body.model ? body.model : cfg.model.startsWith("anthropic/") ? cfg.model : "anthropic/claude-opus-5-5";
-      if (model.startsWith("anthropic/") && !publicConfig().hasApiKey) throw new HttpError(400, "Connect Anthropic (Claude) under Integrations → AI models to hand tasks to Claude.");
+      if (model.startsWith("anthropic/") && !publicConfig().hasApiKey) throw new HttpError(400, "Connect Anthropic (Claude) under Connections → AI models to hand tasks to Claude.");
       return send(res, 200, await attemptQuest(async () => (await quests.escalate(id, model), { ok: true, model })));
     }
     if (action === "changes" && req.method === "GET") return send(res, 200, await attemptQuest(() => quests.changes(id)));
@@ -1522,7 +1522,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
       // The same checks as before any task: what it cannot do without is caught first, for free.
       const onlyOne = !body.project && body.project !== "" && getConfig().projects.length === 1 ? getConfig().projects[0] : null;
       const project = body.project ? projectOrNull(String(body.project)) : onlyOne;
-      if (body.project && !project) throw new HttpError(400, "Connect that repository under Integrations → Git first.");
+      if (body.project && !project) throw new HttpError(400, "Connect that repository under Connections → Git first.");
       const bot = loadCrew(project ?? undefined).bots.find((b) => b.id === body.owner);
       if (!bot) throw new HttpError(400, "Choose an agent for the task.");
       const text = String(body.description || body.title || "").trim();
@@ -1865,7 +1865,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
     }
   }
 
-  // Integrations: the outside tools agents work with. Git is the first.
+  // Connections: the outside tools agents work with. Git is the first.
   if (parts[0] === "integrations") {
     if (route === "GET integrations" && !parts[1]) return send(res, 200, await listIntegrations());
     if (route === "GET integrations" && parts[1] === "git") return send(res, 200, await gitIntegration());
@@ -2071,7 +2071,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
   throw new HttpError(404, "Not found.");
 }
 
-/** Who to name in the audit log for a request: the signed-in person, or "You" when people are not set up. */
+/** Who to name in the activity log for a request: the signed-in person, or "You" when people are not set up. */
 const requestActor = (req: IncomingMessage) => ((p) => (p ? { actor: `person:${p.id}`, actorName: `${p.name} (${ROLE_WORDS[p.role].name})` } : { actor: "owner", actorName: "You" }))((req as { person?: Person | null }).person);
 
 export async function handle(req: IncomingMessage, res: ServerResponse) {
