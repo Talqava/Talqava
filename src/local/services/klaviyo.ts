@@ -3,7 +3,7 @@
 // "Authorization: Klaviyo-API-Key <key>" with a revision header (2026-10-15 here) to https://a.klaviyo.com/api;
 // answers are in the JSON:API shape; adding a profile to a list does not record consent, while subscribing does and
 // follows the list's opt-in setting (a double opt-in list emails the person to confirm). Klaviyo's browser sign-in
-// always needs the app's secret, so it connects with the key. Campaigns are left out: the guide and the reference
+// always needs the app's secret (sent as a Basic header, with PKCE), so the key stays as the simpler way. Campaigns are left out: the guide and the reference
 // for this revision disagree on a campaign's fields, and results need a figure only a shop integration provides.
 // Not confirmed there: what a duplicate answer carries besides its status.
 import { baseOf, call, count, plain, type Connection, type ServiceDef } from "../connector-kit.ts";
@@ -11,7 +11,7 @@ import { baseOf, call, count, plain, type Connection, type ServiceDef } from "..
 type Keys = Pick<Connection, "values">;
 const REVISION = "2026-10-15";
 const api = <T = any>(c: Keys, path: string, method = "GET", body?: unknown) =>
-  call<T>(`${baseOf("klaviyo", "https://a.klaviyo.com/api")}${path}`, { name: "Klaviyo", method, headers: { authorization: `Klaviyo-API-Key ${c.values.api_key}`, revision: REVISION, accept: "application/vnd.api+json" }, ...(body === undefined ? {} : { raw: { type: "application/vnd.api+json", data: JSON.stringify(body) } }) });
+  call<T>(`${baseOf("klaviyo", "https://a.klaviyo.com/api")}${path}`, { name: "Klaviyo", method, headers: { authorization: c.values.access_token ? `Bearer ${c.values.access_token}` : `Klaviyo-API-Key ${c.values.api_key}`, revision: REVISION, accept: "application/vnd.api+json" }, ...(body === undefined ? {} : { raw: { type: "application/vnd.api+json", data: JSON.stringify(body) } }) });
 /** Query text in Klaviyo's form: names with square brackets, values encoded. */
 const q = (values: Record<string, string | number | undefined>) => {
   const parts = Object.entries(values).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
@@ -44,13 +44,29 @@ export const klaviyo: ServiceDef = {
   ],
   docs: "https://developers.klaviyo.com/en/docs/authenticate_",
   fields: [{ key: "api_key", label: "Private API key", secret: true, placeholder: "pk_…" }],
+  // Browser sign-in with the owner's own Klaviyo app. Klaviyo requires the proof called PKCE and the app's secret,
+  // sent as a Basic sign-in header. Its pages do not say whether an address on this computer is accepted.
+  browser: {
+    authUrl: "https://www.klaviyo.com/oauth/authorize",
+    tokenUrl: "https://a.klaviyo.com/oauth/token",
+    scopes: ["accounts:read", "lists:read", "lists:write", "profiles:read", "profiles:write", "subscriptions:write"],
+    secret: "required",
+    tokenStyle: "basic",
+    appSteps: [
+      "In Klaviyo, an owner, admin or manager opens klaviyo.com/manage-apps and presses Create app. Name it Talqava.",
+      "Add this redirect URL exactly: {redirect}",
+      "Give it these scopes: accounts:read, lists:read, lists:write, profiles:read, profiles:write, subscriptions:write.",
+      "Copy the Client ID and Client secret, paste them below and press the button. Klaviyo asks you to allow Talqava.",
+    ],
+  },
   async check(values) {
     const api_key = String(values.api_key ?? "").trim();
-    if (!/^pk_[\w-]{10,200}$/.test(api_key)) throw new Error("That does not look like a Klaviyo private key. It starts with pk_.");
-    const account = (await api<{ data: any[] }>({ values: { api_key } }, "/accounts")).data?.[0];
+    if (!values.access_token && !/^pk_[\w-]{10,200}$/.test(api_key)) throw new Error("That does not look like a Klaviyo private key. It starts with pk_.");
+    const signedIn: Record<string, string> = values.access_token ? { access_token: values.access_token } : { api_key };
+    const account = (await api<{ data: any[] }>({ values: signedIn }, "/accounts")).data?.[0];
     if (!account?.id) throw Object.assign(new Error("Klaviyo did not say whose account this is. Check that the key may read Accounts."), { refused: true });
     const info = account.attributes?.contact_information ?? {};
-    return { label: `${plain(info.organization_name, 80) || "Your account"}${info.default_sender_email ? ` (${plain(info.default_sender_email, 120)})` : ""}`, values: { api_key } };
+    return { label: `${plain(info.organization_name, 80) || "Your account"}${info.default_sender_email ? ` (${plain(info.default_sender_email, 120)})` : ""}`, values: (values.access_token ? {} : { api_key }) as Record<string, string> };
   },
   triggers: [
     {
