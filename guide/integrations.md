@@ -1,6 +1,6 @@
 # Connections
 
-Connections connect Talqava to the tools your business already uses, so your agents can work where the work is. Today there are six: **AI models** for the AI services your agents think with, **OpenRouter** for hundreds of models through one account, **Git and GitHub** for code and documents kept in repositories, **Connectors and AI apps** for using your team from Claude and for giving agents tools from other services, **API keys for other services**, and **Langfuse** for seeing your agents' costs in Langfuse if you use it. Each one says plainly what agents can and cannot do with it.
+Connections connect Talqava to the tools your business already uses, so your agents can work where the work is. Today there are five: **AI models** for the AI services your agents think with, **OpenRouter** for hundreds of models through one account, **Git and GitHub** for code and documents kept in repositories, **Connectors and AI apps** for using your team from Claude and for giving agents tools from other services and **API keys for other services**. Each one says plainly what agents can and cannot do with it.
 
 ## What you'll see
 
@@ -94,19 +94,18 @@ A post can be given **categories**, **tags** and a **featured image**. Agents ch
 
 To ask for one post or one change by hand, give a task in your own words, such as "Write a post about our winter opening hours for the blog" or "Update the About page on our website with our new address".
 
-### Connect a built-in service (Shopify, WooCommerce, HubSpot, Mailchimp, Slack, Asana, Trello, Calendly, Typeform, Zendesk, GitLab, Xero, Pipedrive, Todoist, Jira, ClickUp, Freshdesk, Brevo, Telegram, Klaviyo, Square)
+### Connect a built-in service (HubSpot, Mailchimp, Slack, Asana, Trello, Calendly, Typeform, Zendesk, GitLab, Xero, Pipedrive, Todoist, Jira, ClickUp, Klaviyo, Square)
 
 These services are built into Talqava and all work the same way.
 
-1. Open **Connections** and choose the service, for example **WooCommerce**.
+1. Open **Connections** and choose the service, for example **Asana**.
 2. Read **What agents can do**: what they can read, what they can change, and what they can delete (deleting always asks you first).
 3. Sign in:
    - **Asana, HubSpot, Typeform, Trello, Zendesk, GitLab, Xero, Todoist, ClickUp, Square, Klaviyo, Jira, Pipedrive and Mailchimp** sign in through your browser. The page shows **Sign in to** the service first. The service asks for an app registered with it; you register your own once, following the numbered steps on the page, then press the button and approve in the browser. The tab says **Connected**. For Trello you copy only its public API key; there is no token to copy.
    - Where Talqava has its own app registered with a service, there are no steps: press the button, sign in and approve. For some of these the page says the sign-in passes through Talqava's website (auth.talqava.com). That website completes the sign-in with the service and keeps nothing; your sign-in is stored only on your computer. You can still register and use your own app instead.
    - If you would rather paste a key, open **Use a key instead** on the same page.
    - **Slack and Calendly** send your browser back only to a secure website address, which an app on your own computer cannot be. So their browser sign-in appears once Talqava's maker has registered Talqava's app with them; until then they connect with a key: follow the numbered steps, paste it, and press **Check and connect**.
-   - **Shopify** connects with an app you make in Shopify's Dev Dashboard and install on your shop; Talqava exchanges the app's ID and secret for a short-lived token and renews it.
-   - **WooCommerce, Brevo, Freshdesk and Telegram** connect with a key. Freshdesk and Telegram offer no browser sign-in for other apps at all. WooCommerce's approval page hands the key to a public website, not to your computer. Brevo's sign-in needs an app that Brevo reviews first.
+   - Talqava offers only services that can sign in through your browser. Shopify, WooCommerce, Freshdesk, Brevo and Telegram were removed for that reason; if you had connected one, its saved key was forgotten when Talqava updated, and nothing at the service was changed.
    
    Talqava checks the sign-in with the service before saving it.
 4. Choose **What agents may do with this account**:
@@ -116,8 +115,6 @@ These services are built into Talqava and all work the same way.
 
 What each one does:
 
-- **WooCommerce**: see orders, products and customers of the shop on your WordPress site; change a product's price, stock or text; move an order to another status; add a note to an order. A note marked for the customer is emailed to them.
-- **Shopify**: see orders, products and customers, and change a product's title, status or tags. Shopify no longer gives a shop a simple key: you make a small app in Shopify's Dev Dashboard, install it on your shop, and paste its Client ID and Client secret; the page lists the steps. Talqava renews its access each day by itself.
 - **Slack**: read the channels the bot has been invited to, and post messages and replies. You make the bot in your own Slack workspace; the page lists the permissions to give it.
 - **Asana**: see projects and tasks, add tasks, change them or mark them done, and comment.
 - **HubSpot**: find and read contacts, companies and deals; add and change them. It connects with a HubSpot service key.
@@ -132,9 +129,6 @@ What each one does:
 - **Todoist**: see your projects and open to-dos (also with a Todoist filter such as *today | overdue*); add, change, comment on and tick off to-dos. Deleting a to-do always asks you first. Sign in through your browser with an app you make in Todoist's App Management Console, or paste your API token.
 - **Jira**: see projects, find and read issues with their comments; open an issue, comment, move it to another step, change its summary or labels, or assign it to yourself. Sign in through your browser with an app you make in Atlassian's developer console, or connect with your site name, your Atlassian email and an API token of the plain kind (not the kind with scopes). Atlassian's tokens expire after at most a year; make a new one then and connect again. A browser sign-in renews itself.
 - **ClickUp**: see your spaces, folders and lists, the tasks in a list and the tasks assigned to you; add tasks, change them (for example their status), and comment. Sign in through your browser with an app a workspace owner or admin makes under Settings › Apps, or paste your personal API token (it starts with pk_).
-- **Freshdesk**: see and find support tickets and read their conversations; add private notes, change a ticket's status or priority, and open a ticket. A reply to the customer always asks you first, because Freshdesk emails it to them. It connects with the API key on your Freshdesk profile page and your helpdesk domain.
-- **Brevo**: see your contact lists, contacts and how email campaigns did (delivered, opened, clicked, unsubscribed, bounced); add or update a contact, move them between lists, or mark them unsubscribed. Agents do not send emails or campaigns. It connects with an API key; Brevo switches off a key that is not used for 90 days, and may refuse an internet address it has not seen until you authorize it under Settings › Security › Authorized IPs.
-- **Telegram**: receive the messages people send to a bot you make with @BotFather, and answer them. Sending always asks you first. People must write to the bot first; a bot cannot start a conversation. Telegram hands each message over once and keeps no history for bots, so agents can read what arrived since Talqava was started, and a new message can start a task. Use the bot only with Talqava.
 - **Klaviyo**: see lists and profiles, add a person or update their name, and take someone off a list. Subscribing someone to a list records their consent and always asks you first; on a double opt-in list Klaviyo emails them to confirm. Campaigns are not included yet. Sign in through your browser with an app you make in Klaviyo, or paste a private key.
 - **Square**: see payments, orders, customers, locations and items with prices, and add a customer. Agents take no payments and give no refunds. Sign in through your browser with the Application ID of an application you create in Square's Developer Console; Talqava then asks only to see payments, orders, customers and items and to add customers. If Square refuses the return address on your computer, use the application's Production access token instead; that token reaches everything in your own Square account.
 
@@ -157,7 +151,7 @@ On a connected account of a built-in service:
 
 Talqava looks every five minutes. Only things that happen after you set it up start a task, each thing starts one task only, and at most five start at a time. The task shows up like any other and waits for your review. You can **Pause** or **Remove** it on the same card.
 
-Events today: a new order (Shopify, WooCommerce), a new email (Gmail, Outlook), a new booking (Calendly) and a new form answer (Typeform).
+Events today: a new payment (Square), a new email (Gmail, Outlook), a new booking (Calendly) and a new form answer (Typeform).
 
 What the service sends, such as the words of an email, is given to the agent as information, never as instructions. Each task costs what the AI model charges, so watch a busy inbox with care; with Gmail you can limit it to emails matching search words.
 
@@ -181,19 +175,6 @@ Good to know:
 - **Google asks you to sign in again every seven days** while your Google app is in "Testing", which is the case for a personal Google account. With Google Workspace, choose **Internal** when registering and there is no such limit. When a sign-in runs out, the account shows **Needs attention** and your Inbox gets a note.
 - One Google project serves Gmail, Calendar and Drive; you sign in to each separately, so each gets only the permission it needs.
 
-### Connect a well-known service from the catalogue
-
-The catalogue lists services that publish their own connector and accept a key you make: **Stripe**, **Airtable**, **monday.com**, **Intercom**, **Linear** and **GitHub**. It is on the **Connectors and AI apps** page under **From the catalogue**, and in the **Marketplace** under **Connectors**.
-
-1. Press **See what it can do** on a service. Read what it **can read** and **can change** before anything is connected.
-2. Make a key in that service, following the line under the key box (the link opens the service's own instructions). Give the key only the access you want your agents to have: the key decides what the connector can reach.
-3. Paste the key and press **Check the key and connect**. Talqava checks the key with the service first; a key the service refuses is not saved.
-4. To stop, press **Disconnect** on its card. The key is forgotten.
-
-Only agents with the **connected services** power can use a connector, and each one shows under **Connected services** on that agent's line in **Organization → Access**. Tools that change something ask you first, unless the service marks them read-only.
-
-**Not available yet** lists services people ask for that cannot be offered yet, and why: Gmail, Google Calendar and Drive, Microsoft 365, QuickBooks and others need Talqava to be registered with those companies first.
-
 ### Give agents tools from another service (a connector)
 
 1. On the **Connectors and AI apps** page, under **Add a connector**, type a short name and the web address the service gives you.
@@ -201,13 +182,6 @@ Only agents with the **connected services** power can use a connector, and each 
 3. Press **Add connector**. Remove it any time with **Remove**.
 
 A connector that runs as a program on your computer is added further down the same page, under **All connectors, and ones that run on this computer**: give it a name and the program to run, then press **Add connector**.
-
-### Send your agents' costs to Langfuse (optional)
-
-1. In your Langfuse project, open **Settings → API keys** and create a pair.
-2. In Talqava, open **Connections → Langfuse**, choose where your Langfuse is (Europe, United States, Japan, or your own address), paste the public and secret keys, and press **Connect**. Talqava checks them with Langfuse first.
-3. From then on, every model call your agents make is sent there, grouped by task: the model, tokens, cost, time and which agent. What was said is never sent.
-4. Press **Disconnect** to stop.
 
 ### Store a key for another service
 

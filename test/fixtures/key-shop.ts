@@ -1,8 +1,11 @@
+// A service that connects with a pasted key, kept only as a stand-in for the connector kit's tests. Talqava no longer
+// offers WooCommerce itself (it has no browser sign-in that returns to an app on a computer); this was its definition.
+//
 // WooCommerce: the orders, products and customers of a shop on a WordPress site. Facts from WooCommerce's REST API
 // documentation (woocommerce.github.io/woocommerce-rest-api-docs), read November 2026: keys are made under
 // WooCommerce › Settings › Advanced › REST API; over https the consumer key and secret are sent as Basic sign-in, and
 // where the web host does not pass that header on, in the address instead. Plain http is not supported here.
-import { call, count, plain, query, type Connection, type ServiceDef } from "../connector-kit.ts";
+import { call, count, plain, query, type Connection, type ServiceDef } from "../../src/local/connector-kit.ts";
 
 type Keys = Pick<Connection, "values">;
 /** One request. `via` remembers which way of sending the keys this site accepts. */

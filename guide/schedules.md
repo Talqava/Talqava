@@ -15,10 +15,10 @@ A briefing is a routine that is already written: a report an agent sends to your
 
 - **Your own work**: Monday plan, Friday wrap-up, End-of-day wrap, Weekly goals check and Agenda for each project are free, built from your tasks and goals. Weekly roundup of your chats and Meeting notes to actions use your AI model.
 - **The outside world**: Morning news, Competitor watch, Rules and deadlines, Supplier price watch, Review replies, Blog post idea, Learning digest, Mentions watch, New video digest, Search ranking check, Idea log and Trending projects digest need only web search. **Website down alert** and **Page change watch** are free: Talqava looks at the address itself, with no AI model.
-- **Money**: Overdue invoices, Bills due this week, Weekly cash check, Subscription watch and Month-end pack read Xero. Yesterday's sales reads Square, Shopify or WooCommerce. Receipts to a list reads Gmail or Outlook.
-- **Customers**: Inbox triage (Gmail or Outlook), Unanswered customers (Zendesk or Freshdesk), New leads (HubSpot, Pipedrive or Typeform), Follow-up reminders (HubSpot or Pipedrive), Quiet customers (Shopify, Square or WooCommerce), New signup prospecting and Proposal first draft (HubSpot or Pipedrive), After-hours holding replies (Gmail, Outlook, Zendesk, Freshdesk or Telegram).
-- **Marketing**: Newsletter draft and Social posts for the week (from what Talqava knows of your business), Campaign results (Mailchimp or Brevo).
-- **Running the business**: Meeting prep, Tomorrow's day and Travel check (Google Calendar), Stock running low (Shopify, WooCommerce or Square), Open issues digest (GitLab, Jira, ClickUp, Asana, Trello or Todoist), Merge requests waiting (GitLab), Weekly review and plan (Google Calendar), Files tidy-up (free).
+- **Money**: Overdue invoices, Bills due this week, Weekly cash check, Subscription watch and Month-end pack read Xero. Yesterday's sales reads Square. Receipts to a list reads Gmail or Outlook.
+- **Customers**: Inbox triage (Gmail or Outlook), Unanswered customers (Zendesk), New leads (HubSpot, Pipedrive or Typeform), Follow-up reminders (HubSpot or Pipedrive), Quiet customers (Square), New signup prospecting and Proposal first draft (HubSpot or Pipedrive), After-hours holding replies (Gmail, Outlook, Zendesk, Freshdesk or Telegram).
+- **Marketing**: Newsletter draft and Social posts for the week (from what Talqava knows of your business), Campaign results (Mailchimp).
+- **Running the business**: Meeting prep, Tomorrow's day and Travel check (Google Calendar), Stock running low (Square), Open issues digest (GitLab, Jira, ClickUp, Asana, Trello or Todoist), Merge requests waiting (GitLab), Weekly review and plan (Google Calendar), Files tidy-up (free).
 - **People and renewals** (free): Renewals coming up and Birthdays and anniversaries work from a list you type; Policy review reminder looks at your Workspace pages.
 
 **Three kinds.**

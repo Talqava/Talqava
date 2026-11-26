@@ -47,7 +47,7 @@ One word for each thing, the same in every screen and guide.
 ## Connecting things
 
 - **AI model**: the service your agents think with. **Backup model**: one that takes over if the first is down.
-- **Connector**: a link to another service, such as Stripe, that gives agents tools for it. (Technically an MCP server.)
+- **Connector**: a link to another service that gives agents tools for it. (Technically an MCP server.)
 - **Key**: a secret from another service that lets Talqava use your account there.
 - **Single sign-on**: signing in with your company account.
 

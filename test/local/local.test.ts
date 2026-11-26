@@ -675,11 +675,11 @@ test("examples differ in size, copying never shrinks a chart, and Git reports it
   assert.equal(found.github, null);
   assert.equal(gone.found, false);
   assert.ok((await listIntegrations()).integrations.some((i) => i.id === "git"));
-  // One directory: every service is filed under a known category, catalogue services stand beside the built-in ones,
+  // One directory: every service is filed under a known category, services that connect only with a pasted key are not offered,
   // and a planned service is shown as coming, never twice.
   const dir = await listIntegrations();
   assert.ok(dir.integrations.every((i) => dir.categories.includes(i.category)), "every entry has a category that is shown");
-  assert.equal(dir.integrations.find((i) => i.id === "connector:stripe")?.category, "Payments and online shop");
+  for (const gone of ["Stripe", "Langfuse", "Shopify", "WooCommerce", "Freshdesk", "Brevo", "Telegram"]) assert.equal(dir.integrations.some((i) => i.name === gone), false, `${gone} is no longer offered`);
   assert.equal(dir.integrations.find((i) => i.name === "Gmail")?.state, "needs-setup", "Gmail is built in, signing in through the browser");
   assert.equal(dir.integrations.find((i) => i.name === "Salesforce")?.state, "coming");
   assert.equal(new Set(dir.integrations.map((i) => i.name.toLowerCase())).size, dir.integrations.length, "no service is listed twice");
@@ -2849,43 +2849,8 @@ test("workspace pages link to each other by name, keep links on rename, list bac
   }
 });
 
-test("Langfuse gets each model call's model, tokens, cost and agent, never what was said; Portkey takes its own key header", async () => {
-  const lf = await import("../../src/local/langfuse.ts");
+test("Portkey takes its key in its own header", async () => {
   const http = await import("node:http");
-  const got: { auth: string; version: string; body: any }[] = [];
-  const server = http.createServer(async (req, res) => {
-    let raw = "";
-    for await (const chunk of req) raw += chunk;
-    got.push({ auth: String(req.headers.authorization), version: String(req.headers["x-langfuse-ingestion-version"]), body: JSON.parse(raw) });
-    const ok = req.url === "/api/public/otel/v1/traces" && req.headers.authorization === `Basic ${Buffer.from("pk-lf-1:sk-lf-2").toString("base64")}`;
-    res.writeHead(ok ? 200 : 401, { "content-type": "application/json" }).end("{}");
-  });
-  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
-  const host = `http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}`;
-  try {
-    await assert.rejects(lf.connectLangfuse({ host, publicKey: "abc", secretKey: "def" }), /starts with pk-lf-/);
-    await assert.rejects(lf.connectLangfuse({ host, publicKey: "pk-lf-1", secretKey: "sk-lf-wrong" }), /did not accept those keys/);
-    assert.deepEqual(await lf.connectLangfuse({ host, publicKey: "pk-lf-1", secretKey: "sk-lf-2" }), { ok: true });
-    lf.recordStep({ model: "claude-opus-5-5 on Anthropic", ms: 2500, cost: 0.0123, input: 1200, output: 300, cacheRead: 8000 }, { trace: "task-1", traceName: "Close November", agent: "Bookkeeper", session: "conv-1" });
-    await lf.flushLangfuse();
-    const sent = got.at(-1)!;
-    assert.equal(sent.version, "4");
-    const span = sent.body.resourceSpans[0].scopeSpans[0].spans[0];
-    const attrs = Object.fromEntries(span.attributes.map((a: { key: string; value: { stringValue: string } }) => [a.key, a.value.stringValue]));
-    assert.equal(attrs["langfuse.observation.type"], "generation");
-    assert.equal(attrs["langfuse.trace.name"], "Close November");
-    assert.deepEqual(JSON.parse(attrs["langfuse.observation.usage_details"]), { input: 1200, output: 300, cache_read_input_tokens: 8000 });
-    assert.deepEqual(JSON.parse(attrs["langfuse.observation.cost_details"]), { total: 0.0123 });
-    assert.equal(span.traceId.length, 32);
-    assert.equal(BigInt(span.endTimeUnixNano) - BigInt(span.startTimeUnixNano), 2_500_000_000n);
-    // Nothing that was said is in it.
-    assert.ok(!JSON.stringify(sent.body).includes("observation.input"));
-    lf.removeLangfuse();
-    assert.equal(store.getConfig().langfuse, undefined);
-  } finally {
-    store.saveConfig({ langfuse: undefined });
-    server.close();
-  }
   // Portkey's key goes in its own header.
   const { OpenAICompatibleModel } = await import("../../src/core/index.ts");
   let header = "";

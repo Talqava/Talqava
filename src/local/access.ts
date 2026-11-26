@@ -2,7 +2,6 @@
 // (its powers, the org chart, library and workspace access, connectors, keys, approvals and budgets). The rules stay
 // where they are and keep refusing what is not allowed; this is the single place that shows them together, so the
 // owner can see at a glance what an agent can read, change, hand work to, and ask.
-import { connectorLabel } from "./connector-catalog.ts";
 import type { Org } from "./orgs.ts";
 import { assignableBy, memberOf, requestableBy } from "./orgs.ts";
 import { loadCrew } from "./crew.ts";
@@ -74,7 +73,7 @@ export function accessGraph(org: Org, botId: string): AccessGraph {
       suggestOnly: visible.filter((p) => p.edit !== "direct" || p.protected).length,
       hidden: pages.length - visible.length,
     },
-    connectors: powers.includes("connectors") ? cfg.mcpServers.map((s) => connectorLabel(s.name)) : [],
+    connectors: powers.includes("connectors") ? cfg.mcpServers.map((s) => s.name) : [],
     keys: powers.includes("api") ? Object.entries(cfg.secrets).map(([name, s]) => ({ name, host: s.host })) : [],
     budget: general ? { perTask: cfg.budget.spend ?? null, steps: cfg.budget.steps ?? null, monthly: cfg.monthlyBudget ?? null } : { perTask: bot!.budget?.spend ?? cfg.budget.spend ?? null, steps: bot!.budget?.steps ?? cfg.budget.steps ?? null, monthly: bot!.monthly ?? null },
   };

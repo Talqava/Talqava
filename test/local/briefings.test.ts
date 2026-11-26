@@ -23,7 +23,7 @@ before(async () => {
 test("the catalogue: every briefing says what, when and who suits it; none may invent, and a drafting one never sends", () => {
   assert.equal(B.BRIEFINGS.length, 50);
   assert.equal(new Set(B.BRIEFINGS.map((b) => b.id)).size, 50, "every id is used once");
-  const known = new Set(["xero", "square", "shopify", "woocommerce", "gmail", "outlook", "zendesk", "freshdesk", "hubspot", "pipedrive", "typeform", "mailchimp", "brevo", "googlecalendar", "gitlab", "jira", "clickup", "asana", "trello", "todoist", "telegram"]);
+  const known = new Set(["xero", "square", "gmail", "outlook", "zendesk", "hubspot", "pipedrive", "typeform", "mailchimp", "googlecalendar", "gitlab", "jira", "clickup", "asana", "trello", "todoist", "telegram"]);
   for (const b of B.BRIEFINGS) {
     assert.ok(b.name && b.about && b.when && b.suits.length, b.id);
     assert.match(b.schedule, /^(\S+ \S+ \S+ \S+ \S+|every \d+[mh])$/, `${b.id} has a time`);

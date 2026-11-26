@@ -152,8 +152,6 @@ export interface Config {
   checkFirst?: boolean;
   /** The Client ID of the GitHub app that "Connect GitHub" signs in through. Not a secret. */
   githubClientId?: string;
-  /** Langfuse, when the owner connected it: where to send each model call's cost and tokens (see langfuse.ts). */
-  langfuse?: { host: string; publicKey: string; secretKey: string };
   sessionSecret: string;
 }
 

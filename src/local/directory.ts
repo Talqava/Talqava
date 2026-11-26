@@ -26,7 +26,7 @@ export const DIRECTORY_CATEGORIES = [
 ] as const;
 export type DirectoryCategory = (typeof DIRECTORY_CATEGORIES)[number];
 
-/** Where each built integration is filed. Catalogue connectors are filed by their own id. */
+/** Where each built integration is filed. */
 export const FILED_UNDER: Record<string, DirectoryCategory> = {
   "ai-models": "AI models",
   openrouter: "AI models",
@@ -34,13 +34,6 @@ export const FILED_UNDER: Record<string, DirectoryCategory> = {
   git: "Code and technical",
   mcp: "Advanced",
   "api-keys": "Advanced",
-  langfuse: "Advanced",
-  stripe: "Payments and online shop",
-  airtable: "Sales and customer records",
-  monday: "Sales and customer records",
-  intercom: "Customer support",
-  linear: "Projects and tasks",
-  github: "Code and technical",
 };
 
 export interface ComingService {
@@ -64,7 +57,6 @@ export const COMING_SERVICES: ComingService[] = [
   { name: "Slack", category: "Team chat", about: "Read channels, post updates and answer questions." },
   { name: "Microsoft Teams", category: "Team chat", about: "Post updates and read channel messages." },
   { name: "Discord", category: "Team chat", about: "Post to and read from a server." },
-  { name: "Telegram", category: "Team chat", about: "Send and receive messages." },
   { name: "WhatsApp Business", category: "Team chat", about: "Answer customers on WhatsApp." },
   { name: "Webflow", category: "Websites and content", about: "Update site content and blog items." },
   { name: "Ghost", category: "Websites and content", about: "Write and publish posts and newsletters." },
@@ -75,14 +67,10 @@ export const COMING_SERVICES: ComingService[] = [
   { name: "YouTube", category: "Social media", about: "Read channel figures and comments, and update video details." },
   { name: "Mailchimp", category: "Email marketing", about: "Manage your audience and draft campaigns." },
   { name: "Klaviyo", category: "Email marketing", about: "Manage lists and draft campaigns for a shop." },
-  { name: "Brevo", category: "Email marketing", about: "Manage contacts and send campaigns." },
   { name: "HubSpot", category: "Sales and customer records", about: "Find and update contacts, companies and deals." },
   { name: "Salesforce", category: "Sales and customer records", about: "Find and update leads, accounts and opportunities." },
   { name: "Pipedrive", category: "Sales and customer records", about: "Find and update deals and contacts." },
-  { name: "Freshdesk", category: "Customer support", about: "Read, answer and update support tickets." },
   { name: "Help Scout", category: "Customer support", about: "Read and answer customer conversations." },
-  { name: "Shopify", category: "Payments and online shop", about: "See orders, products and customers, and update products." },
-  { name: "WooCommerce", category: "Payments and online shop", about: "See orders and products on a WordPress shop." },
   { name: "Square", category: "Payments and online shop", about: "See sales, customers and catalogue items." },
   { name: "PayPal", category: "Payments and online shop", about: "See payments and send invoices." },
   { name: "QuickBooks", category: "Accounting and invoices", about: "See invoices, bills and reports, and draft invoices." },
