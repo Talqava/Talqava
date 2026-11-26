@@ -148,6 +148,8 @@ test("Slack: the bot token is checked, refusals are explained, and posting asks 
   assert.match(await run("slack__read_channel", { channel: "C1" }), /U1 · Flour is low \[1795000000\.000100\]/);
   await assert.rejects(run("slack__read_channel", { channel: "C2" }), /the bot is not in that channel.*\/invite/);
   assert.equal(tool("slack__post_message")!.needsApproval({ channel: "C1", text: "x" }), true);
+  await assert.rejects(run("slack__post_message", { channel: "C1", text: "The key is sk-exampleexampleexampleexample" }), /would send an AI service key to Slack/);
+  assert.equal(state.slackPosts.length, 0, "nothing with a key in it reaches the service");
   assert.match(await run("slack__post_message", { channel: "C1", text: "Flour ordered.", thread: "1795000000.000100" }), /Posted in C1/);
   assert.deepEqual(state.slackPosts[0], { channel: "C1", text: "Flour ordered.", thread_ts: "1795000000.000100" });
   K.removeConnection(c.id);

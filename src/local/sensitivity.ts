@@ -100,3 +100,59 @@ export function mayReceive(level: Level): boolean {
 export function describePolicy(p: Policy = policy()): string[] {
   return LEVELS.map((l) => `${LEVEL_WORDS[l].name}: ${((w) => w[0].toLowerCase() + w.slice(1))(WHERE_WORDS[p.services[l]])}.`);
 }
+
+// ---------- noticing what text holds ----------
+// Two plain checks on text, done on this computer with patterns (nothing is sent anywhere): whether it looks more
+// sensitive than its level says, and whether it holds a key or password that should never be sent to a service.
+
+const luhn = (digits: string): boolean => {
+  let sum = 0;
+  for (let i = digits.length - 1, double = false; i >= 0; i--, double = !double) {
+    let n = Number(digits[i]);
+    if (double && (n *= 2) > 9) n -= 9;
+    sum += n;
+  }
+  return sum % 10 === 0;
+};
+const hasCard = (text: string) => [...text.matchAll(/\b(?:\d[ -]?){13,19}\b/g)].some((m) => ((d) => d.length >= 13 && d.length <= 19 && !/^(\d)\1+$/.test(d) && luhn(d))(m[0].replace(/\D/g, "")));
+const HEALTH = /\b(diagnos(is|ed)|prescri(bed|ption)|medical (record|history|condition)|patient (name|record|id)|blood test|health insurance (number|id)|sick note)\b/i;
+const PAY = /\b(payroll|salary|salaries|wage slip|payslip|pay stub|gross pay|net pay|bonus(es)? (for|of)|tax(payer)? (id|number)|national insurance number)\b/i;
+const MONEY_ROWS = /(?:[$£€]\s?\d[\d,]{3,}|\b\d{1,3}(?:,\d{3})+(?:\.\d{2})?\b)/g;
+
+/**
+ * A level this text probably deserves, and why, when it looks more sensitive than everyday business. Card numbers,
+ * social security numbers, health details and payroll point to Restricted; bank details and contracts to Confidential.
+ */
+export function suggestLevel(text: string): { level: Level; why: string } | null {
+  const t = String(text ?? "").slice(0, 400_000);
+  if (hasCard(t)) return { level: "restricted", why: "it seems to hold a payment card number" };
+  if (/\b\d{3}-\d{2}-\d{4}\b/.test(t) && /\b(ssn|social security)\b/i.test(t)) return { level: "restricted", why: "it seems to hold a social security number" };
+  if (HEALTH.test(t)) return { level: "restricted", why: "it seems to hold health details" };
+  if (PAY.test(t) && (t.match(MONEY_ROWS)?.length ?? 0) >= 2) return { level: "restricted", why: "it seems to hold pay or payroll figures" };
+  if (/\b[A-Z]{2}\d{2}[ ]?(?:[A-Z0-9]{4}[ ]?){2,7}[A-Z0-9]{1,4}\b/.test(t) && /\b(iban|bank|account)\b/i.test(t)) return { level: "confidential", why: "it seems to hold bank account details" };
+  if (/\b(routing number|sort code|account number)\b/i.test(t) && /\b\d{6,}\b/.test(t)) return { level: "confidential", why: "it seems to hold bank account details" };
+  if (/\b(non-disclosure agreement|confidential(ity)? agreement|strictly confidential|this agreement is (made|entered))\b/i.test(t)) return { level: "confidential", why: "it reads like a contract or a confidential paper" };
+  return null;
+}
+/** The suggestion only when it is higher than the level the file has now. */
+export function higherLevel(text: string, now: unknown): { level: Level; why: string } | null {
+  const hint = suggestLevel(text);
+  return hint && LEVELS.indexOf(hint.level) > LEVELS.indexOf(levelOf(now)) ? hint : null;
+}
+
+const SECRETS: [RegExp, string][] = [
+  [/-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/, "a private key"],
+  [/\bsk-(?:ant-|proj-|or-)?[A-Za-z0-9_-]{24,}\b/, "an AI service key"],
+  [/\bAKIA[0-9A-Z]{16}\b/, "an Amazon access key"],
+  [/\bgh[pousr]_[A-Za-z0-9]{30,}\b|\bgithub_pat_[A-Za-z0-9_]{40,}\b/, "a GitHub token"],
+  [/\bxox[baprs]-[A-Za-z0-9-]{20,}\b/, "a Slack token"],
+  [/\b(?:sk|rk)_live_[A-Za-z0-9]{20,}\b/, "a Stripe key"],
+  [/\bAIza[0-9A-Za-z_-]{35}\b/, "a Google key"],
+  [/\beyJ[A-Za-z0-9_-]{15,}\.eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}\b/, "a sign-in token"],
+  [/\b(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token)\s*[:=]\s*["']?[^\s"']{8,}/i, "a password or key"],
+];
+/** What kinds of keys or passwords a text seems to hold, in plain words. Empty when it holds none. */
+export function findSecrets(text: string): string[] {
+  const t = String(text ?? "").slice(0, 400_000);
+  return [...new Set(SECRETS.filter(([re]) => re.test(t)).map(([, what]) => what))];
+}

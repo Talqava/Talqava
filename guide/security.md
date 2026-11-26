@@ -96,6 +96,10 @@ These limits are enforced by the app itself. A person who tries something their 
 2. In its side panel, under **Sensitivity**, choose **Confidential** or **Restricted**.
 3. For **Restricted**, also name the agents who may read it: under **Who can see it**, choose **Only some groups or agents** and tick those agents by name. Being in a ticked group is not enough for a Restricted item.
 
+Talqava also watches for this itself. When you open a file whose text looks more sensitive than its level, such as a payment card number, health details, payroll figures or bank details, the side panel says so and offers one button to raise the level. It is worked out on this computer from patterns; nothing is sent anywhere, and the choice stays yours.
+
+**Keys and passwords are never sent out.** If an agent tries to post, save or publish text through a connected service or your WordPress site and the text holds what looks like a key, a token or a password, Talqava stops it and tells the agent to take it out.
+
 A page made inside a sensitive page starts at the same level. Tables follow their page. A Library document's level is set in its details in the **Library**. Memory has one level as a whole, set under **Sensitive information**.
 
 ### Decide which AI services may receive each level

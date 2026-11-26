@@ -140,6 +140,18 @@ In the panel, under **Turn it into**:
 
 To make it a task, choose an agent under **Give this note to an agent** and press **Give the task**. Share the note with that agent first, or the agent cannot read it.
 
+### Turn a checklist item into a task
+
+1. Open a note or document that has a checklist (lines starting with an empty box).
+2. In its side panel, under **Checklist**, press **Make a task** beside an item.
+3. Choose the agent and press **Create task**.
+
+The item then shows its task and how far along it is; press it to open the task. The note itself is not changed.
+
+### Find what agents noted for you
+
+When an agent has a short finding worth keeping, it can save it as a note. These notes go to the **From agents** notebook under **Notes**, so you find them in one place.
+
 ### Open or save Word, Excel and PowerPoint files
 
 - **Save a document as a Word file:** open it and press **Word file (.docx)** under **Download**.

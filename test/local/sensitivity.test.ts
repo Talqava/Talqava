@@ -117,3 +117,19 @@ test("Library documents and Memory follow the same rules", async () => {
   assert.equal(S.withLevels(cloud, () => orgMemory.search(live, null, "Acme")).length, 0);
   assert.match(orgMemoryPrompt(live, null, "customer"), /Acme/, "outside a run, nothing is held back");
 });
+
+test("text that looks more sensitive than its level is noticed, and keys and passwords are recognised", async () => {
+  const S = await import("../../src/local/sensitivity.ts");
+  assert.deepEqual(S.suggestLevel("Card 4242 4242 4242 4242 exp 12/28"), { level: "restricted", why: "it seems to hold a payment card number" });
+  assert.equal(S.suggestLevel("Order number 1234 5678 9012 3456 shipped"), null, "sixteen digits that are not a card number are left alone");
+  assert.equal(S.suggestLevel("Phone 555 0100, meeting at 10")?.level, undefined);
+  assert.equal(S.suggestLevel("Payroll for March\nAda gross pay $4,200\nSam gross pay $3,900")?.level, "restricted");
+  assert.equal(S.suggestLevel("The patient record shows a new prescription.")?.level, "restricted");
+  assert.equal(S.suggestLevel("Pay to IBAN GB29 NWBK 6016 1331 9268 19 at our bank")?.level, "confidential");
+  assert.equal(S.suggestLevel("Our salary policy is reviewed yearly."), null, "a word alone is not enough");
+  assert.equal(S.higherLevel("Card 4242 4242 4242 4242", "restricted"), null, "nothing to suggest when the level is already as high");
+  assert.equal(S.higherLevel("Card 4242 4242 4242 4242", "internal")?.level, "restricted");
+  assert.deepEqual(S.findSecrets("Use sk-exampleexampleexampleexample and password: hunter2hunter2"), ["an AI service key", "a password or key"]);
+  assert.deepEqual(S.findSecrets("-----BEGIN OPENSSH PRIVATE KEY-----\nabc"), ["a private key"]);
+  assert.deepEqual(S.findSecrets("The password policy asks for twelve characters."), []);
+});

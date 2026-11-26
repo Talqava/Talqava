@@ -13,6 +13,7 @@ import { defineTool } from "../core/index.ts";
 import { getConfig, saveConfig } from "./store.ts";
 import { audit } from "./audit.ts";
 import type { DirectoryCategory } from "./directory.ts";
+import { findSecrets } from "./sensitivity.ts";
 
 export type ActionKind = "read" | "write" | "destructive";
 export const CHANGE_RULES = ["read", "ask", "auto"] as const;
@@ -317,6 +318,11 @@ export function serviceTools(agent?: string): Tool[] {
           async run(input) {
             const connection = await fresh(which(def.id, input.account, agent));
             if (connection.off?.includes(action.name)) throw new Error(`On ${def.name} (${connection.label}) the owner switched this off: ${action.summary.toLowerCase()}. Say in your report what you would have done.`);
+            // A key or password in what is being sent out is stopped here, before it reaches the service.
+            if (action.kind !== "read") {
+              const found = findSecrets(JSON.stringify(input));
+              if (found.length) throw new Error(`That would send ${found.join(" and ")} to ${def.name}. Take it out of the text and try again; keys and passwords are never sent to a connected service.`);
+            }
             if (action.kind !== "read" && connection.rule === "read") throw new Error(`On ${def.name} (${connection.label}) the owner lets agents read only. Say in your report what you would change, and leave it to them.`);
             let out: string;
             try {

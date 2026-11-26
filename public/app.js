@@ -9223,7 +9223,11 @@ function levelPicker(page, id) {
   const say = () => (note.textContent = `${words[sel.value]} Which AI services may receive each level is set under Security.`);
   sel.addEventListener("change", () => attempt(async () => (await api("PATCH", `workspace/pages/${id}`, { level: sel.value }), (page.level = sel.value), say(), toast(`Marked ${LEVEL_NAMES[sel.value]}.`))));
   say();
-  return [levelsEditor(page, id), h("div", { class: "label" }, "Sensitivity"), sel, note, projectPicker(page, id), commentsBox(page, id), page.kind === "sheet" || page.kind === "deck" ? linksBox(id) : null];
+  // A nudge when the text looks more sensitive than its level: the owner decides, with one press.
+  const hint = page.levelHint
+    ? h("div", { class: "banner" }, `This looks more sensitive than ${LEVEL_NAMES[page.level] ?? "its level"}: ${page.levelHint.why}. `, h("button", { class: "small", onclick: () => ((sel.value = page.levelHint.level), sel.dispatchEvent(new Event("change")), hint.remove()) }, `Mark ${LEVEL_NAMES[page.levelHint.level]}`))
+    : null;
+  return [levelsEditor(page, id), h("div", { class: "label" }, "Sensitivity"), hint, sel, note, projectPicker(page, id), page.kind === "sheet" || page.kind === "deck" ? null : checklistBox(page, id), commentsBox(page, id), page.kind === "sheet" || page.kind === "deck" ? linksBox(id) : null];
 }
 
 const ACCESS_WORDS = { none: "No access", read: "Read", comment: "Comment", suggest: "Suggest", edit: "Edit" };
@@ -9279,6 +9283,36 @@ function projectPicker(page, id) {
 }
 
 /** In a file's panel: the tasks that read, changed or made it, and the pages that link to it. */
+/**
+ * In a note's or document's panel: its unticked checklist items, each of which can become a task for an agent. An
+ * item that became a task shows the task and how far along it is; nothing in the note itself is changed.
+ */
+function checklistBox(page, id) {
+  const items = [...new Set(String(page.markdown ?? "").split("\n").map((l) => /^\s*[-*]\s+\[ \]\s+(.+)$/.exec(l)?.[1].trim()).filter(Boolean))].slice(0, 30);
+  if (!items.length) return null;
+  const box = h("div", { class: "wstasks" });
+  const mark = `page ${id}`;
+  const draw = async () => {
+    const work = await api("GET", "work").then((w) => w.items).catch(() => []);
+    fill(
+      box,
+      items.map((text) => {
+        const task = work.find((t) => t.title === text.slice(0, 140) && String(t.description ?? "").includes(mark));
+        return h(
+          "div",
+          { class: "row wstaskrow" },
+          h("span", { class: "grow" }, text),
+          task
+            ? h("button", { class: "plain link small", onclick: () => openTask(task.id) }, `Task #${task.number} · ${TASK_STATUS_WORDS[task.status] ?? task.status}`)
+            : h("button", { class: "small", onclick: () => newTaskDialog({ name: text.slice(0, 140), text: `From the checklist in “${page.title}” (${mark}).`, onCreated: () => (toast("The task is started. It shows here beside the item."), draw()) }) }, "Make a task"),
+        );
+      }),
+    );
+  };
+  draw();
+  return [h("div", { class: "label" }, "Checklist"), box];
+}
+
 function linksBox(id) {
   const used = h("div", { class: "wstasks" });
   const from = h("div", { class: "wstasks" });
@@ -9929,7 +9963,7 @@ async function drawTaskPanel(id) {
 }
 
 /** A new task: what is wanted, who does it, how important it is. Under `parent` when given. */
-async function newTaskDialog({ parent = null, owner = "", text = "", goal = "", projectId = "" } = {}) {
+async function newTaskDialog({ parent = null, owner = "", text = "", goal = "", projectId = "", name = "", onCreated = null } = {}) {
   const org = activeOrg();
   if (!org.members.length) return go("team");
   if (!ui.goals) await api("GET", "goals").then((p) => ((ui.goals = p.goals), (ui.projects = p.projects))).catch(() => {});
@@ -9940,7 +9974,7 @@ async function newTaskDialog({ parent = null, owner = "", text = "", goal = "", 
     (ui.projects ?? []).filter((p) => p.status === "active").map((p) => h("option", { value: `project:${p.id}`, selected: p.id === projectId }, `Project: ${p.title}`)),
     (ui.goals ?? []).filter((g) => g.status === "active").map((g) => h("option", { value: `goal:${g.id}`, selected: g.id === goal && !projectId }, `Goal: ${g.title}`)),
   );
-  const title = h("input", { maxlength: 140, placeholder: "e.g. Find ten wholesale bakeries near us", "aria-label": "Task" });
+  const title = h("input", { maxlength: 140, placeholder: "e.g. Find ten wholesale bakeries near us", "aria-label": "Task", value: name });
   const details = h("textarea", { rows: 5, placeholder: "What should be done, what good looks like, anything they need to know (optional)", "aria-label": "Details" }, text);
   const who = h("select", { "aria-label": "Assign to" }, org.members.map((m) => h("option", { value: m.bot, selected: m.bot === (owner || parent?.owner) }, `${m.title} · ${m.department}`)));
   const priority = h("select", { "aria-label": "Priority" }, ["urgent", "high", "normal", "low"].map((p) => h("option", { value: p, selected: p === (parent?.priority ?? "normal") }, PRIORITY_WORDS[p])));
@@ -9952,7 +9986,7 @@ async function newTaskDialog({ parent = null, owner = "", text = "", goal = "", 
   if (!got || !(got.title || got.description)) return;
   await attempt(async () => {
     const reply = await createTask({ ...got, parent: parent?.id, project: state.project || undefined });
-    if (reply?.item) openTask(reply.item.id);
+    if (reply?.item) onCreated ? onCreated(reply.item) : openTask(reply.item.id);
   });
 }
 

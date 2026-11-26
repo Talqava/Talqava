@@ -8,6 +8,7 @@ import { defineTool } from "../core/index.ts";
 import { getConfig, saveConfig } from "./store.ts";
 import { audit } from "./audit.ts";
 import { stripTags } from "./library.ts";
+import { findSecrets } from "./sensitivity.ts";
 
 export const PUBLISH_RULES = ["drafts", "ask", "auto"] as const;
 export type PublishRule = (typeof PUBLISH_RULES)[number];
@@ -438,6 +439,8 @@ export function wordpressTools(): Tool[] {
       const image = Number(input.image) > 0 ? Math.trunc(Number(input.image)) : undefined;
       if ((categories || tags) && what === "page") throw new Error("Pages have no categories or tags; those are for posts.");
       const extra = { ...(categories ? { categories } : {}), ...(tags ? { tags } : {}), ...(image ? { image } : {}) };
+      const leaked = findSecrets(`${input.title ?? ""}\n${input.markdown ?? ""}\n${input.excerpt ?? ""}`);
+      if (leaked.length) throw new Error(`That text holds ${leaked.join(" and ")}. Take it out and try again; keys and passwords are never put on a website.`);
       const title = String(input.title ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
       const text = String(input.markdown ?? "").trim();
       const excerpt = input.excerpt ? String(input.excerpt).slice(0, 500) : undefined;

@@ -464,6 +464,9 @@ const tagsOf = (text: string | null | undefined): string[] => {
 };
 const KIND_WORDS: Record<PageKind, string> = { page: "page", doc: "document", note: "note", sheet: "sheet", deck: "slides" };
 
+/** The notebook where agents' own notes are kept, so the owner finds them in one place. */
+export const AGENT_NOTEBOOK = "From agents";
+
 /** One slide of a deck: a title, its text in Markdown, and speaker notes. */
 export interface Slide {
   title: string;
@@ -596,7 +599,8 @@ export const workspace = {
     // Documents and notes are not inside pages: a folder or notebook groups them.
     const parent = kind === "page" && input.parent ? visible(org, d, String(input.parent), who).row.id : null;
     if (who !== OWNER && kind === "page" && !parent) throw new Error("Put the page under a page you may see.");
-    if (who !== OWNER && kind === "note") throw new Error("Notes are the owner's. Save your result as a document instead.");
+    // The owner's notebooks are the owner's. An agent's own notes go to the one notebook kept for them.
+    if (who !== OWNER && kind === "note" && String(input.folder ?? "") !== AGENT_NOTEBOOK) throw new Error("Notes are the owner's. Save your result as a document instead.");
     const title = cleanTitle(input.title) || "Untitled";
     const md = String(input.markdown ?? "");
     if (md.length > MAX_PAGE) throw new Error("That page is too long.");
@@ -1029,7 +1033,7 @@ export function workspaceTool(who: (conversationId: string) => string | null): T
       note: { type: "string", description: "For suggest: one line on what you changed and why, for the owner. For comment: the comment itself." },
       title: { type: "string", description: "For file: the new page's title." },
       parent: { type: "string", description: "For file: the id of the page to put it under." },
-      kind: { type: "string", enum: ["page", "document", "slides"], description: "For file: \"document\" saves an Office document instead of a workspace page; \"slides\" saves a presentation." },
+      kind: { type: "string", enum: ["page", "document", "slides", "note"], description: "For file: \"document\" saves an Office document instead of a workspace page; \"slides\" saves a presentation; \"note\" saves a short note for the owner in the notebook for agents' notes." },
       folder: { type: "string", description: "For file with kind document: the folder to put it in, e.g. Customers." },
     },
     required: ["action"],
@@ -1062,6 +1066,12 @@ export function workspaceTool(who: (conversationId: string) => string | null): T
           const deck = workspace.create(org, agent, { kind: "deck", folder: input.folder, title: input.title, markdown: writeDeck(parseDeck(String(input.markdown ?? ""))), task });
           workspace.used(org, task, deck.id, "filed");
           return `Saved as the slides “${deck.title}” (page ${deck.id}) in Office, ${parseDeck(deck.markdown).length} slides. Say so in your report.`;
+        }
+        if (input.kind === "note") {
+          // A short finding for the owner: it goes to one notebook kept for agents' notes, tagged with who wrote it.
+          const note = workspace.create(org, agent, { kind: "note", folder: AGENT_NOTEBOOK, title: input.title, markdown: input.markdown, task });
+          workspace.used(org, task, note.id, "filed");
+          return `Saved as the note “${note.title}” (page ${note.id}) in the notebook ${AGENT_NOTEBOOK}. Say so in your report.`;
         }
         if (input.kind === "document") {
           const doc = workspace.create(org, agent, { kind: "doc", folder: input.folder, title: input.title, markdown: input.markdown, task });
