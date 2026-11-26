@@ -172,7 +172,7 @@ before(async () => {
         if (p === "/emailCampaigns") return json(200, { count: 1, campaigns: [{ id: 8, name: "November news", subject: "Stollen is back", status: "sent", sentDate: "2026-11-18T09:00:00.000Z", statistics: { globalStats: { delivered: 200, uniqueViews: 90, uniqueClicks: 20, unsubscriptions: 1, hardBounces: 2, softBounces: 1 } } }] });
         return json(404, { code: "document_not_found", message: "Contact does not exist" });
       }
-      if (svc === "bot123456:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw" || svc === "bot999999:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw") {
+      if (svc === "bot123456:made-up-for-tests-not-a-real-token" || svc === "bot999999:made-up-for-tests-not-a-real-token") {
         if (svc.startsWith("bot999999")) return p === "/getMe" ? json(200, { ok: true, result: { id: 2, first_name: "Other", username: "other_bot" } }) : json(200, { ok: true, result: { url: "https://example.com/hook" } });
         if (p === "/getMe") return json(200, { ok: true, result: { id: 1, is_bot: true, first_name: "Bakery helper", username: "bakery_help_bot" } });
         if (p === "/getWebhookInfo") return json(200, { ok: true, result: { url: "" } });
@@ -492,8 +492,8 @@ test("Brevo: contacts, lists and campaign results with a key; nothing is sent fr
 
 test("Telegram: a bot's messages are received once and kept in memory; sending always asks the owner", async () => {
   await assert.rejects(K.connectService("telegram", { values: { token: "not a token" } }), /does not look like a bot token/);
-  await assert.rejects(K.connectService("telegram", { values: { token: "999999:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw" } }), /already sends its messages to another program/);
-  const c = await K.connectService("telegram", { values: { token: "123456:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw" }, rule: "auto" });
+  await assert.rejects(K.connectService("telegram", { values: { token: "999999:made-up-for-tests-not-a-real-token" } }), /already sends its messages to another program/);
+  const c = await K.connectService("telegram", { values: { token: "123456:made-up-for-tests-not-a-real-token" }, rule: "auto" });
   assert.equal(c.label, "Bakery helper (@bakery_help_bot)");
   assert.equal(await run("telegram__recent_messages"), "No messages have arrived since Talqava was started.");
 
@@ -521,7 +521,7 @@ test("Telegram: a bot's messages are received once and kept in memory; sending a
 
   // A new message can start a task, and is described from what was kept.
   const trigger = K.services().find((s) => s.id === "telegram")!.triggers![0];
-  const conn = { values: { token: "123456:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw" } } as never;
+  const conn = { values: { token: "123456:made-up-for-tests-not-a-real-token" } } as never;
   telegramUpdates = [{ update_id: 13, message: { message_id: 8, date: 1795478600, chat: { id: 42, type: "private", first_name: "Sam" }, from: { id: 42, first_name: "Sam" }, text: "Thanks!" } }];
   const ids = await trigger.list(conn, "");
   assert.deepEqual(ids, ["42_8", "m1002_7", "42_5"]);
