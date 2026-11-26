@@ -126,7 +126,21 @@ To have an agent draft slides, use **Or ask an agent to draft them** on the Slid
 1. Open the note. Under **Attachments**, press **Record a voice memo**. The first time, your computer asks whether Talqava may use the microphone; allow it.
 2. Speak, then press **Stop recording** (20 minutes at most). The memo is attached to the note with the date and time in its name, and a player to listen to it.
 
-A voice memo is kept as sound on this computer. Talqava does not write it out as text yet, and it is not sent to any AI service. If recording does not start on a Mac, open **System Settings › Privacy & Security › Microphone** and switch Talqava on.
+A voice memo is kept as sound on this computer and is not sent to any AI service. To have it written out, see the next section. If recording does not start on a Mac, open **System Settings › Privacy & Security › Microphone** and switch Talqava on.
+
+### Have a recording written out
+
+Talqava can write out what is said in a voice memo, or in any sound file you attach to a note. It does this on your own computer with a speech program that comes with Talqava: nothing you say is sent anywhere, and it uses no AI model credit.
+
+1. Beside the recording, press **Write it out**.
+2. The first time, Talqava asks to download the speech model, which is kept on your computer. **Standard** (142 MB) suits everyday use; **Quick** (75 MB) is faster and makes more mistakes; **Careful** (466 MB) is slower and better with names, accents and noise. Press **Download** and wait for it to finish.
+3. When it is done, press **Show words** to read what was said. Searching Notes for any of those words now finds the note.
+
+It understands many languages and works out which one is spoken. Recordings of up to twenty minutes can be written out. Expect mistakes with names, strong accents and noisy rooms; read important things through. If **Write it out** is not shown, your copy of Talqava was built without the speech program.
+
+### Speak instead of typing
+
+On the home screen and in a chat, press the microphone beside the send button, say what you want, and press it again. What you said is written into the box for you to check and send. It uses the same speech program, on your computer, and stops by itself after five minutes.
 
 Reading the words needs a Claude model as your team's model, and the note's sensitivity level must be one your rules let that AI service receive. Attachments stay with you: agents are not given them, even on a note you share.
 
@@ -214,7 +228,7 @@ Every file's side panel has the same parts in the same order: who can see it, ho
 ## What is not built yet
 
 - Slides: pictures, and layouts other than a title with text.
-- Notes: voice memos written out, and searching the words in photos.
+- Notes: handing a written-out voice memo to an agent as a task, and writing out a recording longer than twenty minutes.
 
 ## Tips
 

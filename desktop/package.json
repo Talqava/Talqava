@@ -51,7 +51,7 @@
       "entitlements": "entitlements.mac.plist",
       "entitlementsInherit": "entitlements.mac.plist",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Talqava uses the microphone only when you press Record a voice memo in a note. The recording stays on this computer."
+        "NSMicrophoneUsageDescription": "Talqava uses the microphone only when you press Record a voice memo in a note, or the microphone button to speak instead of typing. What you say stays on this computer."
       }
     },
     "dmg": {

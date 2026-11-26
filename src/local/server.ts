@@ -71,6 +71,7 @@ import { budgetBlock, groupSpend, monthlyBudgets, spentToday } from "./spend.ts"
 import { decide, listProposals } from "./proposals.ts";
 import { exportOrg, importOrg } from "./portable.ts";
 import { fileReport, parseDeck, workspace, writeDeck } from "./workspace.ts";
+import { MAX_WAV, fetchModel, removeModel, speechStatus, transcribe } from "./speech.ts";
 import { PRIORITIES, work } from "./work.ts";
 import { PLANNED_BRIEFINGS, briefingOf, briefingPrompt, chosenModel, cleanTopic, possibleSenders, digests, forgetDigest, listBriefings, missingService, runDigest, runWatch, senderFor } from "./briefings.ts";
 import { goals } from "./goals.ts";
@@ -817,12 +818,24 @@ function chartSize(seats: ReturnType<typeof seatsFor>) {
   return { agents: seats.length, departments: new Set(seats.map((x) => x.department ?? categories.get(x.bot) ?? "Other")).size, levels: seats.length ? Math.max(...seats.map((x) => depth(x.bot))) : 0 };
 }
 
+/** The sound sent with a request, as it is: plain WAV, at most twenty minutes. */
+async function soundOf(req: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > MAX_WAV) throw new Error("That recording is longer than twenty minutes. Write out a shorter one.");
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks);
+}
+
 // ---------- routes ----------
 async function api(req: IncomingMessage, res: ServerResponse, url: URL, approved?: WaitingChange): Promise<unknown> {
   const parts = url.pathname.split("/").filter(Boolean).slice(1); // after "api"
   const route = `${req.method} ${parts[0] || ""}`;
   // A file dropped into the library arrives as it is, not as JSON; it is read after the sign-in check below.
-  const upload = (route === "POST library" && parts[1] === "upload") || (route === "POST workspace" && parts[1] === "import-file") || (route === "POST workspace" && parts[1] === "pages" && parts[3] === "attachments" && !parts[4]);
+  const upload = (route === "POST library" && parts[1] === "upload") || (route === "POST workspace" && parts[1] === "import-file") || (route === "POST workspace" && parts[1] === "pages" && parts[3] === "attachments" && !parts[4]) || (route === "POST speech" && parts[1] === "write-out") || (route === "POST workspace" && parts[1] === "pages" && parts[3] === "attachments" && parts[5] === "write-out");
   // A change a second administrator just approved is carried out with what the first one asked for.
   const body = approved ? (approved.body as any) : upload ? {} : ["POST", "PUT", "PATCH"].includes(req.method ?? "") ? await readBody(req) : {};
   (req as { auditBody?: unknown }).auditBody = route === "POST login" || parts[0] === "me" || parts[0] === "people" || parts[0] === "security-ops" ? { name: body.name, role: body.role } : body;
@@ -1094,7 +1107,8 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
     ];
     return send(res, 200, { rules: guardrails(), connected, stepKinds: STEP_KINDS.map((id) => ({ id, words: STEP_WORDS[id] })), people: people.enabled() ? people.list().filter((p) => p.role !== "auditor" && (p as { active?: boolean }).active !== false).map((p) => ({ id: p.id, name: p.name })) : [], spentToday: spentToday(), words: describeGuardrails(), refused: readAudit({ kind: "guardrail", limit: 30 }).entries });
   }
-  if (route === "GET state") return send(res, 200, publicConfig());
+  // Whether this copy of Talqava can write out speech decides whether the page shows a microphone at all.
+  if (route === "GET state") return send(res, 200, { ...publicConfig(), speech: speechStatus().state !== "unavailable" });
   if (route === "PUT settings") return send(res, 200, await updateSettings(body));
   if (route === "POST model-check") {
     const cfg = getConfig();
@@ -1723,6 +1737,15 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
           return { ...result, cost: reader.cost() };
         }));
       }
+      // The words said in an attached recording, written out on this computer. The page turns the recording into
+      // plain sound first, so nothing here has to understand its format.
+      if (route === "POST workspace" && id && sub === "attachments" && extra && parts[5] === "write-out") {
+        return send(res, 200, await attempt(async () => {
+          workspace.attachment(org, id, extra);
+          const heard = await transcribe(await soundOf(req));
+          return { ...workspace.heardAttachment(org, id, extra, heard.text), seconds: heard.seconds };
+        }));
+      }
       if (route === "GET workspace" && id && sub === "tasks") {
         return send(res, 200, await attempt(() => {
           workspace.get(org, id);
@@ -2048,6 +2071,11 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
   }
 
   // Briefings: ready-made routines that report to the Inbox.
+  // Speech to text on this computer: whether it can be used, the one-time model download, and writing out a recording.
+  if (route === "GET speech") return send(res, 200, speechStatus());
+  if (route === "POST speech" && parts[1] === "model") return send(res, 200, await attempt(() => (audit({ ...requestActor(req), kind: "settings", action: "Downloaded or chose a speech model", detail: String(body.model ?? "") }), fetchModel(body.model), speechStatus())));
+  if (route === "DELETE speech" && parts[1] === "model" && parts[2]) return send(res, 200, await attempt(async () => (await removeModel(parts[2]), speechStatus())));
+  if (route === "POST speech" && parts[1] === "write-out") return send(res, 200, await attempt(async () => transcribe(await soundOf(req))));
   if (route === "GET jobs" && parts[1] === "briefings") return send(res, 200, { briefings: listBriefings(orgs.active(), await jobs.list()), digests: digests(), planned: PLANNED_BRIEFINGS, team: possibleSenders(orgs.active()) });
   if (route === "POST jobs" && parts[1] === "briefings" && parts[3] === "on") {
     return send(res, 200, await attempt(async () => {

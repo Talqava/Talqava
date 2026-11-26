@@ -2197,3 +2197,13 @@ button.todaytile.on { background: color-mix(in srgb, var(--warn) 12%, var(--pane
 .checks .check { display: flex; align-items: flex-start; gap: 8px; font-weight: 400; }
 .slidechart { margin: 0.4em 0; }
 .slidechart figcaption { margin-bottom: 0.3em; }
+
+/* Speak instead of typing: a microphone beside the send button. */
+.micbutton { display: inline-flex; align-items: center; justify-content: center; width: 34px; min-width: 34px; height: 34px; min-height: 34px; padding: 0; border-radius: 50%; color: var(--muted); }
+.micbutton:hover { color: var(--text); background: var(--line); }
+.micbutton.recording { color: #fff; background: #d6453d; animation: micpulse 1.2s ease-in-out infinite; }
+.micbutton.working { opacity: 0.55; cursor: progress; }
+.askmic { margin-left: auto; }
+.askmic + .asksend { margin-left: 0; }
+@keyframes micpulse { 50% { box-shadow: 0 0 0 6px rgba(214, 69, 61, 0.18); } }
+@media (prefers-reduced-motion: reduce) { .micbutton.recording { animation: none; } }

@@ -670,6 +670,15 @@ export const workspace = {
     return { name: file.name, words: words ? words.split(/\s+/).length : 0 };
   },
 
+  /** Keeps the words written out from an attached recording, so the note is found by them. Sound only. */
+  heardAttachment(org: Org, page: string, id: string, text: string): { name: string; words: number } {
+    const { file } = this.attachment(org, page, id);
+    if (!/^(webm|m4a|mp3|wav|ogg|mp4|aac|flac)$/.test(file.type)) throw new Error("Only a recording can be written out this way.");
+    const words = String(text ?? "").replace(/\r\n?/g, "\n").trim().slice(0, 100_000);
+    db(org.id).prepare("update page_files set words = ? where id = ?").run(words, file.id);
+    return { name: file.name, words: words ? words.split(/\s+/).length : 0 };
+  },
+
   /** The words written out from an attached picture. */
   attachmentWords(org: Org, page: string, id: string): string {
     this.attachment(org, page, id);

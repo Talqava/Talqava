@@ -2,3 +2,5 @@ node_modules/
 data/
 .env
 *.log
+# The speech program is built on the computer that makes a release, never kept in the repository.
+vendor/whisper/
