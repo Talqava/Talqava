@@ -88,17 +88,19 @@ The box at the top finds anything: files by name or by the words inside, tasks, 
 **Tasks and projects**: The work. Its tabs:
 - **Tasks**: every task in your organization: queued, working, needing you, to review and done.
 - **Projects**: one folder for each body of work, with its tasks and chats.
-- **Automations**: repeating work your agents do on their own, such as a morning news digest every weekday. Automations also has its own icon on the strip.
 
-**Team**: Who does the work. Its tabs:
+**Automations** (the clock): repeating work your agents do on their own, such as a morning news digest every weekday. See [Automations](schedules.md).
+
+**Team**: Who does the work, and what they know. Its tabs:
 - **Agents**: your agents and what each is doing right now. Assign work and open any agent's page.
 - **Organization**: your org chart. Add positions, draw who reports to whom, group them into teams with leads, and set budgets.
-- **Marketplace**: ready-made agents, teams, company templates, playbooks, page packs, Office templates and connectors, free.
+- **Memory**: what agents should always remember. See [Memory](memory.md).
+- **Skills**: procedures agents wrote down for themselves. See [Skills](skills.md).
+- **Marketplace**: ready-made agents, teams, page packs and Office templates, free.
 
 **Files**: What you make and what your agents work from, in one place.
 - **All files** lists everything together, newest change first: documents, notes, workspace pages and the files in your library. Buttons above the list show one kind at a time. The search box finds documents, notes and pages by the words inside them. Start a document or a note from the top, or ask an agent to make one.
 - **Work in one kind**, lower on the page, opens the full page for Documents, Notes, Workspace pages or the Library (where you add and organize files). See [Office](office.md), [Workspace](workspace.md) and [Library](library.md). **Sheets** and **Slides** are set aside; see Labs below.
-- **Memory** (what agents should always remember) and **Skills** (procedures agents wrote down for themselves) have their own tabs.
 
 **Search**: Puts you in the box at the top, which finds anything.
 
