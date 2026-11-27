@@ -41,6 +41,9 @@ func portIsFree(_ port: Int) -> Bool {
   let sock = socket(AF_INET, SOCK_STREAM, 0)
   guard sock >= 0 else { return false }
   defer { close(sock) }
+  // A port a copy of Talqava has just let go of counts as free, so restarting takes the same port again.
+  var yes: Int32 = 1
+  setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
   var addr = sockaddr_in()
   addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
   addr.sin_family = sa_family_t(AF_INET)
