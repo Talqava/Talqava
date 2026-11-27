@@ -15,6 +15,7 @@ import { DATA, getConfig, saveConfig } from "./store.ts";
 import { unzip } from "./library.ts";
 import { zip } from "./officefiles.ts";
 import { audit } from "./audit.ts";
+import { RESTORED, markPending, pendingDir, pendingRestore } from "./restore-pending.ts";
 
 const MAGIC = Buffer.from("TALQAVA-BACKUP-1\n");
 /** Working copies of repositories and downloaded repositories are large and can be made again; they are left out. */
@@ -175,6 +176,65 @@ export function restoreTo(passphrase: unknown, name?: unknown, now = new Date())
   return { folder: out, files: count };
 }
 
+/**
+ * Restore in place, step one: opens a backup with the passphrase and writes its files into a waiting folder beside
+ * the data folder. Nothing in use is touched. The next time Talqava starts, what is there now is moved aside into a
+ * folder of its own and the restored files are moved in (restore-pending.ts).
+ */
+export function stageRestore(passphrase: unknown, name?: unknown, now = new Date()): { name: string; files: number; madeAt: string } {
+  const all = listBackups();
+  const pick = name ? all.find((b) => b.name === String(name)) : all[0];
+  if (!pick) throw new Error("There is no backup yet.");
+  const files = openBackup(pick.file, String(passphrase ?? ""));
+  const waiting = pendingDir(DATA);
+  // Whatever an earlier, unfinished restore left waiting is replaced by this one.
+  fs.rmSync(waiting, { recursive: true, force: true });
+  let count = 0;
+  for (const [n, read] of files) {
+    if (n === "BACKUP.json" || n.split("/").includes("..") || path.isAbsolute(n)) continue;
+    const to = path.join(waiting, n);
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.writeFileSync(to, read(), { mode: 0o600 });
+    count++;
+  }
+  if (!count) throw new Error("That backup holds no files.");
+  markPending({ from: pick.name, at: now.toISOString(), files: count }, DATA);
+  audit({ actor: "system", actorName: "Talqava", kind: "security", action: "Got a backup ready to restore", detail: `${pick.name}: ${count} files. It is put in place the next time Talqava starts.` });
+  return { name: pick.name, files: count, madeAt: pick.at };
+}
+
+/** Calls off a restore that is waiting. Nothing in use was touched, so nothing else changes. */
+export function cancelRestore(): { ok: true } {
+  if (pendingRestore(DATA)) {
+    fs.rmSync(pendingDir(DATA), { recursive: true, force: true });
+    audit({ actor: "system", actorName: "Talqava", kind: "security", action: "Called off a restore that was waiting" });
+  }
+  return { ok: true };
+}
+
+/** The last restore that was put in place, and whether what was there before is still kept. */
+function lastRestore(): { at: string; from: string; kept: string; keptHere: boolean; undo: boolean } | null {
+  try {
+    const r = JSON.parse(fs.readFileSync(path.join(DATA, RESTORED), "utf8")) as { at: string; from: string; kept: string; undo?: boolean };
+    return { at: r.at, from: r.from, kept: r.kept, keptHere: fs.existsSync(path.join(path.dirname(DATA), r.kept)), undo: Boolean(r.undo) };
+  } catch {
+    return null;
+  }
+}
+
+/** Puts back what the last restore moved aside: it becomes the restore that waits for the next start. */
+export function undoRestore(now = new Date()): { from: string } {
+  const last = lastRestore();
+  if (!last?.keptHere) throw new Error("What was there before the restore is no longer kept on this computer.");
+  const waiting = pendingDir(DATA);
+  fs.rmSync(waiting, { recursive: true, force: true });
+  fs.renameSync(path.join(path.dirname(DATA), last.kept), waiting);
+  const from = `what you had before the restore of ${new Date(last.at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+  markPending({ from, at: now.toISOString(), files: fs.readdirSync(waiting).length, undo: true }, DATA);
+  audit({ actor: "system", actorName: "Talqava", kind: "security", action: "Got ready to put back what a restore replaced", detail: "It is put in place the next time Talqava starts." });
+  return { from };
+}
+
 /** Whether the computer's own disk encryption is on, as far as can be told. */
 export function diskEncryption(): { state: "on" | "off" | "unknown"; words: string } {
   try {
@@ -189,7 +249,7 @@ export function diskEncryption(): { state: "on" | "off" | "unknown"; words: stri
 export function backupStatus() {
   const b = getConfig().backup ?? {};
   const list = listBackups();
-  return { ready: Boolean(b.key), folder: folder(), nightly: b.nightly !== false && Boolean(b.key), lastAt: b.lastAt ?? null, lastFiles: b.lastFiles ?? null, lastTestedAt: b.lastTestedAt ?? null, backups: list.slice(0, KEEP_BACKUPS).map(({ name, bytes, at }) => ({ name, bytes, at })), keep: KEEP_BACKUPS, disk: diskEncryption() };
+  return { ready: Boolean(b.key), folder: folder(), nightly: b.nightly !== false && Boolean(b.key), lastAt: b.lastAt ?? null, lastFiles: b.lastFiles ?? null, lastTestedAt: b.lastTestedAt ?? null, backups: list.slice(0, KEEP_BACKUPS).map(({ name, bytes, at }) => ({ name, bytes, at })), keep: KEEP_BACKUPS, disk: diskEncryption(), waiting: pendingRestore(DATA), restored: lastRestore() };
 }
 
 /** The nightly backup: once a day when a passphrase is set and nightly backups are on. Never throws. */

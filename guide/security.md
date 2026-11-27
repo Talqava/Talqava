@@ -170,8 +170,20 @@ It shows where things went and how much, never the content itself, and it is kep
 
 ### Get your data back from a backup
 
-1. Press **Restore into a new folder** and type your passphrase. The backup's files are written to a new folder named `restored-…` next to Talqava's data folder. Your current data is not touched.
-2. To switch to the restored copy: quit Talqava, rename the current `data` folder (for example to `data-old`), rename the `restored-…` folder to `data`, and open Talqava again.
+1. Under **Your backups**, press **Restore this one…** beside the backup you want, and type your passphrase. Talqava opens the backup and gets it ready. Nothing in use changes yet.
+2. Quit Talqava and open it again. As it starts, everything goes back to how it was in that backup: settings, chats, tasks, pages, files and memory.
+3. What you had before is not deleted. It is moved into a folder of its own, named `data-before-restore-…`, beside Talqava's data folder.
+
+Until you reopen Talqava you can press **Call it off**, and nothing is changed.
+
+### Put back what you had before a restore
+
+1. On the same page, the line at the top says when you restored and where what you had is kept. Press **Put it back**.
+2. Quit Talqava and open it again. What you had before the restore is back, and what the restore brought in is kept in a folder of its own.
+
+### Look inside a backup without changing anything
+
+Press **Restore into a new folder** and type your passphrase. The newest backup's files are written to a new folder named `restored-…` next to Talqava's data folder. Your current data is not touched.
 
 ### Do an access review
 

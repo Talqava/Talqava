@@ -286,3 +286,30 @@ td.autonum .autoout { margin: 0 0 0 8px; }
 td.autonum .autoby { display: block; }
 .brokenlist { display: grid; gap: 8px; }
 .brokenlist::before { display: none; }
+
+/* Backups: each one with its Restore button, and the line that says what is waiting. */
+.backuplist { display: grid; gap: 6px; margin-top: 6px; }
+.backuprow { padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; align-items: center; gap: 10px; }
+.restorewait { display: flex; gap: 12px; align-items: center; }
+
+/* ---------- choosing the AI model in the message box: a short list, the rest by typing ---------- */
+.modelbtn { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; padding: 5px 10px; border: 1px solid var(--line2); border-radius: 999px; background: transparent; color: var(--soft); font-size: 12.5px; min-height: 0; }
+.modelbtn:hover { color: var(--text); border-color: var(--accent); }
+.modelbtnname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modelmenu { position: fixed; z-index: 60; width: 360px; max-width: calc(100vw - 24px); max-height: min(520px, calc(100vh - 120px)); display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line2); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow-l); }
+:root:not([data-theme="light"]) .modelmenu { background: #171918; }
+.modelfind { width: 100%; }
+.modellist { overflow-y: auto; min-height: 0; display: grid; gap: 2px; }
+.modelgroup { font: 600 10.5px var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding: 8px 8px 2px; }
+.modelrow { display: flex; align-items: center; border-radius: 8px; }
+.modelrow:hover, .modelservice:hover { background: var(--surface-hover); }
+.modelrow.on { background: var(--surface-selected); }
+.modelrowmain { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; padding: 7px 8px; border: 0; background: none; text-align: left; color: var(--text); font-size: 13.5px; min-height: 0; }
+.modelrowname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modelrowby { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.modelrowon { margin-left: auto; color: var(--accent-ink, var(--accent)); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.modelstar { border: 0; background: none; color: var(--muted); padding: 4px 8px; min-height: 0; font-size: 14px; }
+.modelstar.on, .modelstar:hover { color: var(--warn); }
+.modelservice { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border: 0; border-radius: 8px; background: none; color: var(--soft); font-size: 13.5px; text-align: left; min-height: 0; }
+.modelnote { padding: 4px 8px; margin: 0; }
+.modeladd { align-self: flex-start; padding: 2px 8px; }

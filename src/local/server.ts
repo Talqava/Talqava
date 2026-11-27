@@ -52,7 +52,7 @@ import { listOfficeTemplates, useOfficeTemplate } from "./office-templates.ts";
 import { pageTool } from "../core/tools/page.ts";
 import { STEP_KINDS, STEP_WORDS, decideStep, describeGuardrails, firstApprover, guardrails, guardrailsFrom, marketAllowed, noteStuck, stepKind } from "./guardrails.ts";
 import { securityOverview, securityReport } from "./securitycenter.ts";
-import { backupStatus, makeBackup, nightlyBackup, restoreTo, setBackup, testRestore } from "./backup.ts";
+import { backupStatus, cancelRestore, makeBackup, nightlyBackup, restoreTo, setBackup, stageRestore, testRestore, undoRestore } from "./backup.ts";
 import { finishSso, setSso, sso, ssoPublic, startSso } from "./sso.ts";
 import { directoryGroups, disableScim, enableScim, handleScim, scimAuthorized, scimSettings, setGroupRoles } from "./scim.ts";
 import { changes, type WaitingChange } from "./twoadmins.ts";
@@ -1235,6 +1235,10 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
     if (req.method === "POST" && parts[1] === "backup" && parts[2] === "now") return send(res, 200, await tryIt(() => ((r) => ({ name: path.basename(r.file), files: r.files, bytes: r.bytes, skipped: r.skipped }))(makeBackup())));
     if (req.method === "POST" && parts[1] === "backup" && parts[2] === "test") return send(res, 200, await tryIt(() => testRestore(body.passphrase, body.name)));
     if (req.method === "POST" && parts[1] === "backup" && parts[2] === "restore") return send(res, 200, await tryIt(() => restoreTo(body.passphrase, body.name)));
+    // Restore in place: made ready now, put in place the next time Talqava starts; it can be called off until then, and put back afterwards.
+    if (req.method === "POST" && parts[1] === "backup" && parts[2] === "restore-here") return send(res, 200, await tryIt(() => stageRestore(body.passphrase, body.name)));
+    if (req.method === "POST" && parts[1] === "backup" && parts[2] === "restore-cancel") return send(res, 200, await tryIt(() => cancelRestore()));
+    if (req.method === "POST" && parts[1] === "backup" && parts[2] === "restore-undo") return send(res, 200, await tryIt(() => undoRestore()));
     if (route === "GET security-ops" && parts[1] === "person") return send(res, 200, await tryIt(() => findPerson(orgs.active(), url.searchParams.get("q"))));
     if (route === "GET security-ops") return send(res, 200, { feed: feedStatus(), alerts: alerts(), reviews: reviews.list().slice(0, 5), due: reviews.due(), every: REVIEW_EVERY_DAYS, retention: retention(), retentionChoices: RETENTION_CHOICES });
     if (req.method === "PUT" && parts[1] === "feed") return send(res, 200, await tryIt(() => setFeed(body.url ? body : null)));
