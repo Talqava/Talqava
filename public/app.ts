@@ -4,7 +4,7 @@
 import { renderMarkdown } from "/markdown.js";
 
 const app = document.getElementById("app");
-const state = {
+const state: any = {
   config: null,
   convs: [],
   quests: [],
@@ -20,7 +20,9 @@ const state = {
   spaces: [],
   space: "", // the space chats are shown and started in; "" is General
 };
-const ui = {}; // live nodes of the open view
+const ui: any = {}; // live nodes of the open view
+/** Small pieces of state that belong to one function each: a timer, or whether it is already under way. */
+const flags: any = {};
 
 try {
   state.project = localStorage.getItem("talqava.project") || "";
@@ -64,7 +66,7 @@ function brandLogo({ mark = 26, word = 12, cursor = true } = {}) {
   return node;
 }
 
-async function api(method, path, body) {
+async function api(method, path, body?) {
   if (method !== "GET" && method !== "DELETE") body ??= {}; // the server only accepts JSON writes
   const res = await fetch(`/api/${path}`, {
     method,
@@ -77,22 +79,22 @@ async function api(method, path, body) {
     throw new Error("Sign in first.");
   }
   // A sensitive change asks for the password again; once given, the change is made.
-  if (res.status === 403 && data.confirm && !api.confirming) {
-    api.confirming = true;
+  if (res.status === 403 && data.confirm && !flags.apiConfirming) {
+    flags.apiConfirming = true;
     try {
       await askPasswordAgain();
     } finally {
-      api.confirming = false;
+      flags.apiConfirming = false;
     }
     return api(method, path, body);
   }
   // A Marketplace item that is not approved yet: an owner or administrator can approve it on the spot and carry on.
-  if (res.status === 403 && data.approve && !api.approving && confirm(`${data.error}\n\nApprove it for this organization and add it now? Only owners and administrators can.`)) {
-    api.approving = true;
+  if (res.status === 403 && data.approve && !flags.apiApproving && confirm(`${data.error}\n\nApprove it for this organization and add it now? Only owners and administrators can.`)) {
+    flags.apiApproving = true;
     try {
       await api("PUT", "settings", { guardrails: { approveListing: data.approve } });
     } finally {
-      api.approving = false;
+      flags.apiApproving = false;
     }
     return api(method, path, body);
   }
@@ -106,12 +108,12 @@ async function api(method, path, body) {
 
 /** Asks the signed-in person to type their password (and code, if they use one) before a sensitive change. */
 function askPasswordAgain() {
-  return new Promise((resolve, reject) => {
+  return new Promise<any>((resolve, reject) => {
     const dialog = h("dialog", { class: "aidialog" });
     const pw = h("input", { type: "password", placeholder: "Your password", autocomplete: "current-password", "aria-label": "Your password" });
     const code = h("input", { inputmode: "numeric", placeholder: "6-digit code (if you use a second step)", autocomplete: "one-time-code", maxlength: 7, "aria-label": "Code from your authenticator app" });
     const status = h("p", { class: "note", role: "status" });
-    const close = (fn, value) => (dialog.close(), dialog.remove(), fn(value));
+    const close = (fn, value?) => (dialog.close(), dialog.remove(), fn(value));
     const form = h("form", { class: "form" }, pw, state.me?.person?.secondStep ? code : null, status, h("div", { class: "row" }, h("button", { class: "primary" }, "Continue"), h("button", { type: "button", class: "plain", onclick: () => close(reject, new Error("Cancelled: the change was not made.")) }, "Cancel")));
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -135,7 +137,7 @@ function fill(node, ...children) {
 }
 
 // Runs an action and shows any failure next to where it happened.
-async function attempt(fn, where) {
+async function attempt(fn, where?) {
   try {
     return await fn();
   } catch (err) {
@@ -167,9 +169,9 @@ const basename = (p) => String(p).split(/[\\/]/).filter(Boolean).pop() || p;
 // ---------- sign-in ----------
 async function showLogin() {
   state.source?.close();
-  clearInterval(boot.timer);
-  if (showLogin.open && document.querySelector("form.login")) return; // already showing; keep what is typed
-  showLogin.open = true;
+  clearInterval(flags.bootTimer);
+  if (flags.loginOpen && document.querySelector("form.login")) return; // already showing; keep what is typed
+  flags.loginOpen = true;
   // With people set up, each person signs in with their email; otherwise there is one password.
   const how = await fetch("/api/login").then((r) => r.json()).catch(() => ({ people: false }));
   const email = h("input", { type: "email", placeholder: "Email", autocomplete: "username", "aria-label": "Email" });
@@ -225,9 +227,9 @@ async function boot() {
   // A first run (no AI model, or nobody on the team yet) opens as a short set-up chat, until it is finished or skipped.
   if (!state.me?.mustSetUpSecondStep && state.view === "start" && setupWanted()) state.view = "setup";
   render();
-  clearInterval(boot.timer);
+  clearInterval(flags.bootTimer);
   // One heartbeat keeps every part of the window current.
-  boot.timer = setInterval(tick, 2000);
+  flags.bootTimer = setInterval(tick, 2000);
 }
 
 async function loadCrew() {
@@ -330,8 +332,8 @@ function heroVideo() {
 // When the theme changes, every brand video on screen switches with it.
 window.addEventListener("talqava-theme", () => {
   const t = document.documentElement.dataset.theme === "light" ? "light" : "dark";
-  for (const v of document.querySelectorAll(".herovideo")) (v.src = `/media/brand-loop-${t}.webm`), (v.poster = `/media/brand-loop-${t}.jpg`), v.play?.().catch(() => {});
-  for (const i of document.querySelectorAll(".heroposter")) i.src = `/media/brand-loop-${t}.jpg`;
+  for (const v of document.querySelectorAll<HTMLVideoElement>(".herovideo")) (v.src = `/media/brand-loop-${t}.webm`), (v.poster = `/media/brand-loop-${t}.jpg`), v.play?.().catch(() => {});
+  for (const i of document.querySelectorAll<HTMLImageElement>(".heroposter")) i.src = `/media/brand-loop-${t}.jpg`;
 });
 
 function render() {
@@ -477,7 +479,7 @@ function renderRail() {
 
 /** The account menu at the foot of the rail: connections, security, the activity log, settings, the look, and help. */
 function accountMenu(anchor) {
-  const open = document.querySelector(".acctmenu");
+  const open: any = document.querySelector(".acctmenu");
   if (open) return open.close();
   const me = state.me?.person;
   const org = activeOrg();
@@ -523,7 +525,7 @@ function accountMenu(anchor) {
 /** Under the menu: the few things in motion right now, so the owner can step back into them. */
 function renderRecent() {
   if (!ui.recent) return;
-  let live = [];
+  let live: any[] = [];
   try {
     live = mailMessages().filter((m) => m.label === "needs" || m.label === "failed" || m.label === "working").slice(0, 5);
   } catch {}
@@ -561,8 +563,8 @@ function enterPage() {
   body.classList.remove("enter");
   void body.offsetWidth; // restart the animation
   body.classList.add("enter");
-  clearTimeout(enterPage.timer);
-  enterPage.timer = setTimeout(() => body.classList.remove("enter"), 700);
+  clearTimeout(flags.enterTimer);
+  flags.enterTimer = setTimeout(() => body.classList.remove("enter"), 700);
 }
 
 // The repository picker and quest spending only matter on the bot pages.
@@ -628,7 +630,7 @@ function renderSpent() {
 }
 
 // ---------- the command box ----------
-const COMMANDS = [
+const COMMANDS: [string, () => void][] = [
   ["Home", () => go("start")],
   ["New session", () => go("chat")],
   ["Inbox", () => go("inbox")],
@@ -671,11 +673,11 @@ function openFound(r) {
   return go("library");
 }
 function findSoon(box) {
-  clearTimeout(findSoon.timer);
+  clearTimeout(flags.findTimer);
   const text = ui.palette?.value.trim() ?? "";
   if (text.length < 2 || text.startsWith("@")) return (ui.found = null);
   if (ui.found?.query === text) return;
-  findSoon.timer = setTimeout(async () => {
+  flags.findTimer = setTimeout(async () => {
     const r = await api("GET", `find?q=${encodeURIComponent(text)}`).catch(() => null);
     if (!r || (ui.palette?.value.trim() ?? "") !== text) return;
     ui.found = r;
@@ -716,7 +718,7 @@ function paletteHint() {
 function paletteItems() {
   const text = ui.palette?.value.trim() ?? "";
   const bots = state.crew?.bots ?? [];
-  const items = [];
+  const items: any[] = [];
   const mention = /^@([\w-]+)\s*(.*)$/s.exec(text);
   // Plain text starts a chat; bots are sent only from the bots page or with @name.
   const botFirst = state.view === "home";
@@ -788,7 +790,7 @@ async function startTask(payload) {
 }
 
 function needsDialog(needs, repositories) {
-  return new Promise((resolve) => {
+  return new Promise<any>((resolve) => {
     const dialog = h("dialog", { class: "needs" });
     const done = (value) => (dialog.close(), dialog.remove(), resolve(value));
     const goFix = (need) => {
@@ -992,7 +994,7 @@ function addUser(text) {
   }
 }
 
-function summarize(name, input = {}) {
+function summarize(name, input: any = {}) {
   if (name === "bash") return input.command || "restart";
   if (name === "str_replace_based_edit_tool") return `${input.command || ""} ${input.path || ""}`;
   if (name === "http_request") return `${input.method || ""} ${input.url || ""}`;
@@ -1021,7 +1023,7 @@ function toolCard(id, name, input, done) {
  * What the agent saved to memory, shown in the conversation as it happens,
  * with Edit and Undo, so nothing is remembered behind the person's back.
  */
-function memoryNote(id, input = {}) {
+function memoryNote(id, input: any = {}) {
   if (!["add", "update", "remove"].includes(input.action)) return toolCard(id, "memory", input, false);
   const label = h("span", { class: "mlabel" }, { add: "Remembering…", update: "Updating memory…", remove: "Forgetting…" }[input.action]);
   const text = h("span", { class: "mtext" }, input.text || "");
@@ -1296,7 +1298,7 @@ const TINTS = {
   neutral: ["Other", "#B8B8B8", "#5E625E"],
 };
 /** Which colour a department takes, by the words in its name. */
-const TINT_WORDS = [
+const TINT_WORDS: [RegExp, string][] = [
   [/exec|leader|chief|board|founder|management|general|strategy|oversight|audit/i, "executive"],
   [/financ|account|book|payroll|billing|tax/i, "finance"],
   [/sales|business dev|revenue|partnership/i, "sales"],
@@ -1335,7 +1337,7 @@ const SYMBOLS = {
   initials: ["Initials", ""],
 };
 /** A symbol from the words in the role, most specific first; then the department's. */
-const SYMBOL_WORDS = [
+const SYMBOL_WORDS: [RegExp, string][] = [
   [/chief|general manager|ceo|founder|director|executive assistant/i, "flag"],
   [/book|ledger|reconcil/i, "ledger"],
   [/payable|receivable|billing|invoice|payroll|time and billing/i, "receipt"],
@@ -1376,7 +1378,7 @@ const tintOf = (subject) => TINTS[tileOf(subject).tint];
  * frame), done (a green tick), stuck (red cursor and a cross), asleep (dimmed). The name `keycap` is kept
  * because the whole app calls it; pass the agent itself, so its role and department pick the tile.
  */
-function keycap(subject, size = 40, mood = "") {
+function keycap(subject, size = 40, mood = "", _extra3?) {
   const t = tileOf(subject);
   const [, tileColour] = TINTS[t.tint];
   const cursor = mood === "working" ? "#00D26A" : mood === "waiting" ? "#FFB020" : mood === "stuck" ? "#FF6B6B" : tileColour;
@@ -1464,21 +1466,21 @@ function renderHome() {
 /** The agents the work page is about: the members of the organization that is selected, or everyone when it has none. */
 function orgBots() {
   const bots = state.crew?.bots ?? [];
-  const members = new Set(activeOrg().members.map((m) => m.bot));
+  const members = new Set<any>(activeOrg().members.map((m) => m.bot));
   const mine = bots.filter((b) => members.has(b.id));
   return mine.length ? mine : bots;
 }
 
 /** Bots by department in the selected organization, departments in name order. */
 function byDepartment(bots) {
-  const groups = new Map();
+  const groups = new Map<any, any>();
   for (const bot of bots) groups.set(departmentOf(bot.id), [...(groups.get(departmentOf(bot.id)) ?? []), bot]);
   return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
 
 /** Bots by team group, groups in name order. */
 function byGroup(bots) {
-  const groups = new Map();
+  const groups = new Map<any, any>();
   for (const bot of bots) groups.set(bot.group || "Other", [...(groups.get(bot.group || "Other") ?? []), bot]);
   return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
@@ -1489,7 +1491,7 @@ function renderCrewColumn() {
   const org = activeOrg();
   const orgs = state.orgs?.orgs ?? [];
   const orgPick = h("select", { class: "orgpick", "aria-label": "Organization", onchange: (e) => attempt(async () => (await api("PATCH", `orgs/${e.target.value}`, { active: true }), await loadOrgs(), (state.selectedBot = null), renderHome())) }, orgs.map((o) => h("option", { value: o.id, selected: o.id === org.id }, o.name)));
-  const live = new Map(state.quests.filter(isLive).map((q) => [q.bot.id, q]));
+  const live = new Map<any, any>(state.quests.filter(isLive).map((q) => [q.bot.id, q]));
   const fromRepo = bots.some((b) => b.source === "project");
   const member = (bot) => {
     const q = live.get(bot.id);
@@ -1519,7 +1521,7 @@ function renderCrewColumn() {
   };
   fill(ui.crewCol, 
     orgs.length > 1 ? h("label", { class: "sidelabel" }, "Organization", orgPick) : null,
-    h("div", { class: "side-head" }, h("h2", { class: "label" }, `${orgs.length > 1 ? "" : `${org.name || "Organization"} · `}${bots.length} agent${bots.length === 1 ? "" : "s"} · ${new Set(bots.map((b) => departmentOf(b.id))).size} department${new Set(bots.map((b) => departmentOf(b.id))).size === 1 ? "" : "s"}`), h("button", { class: "plain small", onclick: () => go("team"), title: "The org chart, departments and budgets" }, "Chart →")),
+    h("div", { class: "side-head" }, h("h2", { class: "label" }, `${orgs.length > 1 ? "" : `${org.name || "Organization"} · `}${bots.length} agent${bots.length === 1 ? "" : "s"} · ${new Set<any>(bots.map((b) => departmentOf(b.id))).size} department${new Set<any>(bots.map((b) => departmentOf(b.id))).size === 1 ? "" : "s"}`), h("button", { class: "plain small", onclick: () => go("team"), title: "The org chart, departments and budgets" }, "Chart →")),
     fromRepo ? h("div", { class: "note small", style: "padding: 0 8px" }, ".crew/ in this repo") : null,
     ...byDepartment(bots).flatMap(([group, members]) => [h("div", { class: "grouplabel" }, `${group} · ${members.length}`), ...members.map(member)]),
     all.length > bots.length ? h("p", { class: "note small", style: "padding: 6px 8px 0" }, `${all.length - bots.length} more agent${all.length - bots.length === 1 ? " is" : "s are"} on your team but not in this organization. `, h("button", { class: "plain link", onclick: () => go("team") }, "Add them on the chart")) : null,
@@ -1533,7 +1535,7 @@ function renderCrewColumn() {
 const cap = (text) => String(text).charAt(0).toUpperCase() + String(text).slice(1);
 
 /** Pages are reached from the rail on the left, so the side columns carry no links of their own. */
-function navFooter() {
+function navFooter(_extra0?) {
   return null;
 }
 
@@ -1576,12 +1578,12 @@ function renderBoard() {
   const succeeded = week.filter((q) => q.status === "done" && !(q.check && !q.check.passed));
   const weekAll = quests.filter((q) => within(q.updatedAt, WEEK));
   const spent = weekAll.reduce((n, q) => n + (q.cost || 0), 0);
-  const stat = (label, value, note, loud) => h("div", { class: "stat" }, h("span", { class: "label" }, label), h("b", { class: loud ? "loud" : "" }, value), note ? h("span", { class: "statnote" }, note) : null);
+  const stat = (label, value, note, loud?) => h("div", { class: "stat" }, h("span", { class: "label" }, label), h("b", { class: loud ? "loud" : "" }, value), note ? h("span", { class: "statnote" }, note) : null);
 
   // ----- assign a task: to a whole team (through its manager, who splits it up) or to one agent -----
   const orgMembers = activeOrg().members.filter((m) => bots.some((b) => b.id === m.bot));
   const underOf = (id) => {
-    const all = new Set([id]);
+    const all = new Set<any>([id]);
     for (let grew = true; grew; ) {
       grew = false;
       for (const m of orgMembers) if (m.manager && all.has(m.manager) && !all.has(m.bot)) (all.add(m.bot), (grew = true));
@@ -1664,7 +1666,7 @@ function renderBoard() {
   };
 
   // ----- how each department is doing this week -----
-  const depts = new Map();
+  const depts = new Map<any, any>();
   const row = (name) => depts.get(name) ?? depts.set(name, { name, agents: 0, active: 0, waiting: 0, done: 0, failed: 0, spent: 0 }).get(name);
   for (const b of bots) row(departmentOf(b.id)).agents++;
   for (const q of active) (q.approvals?.length ? row(departmentOf(q.bot.id)).waiting++ : row(departmentOf(q.bot.id)).active++);
@@ -1685,7 +1687,7 @@ function renderBoard() {
       "section",
       { class: "stats" },
       stat("Waiting on you", String(needs.length), needs.length ? "Approvals, reviews and failures" : "Nothing blocked", needs.length > 0),
-      stat("In progress", String(active.length), active.length ? `${new Set(active.map((q) => q.bot.id)).size} agent${new Set(active.map((q) => q.bot.id)).size === 1 ? "" : "s"} working` : "No tasks under way"),
+      stat("In progress", String(active.length), active.length ? `${new Set<any>(active.map((q) => q.bot.id)).size} agent${new Set<any>(active.map((q) => q.bot.id)).size === 1 ? "" : "s"} working` : "No tasks under way"),
       stat("Finished this week", String(week.length), week.length ? `${Math.round((succeeded.length / week.length) * 100)}% finished cleanly` : "None yet"),
       stat("Spent this week", money(spent), weekAll.length ? `${money(spent / weekAll.length)} a task on average` : "Estimated from list prices"),
     ),
@@ -1871,7 +1873,7 @@ function renderLog() {
 const RECENT = 3 * 24 * 3600 * 1000;
 function inboxItems() {
   const quests = state.quests ?? [];
-  const needs = [];
+  const needs: any[] = [];
   for (const q of quests) {
     const recent = Date.now() - new Date(q.updatedAt).getTime() < RECENT;
     if (q.approvals?.length) needs.push({ kind: "approval", q, approval: q.approvals[0] });
@@ -1976,12 +1978,12 @@ const MONTH_START = () => `${new Date().toISOString().slice(0, 7)}-01T00:00:00.0
 
 /** Every message: one per task the person assigned, plus whatever else needs them. Newest activity first. */
 function mailMessages() {
-  const out = [];
+  const out: any[] = [];
   const own = ownTasks();
   const needs = inboxItems().needs;
   // A plan to approve, a question before starting, or finished work to review is shown as that, with its buttons, instead of as the task's ordinary message.
-  const ACTION = new Set(["plan", "asking", "taskreview"]);
-  const actionFor = new Set(needs.filter((n) => n.q && ACTION.has(n.kind)).map((n) => n.q));
+  const ACTION = new Set<any>(["plan", "asking", "taskreview"]);
+  const actionFor = new Set<any>(needs.filter((n) => n.q && ACTION.has(n.kind)).map((n) => n.q));
   for (const q of own) {
     if (actionFor.has(q)) continue;
     // A watching briefing that found nothing new answers with two words, and the owner is not disturbed.
@@ -2107,7 +2109,7 @@ function briefingFor(m) {
 
 /** The Inbox's three lists. A message is in exactly one: it waits on the owner, it is news, or it is put away. */
 const waitsOnYou = (m) => m.label === "needs" || m.label === "failed";
-const INBOX_TABS = [
+const INBOX_TABS: [string, string, (m: any, mark: any) => boolean][] = [
   ["waiting", "Waiting on you", (m, k) => waitsOnYou(m) && !k.archived && !k.deletedAt],
   ["updates", "Updates", (m, k) => !waitsOnYou(m) && !k.archived && !k.deletedAt],
   ["done", "Archive", (m, k) => k.archived && !k.deletedAt],
@@ -2359,7 +2361,7 @@ function readMail(m) {
                 } catch (err) {
                   ui.mailNote = err.message;
                 }
-                document.activeElement?.blur();
+                (document.activeElement as HTMLElement | null)?.blur();
                 renderInbox();
               };
               input.addEventListener("keydown", (e) => (e.key === "Enter" ? save(input.value.trim()) : e.key === "Escape" ? showName() : null));
@@ -2373,7 +2375,7 @@ function readMail(m) {
   const from = h("div", { class: "readfrom", style: m.bot ? botStyle(m.bot) : "" }, m.bot ? keycap(m.bot, 44, isLive(q ?? {}) ? "working" : "", m.bot.type) : h("span", { class: "sysavatar big", "aria-hidden": "true" }, "T"), h("div", { class: "grow" }, nameBox, h("div", { class: "note small" }, `${m.bot && state.mail?.names?.[m.bot.id] ? `${agentRole(m.bot)} · ` : ""}${m.bot ? `${departmentOf(m.bot.id)} · ` : ""}to me`)), h("span", { class: "mtime" }, new Date(m.at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })));
 
   const body = h("div", { class: "readbody" });
-  const act = (fn) => attempt(async () => (await fn(), await Promise.all([loadQuests(), refreshList(), loadCrew(), loadMail()]), renderInbox(), syncInboxCount()), body);
+  const act = (fn, _extra1?) => attempt(async () => (await fn(), await Promise.all([loadQuests(), refreshList(), loadCrew(), loadMail()]), renderInbox(), syncInboxCount()), body);
   if (m.kind === "reminder") {
     const r = m.reminder;
     const clear = (open) =>
@@ -2633,7 +2635,7 @@ function orgAccessPanel(org) {
   const find = h("input", { type: "search", placeholder: "Find an agent", "aria-label": "Find an agent" });
   const list = (items, none) => (items.length ? items.join(", ") : none);
   const row = (label, value, tone = "") => h("div", { class: `arow ${tone}` }, h("span", { class: "alabel" }, label), h("span", { class: "grow" }, value));
-  let graphs = [];
+  let graphs: any[] = [];
   const draw = () => {
     const q = find.value.trim().toLowerCase();
     const shown = graphs.filter((g) => !q || `${g.agent.title} ${g.agent.department ?? ""}`.toLowerCase().includes(q));
@@ -2717,7 +2719,7 @@ const chartSnapshot = (org) => ({ orgId: org.id, members: structuredClone(org.me
 
 /** Makes one change to the chart: remembers how it was first (for undo), saves, and redraws. */
 /** Makes a change to the chart that Undo can take back. `onUndo` restores anything else the change affected. */
-async function orgChange(label, fn, onUndo) {
+async function orgChange(label, fn, onUndo?) {
   const org = activeOrg();
   const before = chartSnapshot(org);
   await attempt(async () => {
@@ -2757,15 +2759,15 @@ function renderOrg() {
   const o = ui.orgx;
   const org = activeOrg();
   const bots = state.crew?.bots ?? [];
-  const byId = new Map(bots.map((b) => [b.id, b]));
+  const byId = new Map<any, any>(bots.map((b) => [b.id, b]));
   const members = org.members.filter((m) => byId.has(m.bot));
   const groups = org.groups ?? [];
   const memberOf_ = (id) => members.find((m) => m.bot === id);
   const groupOfMember = (m) => groups.find((g) => g.name === m.department);
-  const live = new Map((state.quests ?? []).filter(isLive).map((q) => [q.bot.id, q]));
+  const live = new Map<any, any>((state.quests ?? []).filter(isLive).map((q) => [q.bot.id, q]));
   const outside = bots.filter((b) => !members.some((m) => m.bot === b.id));
   const below = (id) => {
-    const out = [];
+    const out: any[] = [];
     for (let wave = members.filter((m) => m.manager === id); wave.length; wave = members.filter((m) => m.manager && wave.some((w) => w.bot === m.manager))) out.push(...wave);
     return out;
   };
@@ -2803,7 +2805,7 @@ function renderOrg() {
     }
     return d.id;
   };
-  const dropOn = (target, e) => {
+  const dropOn = (target, e?) => {
     const d = o.drag;
     o.drag = null;
     col.classList.remove("dragging-on");
@@ -2865,7 +2867,7 @@ function renderOrg() {
   const groupTree = (g) => {
     const inIt = members.filter((m) => m.department === g.name);
     const roots = inIt.filter((m) => !m.manager || !inIt.some((x) => x.bot === m.manager)).sort((a, b) => Number(b.bot === g.lead) - Number(a.bot === g.lead) || a.title.localeCompare(b.title));
-    const out = [];
+    const out: any[] = [];
     const walk = (m, depth) => {
       out.push(card(m, { depth }));
       for (const r of inIt.filter((x) => x.manager === m.bot).sort((a, b) => a.title.localeCompare(b.title))) walk(r, depth + 1);
@@ -2919,7 +2921,7 @@ function renderOrg() {
         .sort((a, b) => a.department.localeCompare(b.department) || a.title.localeCompare(b.title))
         .map((m) => {
           const bot = byId.get(m.bot);
-          const above = new Set([m.bot, ...below(m.bot).map((x) => x.bot)]);
+          const above = new Set<any>([m.bot, ...below(m.bot).map((x) => x.bot)]);
           return h(
             "div",
             { class: "posrow" },
@@ -2935,10 +2937,10 @@ function renderOrg() {
   // ----- the side panel: what is selected, every field editable -----
   const positionPanel = (m) => {
     const bot = byId.get(m.bot);
-    const above = new Set([m.bot, ...below(m.bot).map((x) => x.bot)]);
+    const above = new Set<any>([m.bot, ...below(m.bot).map((x) => x.bot)]);
     const g = groupOfMember(m);
     const canHand = [...below(m.bot), ...members.filter((x) => x.also === m.bot)];
-    const mine = new Set(canHand.map((x) => x.bot));
+    const mine = new Set<any>(canHand.map((x) => x.bot));
     const canRequest = members.filter((x) => x.bot !== m.bot && !mine.has(x.bot) && x.department !== m.department && groups.find((gg) => gg.name === x.department)?.lead === x.bot);
     // Repeating work this position does. It stays with the position when a different agent fills it.
     const routinesBox = h("div", { class: "panelrules" }, h("div", { class: "label" }, "Automations"));
@@ -2955,7 +2957,7 @@ function renderOrg() {
     const title = h("input", { value: m.title, maxlength: 50, "aria-label": "Title" });
     const resp = h("textarea", { rows: 3, maxlength: 400, placeholder: "What this position is responsible for, in a sentence or two. The agent is told.", "aria-label": "Responsibilities" }, m.responsibilities ?? "");
     const saveText = () => {
-      const patch = {};
+      const patch: any = {};
       if (title.value.trim() && title.value.trim() !== m.title) patch.title = title.value.trim();
       if (resp.value.trim() !== (m.responsibilities ?? "")) patch.responsibilities = resp.value.trim();
       if (Object.keys(patch).length) set(m.bot, patch, `Changed ${m.title}`);
@@ -3011,7 +3013,7 @@ function renderOrg() {
     goal.addEventListener("change", () => patch({ goal: goal.value.trim() }, `Changed ${g.name}'s purpose`));
     budget.addEventListener("change", () => patch({ budget: budget.value === "" ? null : Number(budget.value) }, `Changed ${g.name}'s budget`));
     // The group's model: the team's model, one of the backups, or one typed in. Agents with a model of their own keep it.
-    const known = [...new Set([state.config.model, ...(state.config.backups ?? []), g.model].filter(Boolean))];
+    const known = [...new Set<any>([state.config.model, ...(state.config.backups ?? []), g.model].filter(Boolean))];
     const groupModel = h(
       "select",
       { "aria-label": "Group's model", onchange: (e) => patch({ model: e.target.value === state.config.model ? null : e.target.value }, e.target.value === state.config.model ? `${g.name} uses the team's model` : `${g.name} uses ${e.target.value.split("/").pop()}`) },
@@ -3064,7 +3066,7 @@ function renderOrg() {
     const item = (bot, payload, sub) => h("div", { class: "additem", style: botStyle(bot), ...drag(payload), role: "button", tabindex: "0", title: "Drag onto the chart, or click to add it reporting to you", "aria-label": `Add ${bot.name} to the chart, reporting to you`, onclick: () => ((o.drag = payload), dropOn({ kind: "you" })), onkeydown: press(() => ((o.drag = payload), dropOn({ kind: "you" }))) }, keycap(bot, 24, "", bot.type), h("span", { class: "posmain" }, h("b", {}, bot.name), h("span", { class: "possub" }, sub)));
     const teams = (state.marketTeams ?? []).filter((t) => match(`${t.name} ${t.summary}`));
     const market = (state.market ?? []).filter((b) => !byId.has(b.id) && match(`${b.name} ${b.listing.category} ${b.listing.summary}`));
-    const marketById = new Map((state.market ?? []).map((b) => [b.id, b]));
+    const marketById = new Map<any, any>((state.market ?? []).map((b) => [b.id, b]));
     fill(
       addList,
       outside.filter((b) => match(`${b.name} ${b.group}`)).length ? [h("div", { class: "label" }, "Your agents, not on the chart"), outside.filter((b) => match(`${b.name} ${b.group}`)).map((b) => item(b, { kind: "agent", id: b.id }, b.group))] : null,
@@ -3093,7 +3095,7 @@ function renderOrg() {
   ];
 
   // ----- suggested positions: proposals from the mission, each accepted or skipped by the owner -----
-  const suggestNow = async (mission) => {
+  const suggestNow = async (mission?) => {
     o.suggesting = true;
     o.suggestOpen = true;
     renderOrg();
@@ -3127,7 +3129,7 @@ function renderOrg() {
   const suggestions = () => {
     if (!o.suggestOpen || o.suggestFor !== org.id && !o.suggesting) return null;
     const sg = o.suggest;
-    const market = new Map((state.market ?? []).map((b) => [b.id, b]));
+    const market = new Map<any, any>((state.market ?? []).map((b) => [b.id, b]));
     return h(
       "section",
       { class: "suggestbox" },
@@ -3278,8 +3280,8 @@ function renderOrg() {
       h("div", { class: "row wrap" }, h("button", { class: "small", onclick: () => dialogDone("new") }, "New organization"), h("button", { class: "small danger", onclick: () => dialogDone("clear") }, "Start over (empty chart)"), state.orgs.orgs.length > 1 ? h("button", { class: "small danger", onclick: () => dialogDone("delete") }, "Delete this organization") : null),
     );
     let dialogDone;
-    const choice = await new Promise((resolve) => {
-      dialogDone = (v) => (document.querySelector("dialog.libdialog")?.close(), document.querySelector("dialog.libdialog")?.remove(), resolve(v));
+    const choice = await new Promise<any>((resolve) => {
+      dialogDone = (v) => (document.querySelector<HTMLDialogElement>("dialog.libdialog")?.close(), document.querySelector("dialog.libdialog")?.remove(), resolve(v));
       libDialog(`${org.name}: settings`, body, [["Save", () => "save", true]]).then((v) => resolve(v));
     });
     if (choice === "save") {
@@ -3344,11 +3346,11 @@ function orgMemoryPanel(org, groups) {
   const box = h("section", { class: "orgmem" }, h("p", { class: "note" }, "Loading…"));
   const draw = async () => {
     const entries = await api("GET", `orgs/${org.id}/memory`).catch(() => []);
-    const byId = new Map((state.crew?.bots ?? []).map((b) => [b.id, b]));
+    const byId = new Map<any, any>((state.crew?.bots ?? []).map((b) => [b.id, b]));
     const shelf = (e) => (e.shelf === "org" ? "Whole organization" : e.shelf === "dept" ? `${e.key} group` : `${byId.get(e.key)?.name ?? e.key}${e.kind === "log" ? " · past work" : " · notes"}`);
     const text = h("textarea", { rows: 2, maxlength: 800, placeholder: "Something every agent should know. For example: our fiscal year starts in April." });
     const where = h("select", { "aria-label": "Who should know this" }, h("option", { value: "org:" }, "Whole organization"), groups.map((g) => h("option", { value: `dept:${g.name}` }, `${g.name} group`)));
-    const grouped = new Map();
+    const grouped = new Map<any, any>();
     for (const e of entries) grouped.set(shelf(e), [...(grouped.get(shelf(e)) ?? []), e]);
     fill(
       box,
@@ -3383,9 +3385,9 @@ const libIcon = (name, cls = "") => {
 };
 const libParent = (rel) => (rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
 const libBase = (rel) => rel.slice(rel.lastIndexOf("/") + 1);
-const IMAGE_TYPES = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg"]);
-const VIDEO_TYPES = new Set(["mp4", "mov", "webm"]);
-const AUDIO_TYPES = new Set(["mp3", "m4a", "wav", "ogg"]);
+const IMAGE_TYPES = new Set<any>(["png", "jpg", "jpeg", "gif", "webp", "svg"]);
+const VIDEO_TYPES = new Set<any>(["mp4", "mov", "webm"]);
+const AUDIO_TYPES = new Set<any>(["mp3", "m4a", "wav", "ogg"]);
 const KIND_COLORS = { pdf: "#ff6b6b", doc: "#5aa9ff", docx: "#5aa9ff", xls: "#3ddc84", xlsx: "#3ddc84", csv: "#3ddc84", ppt: "#ffb020", pptx: "#ffb020", md: "#b8b8b8", txt: "#b8b8b8" };
 
 /** Says in a few words who may use something: every agent, some departments, or nobody (private). */
@@ -3399,7 +3401,7 @@ function accessLabel(item, bots) {
 
 /** A small modal: resolves with what the person chose, or null. */
 function libDialog(title, body, buttons) {
-  return new Promise((resolve) => {
+  return new Promise<any>((resolve) => {
     const dialog = h("dialog", { class: "needs libdialog" });
     const done = (value) => (dialog.close(), dialog.remove(), resolve(value));
     fill(dialog, h("h2", {}, title), body, h("div", { class: "row end" }, h("button", { class: "plain", onclick: () => done(null) }, "Cancel"), buttons.map(([label, value, primary]) => h("button", { class: primary ? "primary" : "", onclick: () => done(typeof value === "function" ? value() : value) }, label))));
@@ -3486,7 +3488,7 @@ async function speechReady() {
   waiting.showModal();
   try {
     for (;;) {
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise<any>((r) => setTimeout(r, 1000));
       info = await api("GET", "speech");
       if (info.download?.problem) throw new Error(`The speech model could not be downloaded. ${info.download.problem}`);
       if (info.state === "ready" && !info.download) return true;
@@ -3514,7 +3516,7 @@ function micButton(box, cls = "") {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {
       throw new Error("The microphone could not be used. Allow Talqava to use the microphone (on a Mac: System Settings › Privacy & Security › Microphone), then try again.");
     });
-    const parts = [];
+    const parts: any[] = [];
     recorder = new MediaRecorder(stream, { audioBitsPerSecond: 64000 });
     const limit = setTimeout(() => recorder?.stop(), 300_000);
     recorder.ondataavailable = (e) => e.data.size && parts.push(e.data);
@@ -3586,12 +3588,12 @@ function askFolder(lib, moving) {
 async function droppedFiles(dataTransfer) {
   const entries = [...(dataTransfer.items ?? [])].map((i) => i.webkitGetAsEntry?.()).filter(Boolean);
   if (!entries.length) return [...dataTransfer.files].map((file) => ({ file, rel: file.name }));
-  const out = [];
+  const out: any[] = [];
   const visit = async (entry) => {
-    if (entry.isFile) return new Promise((resolve) => entry.file((file) => (out.push({ file, rel: entry.fullPath.replace(/^\//, "") }), resolve()), () => resolve()));
+    if (entry.isFile) return new Promise<void>((resolve) => entry.file((file) => (out.push({ file, rel: entry.fullPath.replace(/^\//, "") }), resolve()), () => resolve()));
     const reader = entry.createReader();
     for (;;) {
-      const batch = await new Promise((resolve) => reader.readEntries(resolve, () => resolve([])));
+      const batch = await new Promise<any>((resolve) => reader.readEntries(resolve, () => resolve([])));
       if (!batch.length) break;
       for (const e of batch) await visit(e);
     }
@@ -3613,14 +3615,14 @@ async function libraryView() {
     return fill(col, h("div", { class: "banner error" }, err.message));
   }
   if (state.view !== "library") return;
-  const bots = new Map((state.crew?.bots ?? []).map((b) => [b.id, b]));
+  const bots = new Map<any, any>((state.crew?.bots ?? []).map((b) => [b.id, b]));
   const act = (fn, note) => attempt(async () => (await fn(), note && (ui.libraryNote = note), again()), col);
   ui.libPath ??= "";
   if (ui.libPath && !lib.folders.some((f) => f.path === ui.libPath)) ui.libPath = "";
-  ui.libSel ??= new Set();
+  ui.libSel ??= new Set<any>();
   const cur = ui.libPath;
-  const docById = new Map(lib.documents.map((d) => [d.id, d]));
-  const folderByPath = new Map(lib.folders.map((f) => [f.path, f]));
+  const docById = new Map<any, any>(lib.documents.map((d) => [d.id, d]));
+  const folderByPath = new Map<any, any>(lib.folders.map((f) => [f.path, f]));
   const keyOf = (kind, p) => `${kind}:${p}`;
   const selected = () => [...ui.libSel].map((k) => ({ kind: k.slice(0, k.indexOf(":")), path: k.slice(k.indexOf(":") + 1) })).filter((t) => (t.kind === "folder" ? folderByPath.has(t.path) : lib.documents.some((d) => d.path === t.path)));
   const itemOf = (t) => (t.kind === "folder" ? folderByPath.get(t.path) : lib.documents.find((d) => d.path === t.path));
@@ -3630,7 +3632,7 @@ async function libraryView() {
   const upload = async (list, into = cur) => {
     list = list.filter((x) => x.file.size > 0);
     if (!list.length) return;
-    const failed = [];
+    const failed: any[] = [];
     let n = 0;
     for (const { file, rel } of list) {
       status.textContent = `Uploading ${++n} of ${list.length}: ${rel}…`;
@@ -3862,7 +3864,7 @@ async function libraryView() {
   findBox.addEventListener("input", () => {
     ui.libFind = findBox.value;
     clearTimeout(ui.libFindTimer);
-    ui.libFindTimer = setTimeout(() => (again(), setTimeout(() => document.querySelector(".findbox")?.focus(), 0)), 250);
+    ui.libFindTimer = setTimeout(() => (again(), setTimeout(() => document.querySelector<HTMLElement>(".findbox")?.focus(), 0)), 250);
   });
   const sortPick = h("select", { "aria-label": "Sort by", onchange: (e) => ((ui.libSort = e.target.value), again()) }, [["name", "Name"], ["modified", "Last changed"], ["size", "Size"]].map(([v, t]) => h("option", { value: v, selected: v === sortBy }, `Sort: ${t}`)));
   const newFolder = () => {
@@ -4042,7 +4044,7 @@ async function auditView() {
 // ---------- integrations ----------
 // The outside tools agents work with, filed by category. Git is the first:
 // repositories agents may work on, each task in a branch and copy of its own.
-const INTEGRATION_MARKS = {
+const INTEGRATION_MARKS: Record<string, string> = {
   git: `<svg viewBox="0 0 48 48" width="44" height="44" aria-hidden="true"><rect x="3" y="3" width="42" height="42" rx="11" fill="var(--accent)" fill-opacity="0.11" stroke="var(--accent)" stroke-opacity="0.5" stroke-width="1.25"/><g fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round"><path d="M17 14v20M17 24c8 0 14-1 14-8"/></g><g fill="var(--bg)" stroke="var(--accent)" stroke-width="2.2"><circle cx="17" cy="14" r="3.4"/><circle cx="17" cy="34" r="3.4"/><circle cx="31" cy="15" r="3.4"/></g></svg>`,
 };
 INTEGRATION_MARKS.mcp = `<svg viewBox="0 0 48 48" width="44" height="44" aria-hidden="true"><rect x="3" y="3" width="42" height="42" rx="11" fill="var(--accent)" fill-opacity="0.11" stroke="var(--accent)" stroke-opacity="0.5" stroke-width="1.25"/><g fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 24h8M26 24h8"/><rect x="20" y="18" width="8" height="12" rx="2.5" fill="var(--bg)"/><circle cx="12" cy="24" r="3" fill="var(--bg)"/><circle cx="36" cy="24" r="3" fill="var(--bg)"/><path d="M24 12v6M24 30v6"/></g></svg>`;
@@ -4141,7 +4143,7 @@ function apiKeysPage(col, again) {
 async function telegramPage(col, again) {
   const info = await api("GET", "integrations/telegram").catch(() => ({ state: "off" }));
   if (state.view !== "integrations" || ui.integration !== "telegram") return;
-  const act = (fn, done) => attempt(async () => (await fn(), done && toast(done), again()), col);
+  const act = (fn, done?) => attempt(async () => (await fn(), done && toast(done), again()), col);
   const token = h("input", { id: "telegram-token", type: "password", autocomplete: "off", placeholder: "123456789:AA…", "aria-label": "Bot token" });
   const head = [
     h("button", { class: "plain back", onclick: () => ((ui.integration = null), again()) }, "← All integrations"),
@@ -4230,13 +4232,13 @@ async function servicePage(col, again, id) {
   // Which agents may use the account: everyone with the power, or only the ones ticked.
   const whoMay = (c) => {
     if (!org?.members?.length) return null;
-    const chosen = new Set(c.agents ?? []);
+    const chosen = new Set<any>(c.agents ?? []);
     const boxes = org.members.map((m) => h("label", { class: "check" }, h("input", { type: "checkbox", checked: chosen.has(m.bot), onchange: (e) => (e.target.checked ? chosen.add(m.bot) : chosen.delete(m.bot), patch(c, { agents: [...chosen] })) }), " ", m.title));
     return h("details", { class: "onthis", open: chosen.size > 0 }, h("summary", {}, h("b", {}, "Which agents may use it"), h("span", { class: "note small" }, chosen.size ? `${chosen.size} chosen` : "Every agent with the “connected services” power")), h("div", { class: "body" }, h("p", { class: "note small" }, "Tick agents to limit this account to them. With none ticked, every agent with the power may use it."), h("div", { class: "checks" }, boxes)));
   };
   // Single actions the owner can switch off for the account.
   const actionSwitches = (c) => {
-    const off = new Set(c.off ?? []);
+    const off = new Set<any>(c.off ?? []);
     const boxes = svc.actions.map((a) => h("label", { class: "check" }, h("input", { type: "checkbox", checked: !off.has(a.name), onchange: (e) => (e.target.checked ? off.delete(a.name) : off.add(a.name), patch(c, { off: [...off] })) }), " ", a.summary));
     return h("details", { class: "onthis", open: off.size > 0 }, h("summary", {}, h("b", {}, "Which actions are on"), h("span", { class: "note small" }, off.size ? `${off.size} switched off` : "All of them")), h("div", { class: "body" }, h("div", { class: "checks" }, boxes)));
   };
@@ -4638,7 +4640,7 @@ function openrouterIntegrationPage(or, act, col, again) {
   const search = h("input", { type: "search", placeholder: `Search ${or.models.length} models, e.g. claude, gpt, gemini, llama, free`, "aria-label": "Search models", value: ui.orSearch ?? "" });
   const sort = h("select", { "aria-label": "Order" }, [["suggested", "Suggested first"], ["cheap", "Cheapest first"], ["name", "A to Z"], ["context", "Longest documents first"]].map(([v, t]) => h("option", { value: v, selected: v === ui.orSort }, t)));
   const rows = h("div", { class: "ormodels" });
-  const suggested = new Map(or.suggested.map((s) => [s.id, s.why]));
+  const suggested = new Map<any, any>(or.suggested.map((s) => [s.id, s.why]));
   const row = (m) =>
     h(
       "div",
@@ -4664,7 +4666,7 @@ function openrouterIntegrationPage(or, act, col, again) {
     ui.orSort = sort.value;
     const words = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
     let shown = or.models.filter((m) => words.every((w) => (w === "free" ? m.free : `${m.name} ${m.id}`.toLowerCase().includes(w))));
-    const by = { cheap: (x, y) => taskCost(x.prices) - taskCost(y.prices), name: (x, y) => x.name.localeCompare(y.name), context: (x, y) => y.contextTokens - x.contextTokens, suggested: (x, y) => (suggested.has(y.id) - suggested.has(x.id)) || (x.id === or.using ? -1 : y.id === or.using ? 1 : 0) || x.name.localeCompare(y.name) };
+    const by = { cheap: (x, y) => taskCost(x.prices) - taskCost(y.prices), name: (x, y) => x.name.localeCompare(y.name), context: (x, y) => y.contextTokens - x.contextTokens, suggested: (x, y) => (Number(suggested.has(y.id)) - Number(suggested.has(x.id))) || (x.id === or.using ? -1 : y.id === or.using ? 1 : 0) || x.name.localeCompare(y.name) };
     shown = shown.sort(by[sort.value] ?? by.suggested);
     fill(rows, shown.length ? [shown.slice(0, 60).map(row), shown.length > 60 ? h("p", { class: "note small" }, `Showing 60 of ${shown.length}. Search to narrow the list.`) : null] : h("p", { class: "note" }, "No model matches that search."));
   };
@@ -4805,7 +4807,7 @@ function gitIntegrationPage(git, act, col, again) {
   };
   // Repositories on GitHub that are not on this computer yet: tick the ones wanted, and they are copied here and connected.
   const remotePicker = (found) => {
-    ui.gitPick ??= new Set();
+    ui.gitPick ??= new Set<any>();
     const filter = h("input", { type: "search", placeholder: "Filter your repositories", "aria-label": "Filter repositories", value: ui.gitPickFilter ?? "" });
     const rows = h("div", { class: "pickrows" });
     const go = h("button", { class: "primary" }, "Connect selected");
@@ -4899,7 +4901,7 @@ function gitIntegrationPage(git, act, col, again) {
   // ----- GitHub: sign in through the web, or with a token -----
   const openWeb = (address) => window.open(address, "_blank", "noopener");
   // Loads the accounts this sign-in can see (the person's own, and their companies) and one account's repositories.
-  const loadAccount = async (account) => {
+  const loadAccount = async (account?) => {
     try {
       const listed = ui.githubPick?.accounts ? ui.githubPick : await api("POST", "integrations/git/github-accounts");
       const chosen = account ?? ui.githubPick?.account ?? listed.accounts[0].login;
@@ -5186,8 +5188,8 @@ function updateBox(bot, col) {
 async function installPreview(kind, id) {
   const p = await api("GET", kind === "team" ? `marketplace/teams/${encodeURIComponent(id)}/preview` : `marketplace/${encodeURIComponent(id)}/preview`);
   const fresh = p.items.filter((i) => i.state === "new");
-  const crew = new Map((state.market ?? []).map((b) => [b.id, b]));
-  return new Promise((resolve) => {
+  const crew = new Map<any, any>((state.market ?? []).map((b) => [b.id, b]));
+  return new Promise<any>((resolve) => {
     const done = (yes) => (dialog.close(), dialog.remove(), resolve(yes));
     const row = (i) =>
       h(
@@ -5348,7 +5350,7 @@ async function marketView() {
   const market = await attempt(loadMarket, col);
   if (!market || state.view !== "market") return;
   const bots = market.bots;
-  const categories = [...new Set(bots.map((b) => b.listing.category))].sort();
+  const categories = [...new Set<any>(bots.map((b) => b.listing.category))].sort();
   const search = h("input", { type: "search", placeholder: "Search by agent name or what you need done", "aria-label": "Search agents", value: ui.marketSearch || "" });
   const pills = h("div", { class: "pills", role: "group", "aria-label": "Categories" });
   const results = h("div", { class: "msections" });
@@ -5367,7 +5369,7 @@ async function marketView() {
     const shown = bots.filter(match);
     const section = (title, list) => (list.length ? h("section", {}, h("h2", {}, title), h("div", { class: "mgrid" }, list.map(marketCard))) : null);
     const featured = !cat && !needle ? bots.filter((b) => b.listing.featured) : [];
-    const byBot = new Map(bots.map((b) => [b.id, b]));
+    const byBot = new Map<any, any>(bots.map((b) => [b.id, b]));
     const teams = (market.teams ?? []).filter((t) => (!cat || t.department === cat) && (!needle || `${t.name} ${t.summary}`.toLowerCase().includes(needle)) && cat !== "+mine");
     const teamCard = (t) => {
       const list = t.bots.map((id) => byBot.get(id)).filter(Boolean);
@@ -5795,7 +5797,7 @@ async function afterDecision() {
 
 /** The diff of each file, keyed by its path. */
 function splitDiff(diff) {
-  const files = new Map();
+  const files = new Map<any, any>();
   let current = null;
   for (const line of diff.split("\n")) {
     const head = /^diff --git a\/(.+) b\/(.+)$/.exec(line);
@@ -5806,11 +5808,11 @@ function splitDiff(diff) {
 }
 
 function renderSteps(q, conversation) {
-  const results = new Map();
+  const results = new Map<any, any>();
   for (const m of conversation.messages) {
     if (m.role === "user" && Array.isArray(m.content)) for (const b of m.content) if (b.type === "tool_result") results.set(b.tool_use_id, b);
   }
-  const steps = [];
+  const steps: any[] = [];
   for (const m of conversation.messages) {
     if (m.role !== "assistant" || !Array.isArray(m.content)) continue;
     for (const b of m.content) {
@@ -5987,7 +5989,7 @@ async function renderReceipt(q) {
     return fill(panel, h("p", { class: "note" }, `The receipt could not be loaded: ${err.message}`));
   }
   if (!r || state.convId !== q.id) return;
-  const open = new Set([...panel.querySelectorAll("details[open]")].map((d) => d.dataset.id));
+  const open = new Set<any>([...panel.querySelectorAll("details[open]")].map((d) => d.dataset.id));
   const most = Math.max(...r.byAgent.map((a) => a.cost), 0.000001);
   // Not done: parts that did not finish, single actions that did not work, and going over the budget.
   const undone = [
@@ -6071,7 +6073,7 @@ async function renderReceipt(q) {
 /** A part's model calls: which model answered each, how long it took and what it cost. Backups are marked. */
 function stepsTable(steps) {
   const secs = (ms) => (ms < 1000 ? "under a second" : ms < 60_000 ? `${Math.round(ms / 1000)} s` : `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} s`);
-  const models = new Set(steps.map((x) => x.model));
+  const models = new Set<any>(steps.map((x) => x.model));
   const total = steps.reduce((n, x) => n + x.ms, 0);
   return h(
     "details",
@@ -6221,7 +6223,7 @@ function botView() {
         drawPortrait();
       },
     },
-    [...new Set([...types, draft.type])].map((t) => h("option", { value: t, selected: t === draft.type }, TYPE_WORDS[t] ?? cap(t))),
+    [...new Set<any>([...types, draft.type])].map((t) => h("option", { value: t, selected: t === draft.type }, TYPE_WORDS[t] ?? cap(t))),
   );
   const instructions = h("textarea", { rows: 7, placeholder: "What this role is responsible for and how it works. Plain sentences work best." }, draft.instructions);
 
@@ -6278,7 +6280,7 @@ function botView() {
   const steps = h("input", { type: "number", min: 1, max: 500, step: 1, value: draft.budget?.steps ?? "" });
 
   const group = h("input", { value: draft.group || "", placeholder: "e.g. Sales", maxlength: 30, list: "team-groups", autocomplete: "off", oninput: (e) => ((draft.group = e.target.value), drawPortrait()) });
-  const groupList = h("datalist", { id: "team-groups" }, [...new Set((state.crew?.bots ?? []).map((b) => b.group))].map((g) => h("option", { value: g })));
+  const groupList = h("datalist", { id: "team-groups" }, [...new Set<any>((state.crew?.bots ?? []).map((b) => b.group))].map((g) => h("option", { value: g })));
   const monthly = h("input", { type: "number", min: 0, max: 10000, step: 0.5, value: draft.monthly ?? "", placeholder: "No limit" });
   save.addEventListener("click", () =>
     attempt(async () => {
@@ -6349,7 +6351,7 @@ function conversationPane({ tools = false } = {}) {
   ui.scroll = h("div", { class: "scroll" }, ui.log);
   ui.input = h("textarea", { rows: 1, placeholder: `Message ${speaker()}…` });
   ui.send = h("button", { class: "primary" }, "Send");
-  ui.cards = new Map();
+  ui.cards = new Map<any, any>();
   ui.stream = null;
   ui.working = null;
   ui.input.addEventListener("keydown", (e) => {
@@ -6380,7 +6382,7 @@ function conversationPane({ tools = false } = {}) {
  */
 function renderOverview() {
   if (!ui.over?.isConnected) return;
-  let mail = [];
+  let mail: any[] = [];
   try {
     mail = mailMessages();
   } catch {}
@@ -6434,7 +6436,7 @@ function chatView() {
     const noModel = needsKey(state.config);
     const noTeam = Boolean(state.orgs) && !activeOrg().members?.length;
     const first = state.me?.person ? state.me.person.name.split(" ")[0] : "";
-    const fromTeam = [];
+    const fromTeam: any[] = [];
     for (const b of bots) {
       const idea = (TASK_IDEAS[departmentOf(b.id)] ?? TASK_IDEAS[b.group] ?? [])[0];
       if (idea && !fromTeam.some((x) => x.idea === idea || x.dept === (departmentOf(b.id) ?? b.group))) fromTeam.push({ dept: departmentOf(b.id) ?? b.group ?? "Team", idea, bot: b });
@@ -6483,7 +6485,7 @@ function modelPicker() {
     return `${provider?.name || ref.slice(0, slash)} · ${name}`;
   };
   const show = (refs) => {
-    const all = [...new Set([c.model, ...refs])];
+    const all = [...new Set<any>([c.model, ...refs])];
     fill(
       pick,
       all.map((ref) => h("option", { value: ref, selected: ref === c.model }, label(ref))),
@@ -6611,7 +6613,7 @@ function renderChatList(force = false) {
   // One list of sessions: every chat and every task you started, newest first. Each can be pinned, renamed and archived.
   const all = (state.sessions ?? state.convs.map((c) => ({ ...c, kind: "chat", state: c.needsApproval ? "waiting" : c.running ? "working" : "idle" }))).filter((x) => (x.space || "") === state.space || x.kind === "task");
   const open = (x) => (x.kind === "task" ? ((ui.questFrom = "sessions"), go("quest", x.id)) : go("chat", x.id));
-  const change = (x, patch, done) =>
+  const change = (x, patch, done?) =>
     attempt(async () => {
       await api("PATCH", `conversations/${x.id}`, patch);
       await refreshList();
@@ -6695,7 +6697,7 @@ async function submit() {
       if (ui.move) ui.move.hidden = !state.spaces.length;
       fill(ui.log, );
       connect(conv.id);
-      await new Promise((resolve) => state.source.addEventListener("open", resolve, { once: true }));
+      await new Promise<any>((resolve) => state.source.addEventListener("open", resolve, { once: true }));
     }
     await api("POST", `conversations/${state.convId}/messages`, { text });
     ui.input.value = "";
@@ -6730,7 +6732,7 @@ const chatBotOf = (id = state.convId) => {
 const speaker = () => (state.view === "quest" ? (state.quests.find((q) => q.id === state.convId)?.bot.name ?? "the agent") : (chatBotOf()?.name ?? state.config.agentName));
 
 /** Opens a chat with one bot, in its role. */
-async function chatWith(bot, where) {
+async function chatWith(bot, where?) {
   await attempt(async () => {
     const conv = await api("POST", "conversations", { bot: bot.id, ...(state.space ? { space: state.space } : {}) });
     await refreshList();
@@ -7129,7 +7131,7 @@ function briefingGallery(host, data, col) {
   };
   // The free ones first: they work for everyone on day one. A group opens by itself when something in it is on.
   const order = ["Your own work", "The outside world", "Money", "Customers", "Marketing", "Running the business", "People and renewals"];
-  const groups = [...new Set(data.briefings.map((b) => b.group))].sort((x, y) => order.indexOf(x) - order.indexOf(y));
+  const groups = [...new Set<any>(data.briefings.map((b) => b.group))].sort((x, y) => order.indexOf(x) - order.indexOf(y));
   const onCount = data.briefings.filter((b) => b.on?.enabled).length;
   fill(
     host,
@@ -7166,7 +7168,7 @@ async function briefingChoices(b, prefix) {
     return provider?.kind === "anthropic" ? `Claude · ${c.models.find((m) => m.id === name)?.label || name}` : `${provider?.name || ref.slice(0, slash)} · ${name}`;
   };
   const model = h("select", { id: `${prefix}-model`, "aria-label": "AI model" });
-  const show = (refs) => fill(model, h("option", { value: "", selected: !b.model }, "The sender's usual model"), [...new Set([...(b.model ? [b.model] : []), c.model, ...refs])].map((ref) => h("option", { value: ref, selected: ref === b.model }, label(ref))));
+  const show = (refs) => fill(model, h("option", { value: "", selected: !b.model }, "The sender's usual model"), [...new Set<any>([...(b.model ? [b.model] : []), c.model, ...refs])].map((ref) => h("option", { value: ref, selected: ref === b.model }, label(ref))));
   show([]);
   // The models of every connected AI service, as the chat's own picker lists them.
   Promise.all(
@@ -7430,7 +7432,7 @@ function aiModelsSection(col) {
   const draw = () => {
     if (!g) return fill(box, h("p", { class: "note" }, "The list of AI services could not be loaded."));
     const live = g.connected.filter((c) => !c.standard);
-    const connectedIds = new Set(live.map((c) => c.service));
+    const connectedIds = new Set<any>(live.map((c) => c.service));
     const findButton = h("button", { class: "small" }, "Find models on this computer");
     findButton.addEventListener("click", () =>
       attempt(async () => {
@@ -7517,7 +7519,7 @@ function aiModelsSection(col) {
   };
 
   const backupsBox = (live) => {
-    const options = [];
+    const options: any[] = [];
     const list = g.backups.slice();
     const wrap = h("div", { class: "aibackups card" });
     const save = (next) => attempt(async () => (await api("PUT", "gateway/backups", { backups: next }), refresh()), col);
@@ -7870,11 +7872,13 @@ boot();
 // A tree of pages on the left; a page on the right, edited in place and saved as you type. Agents read pages,
 // file their results as pages, and suggest changes that wait here (and in the inbox) for the owner.
 let editorModule = null;
-const loadEditor = () => (editorModule ??= import("/vendor/editor.js"));
+// The page editor is one bundled file (see public/vendor/editor.LICENSES.txt); it has no types of its own.
+const EDITOR_FILE: string = "/vendor/editor.js";
+const loadEditor = () => (editorModule ??= import(EDITOR_FILE));
 
 /** Opens the workspace, at a page or at its home. */
 async function openPage(id) {
-  ui.ws ??= { collapsed: new Set() };
+  ui.ws ??= { collapsed: new Set<any>() };
   // A document or a note opens in Office; a page opens in the Workspace.
   let kind = "page";
   if (id) kind = await api("GET", `workspace/pages/${id}`).then((p) => p.kind).catch(() => (ui.ws.data?.tree ?? []).find((p) => p.id === id)?.kind ?? "page");
@@ -7889,7 +7893,7 @@ async function openPage(id) {
 const wsReload = () => (ui.ws?.host === "docs" ? docsView() : ui.ws?.host === "notes" ? notesView() : ui.ws?.host === "sheets" ? sheetsView() : ui.ws?.host === "slides" ? slidesView() : workspaceView());
 
 async function workspaceView() {
-  ui.ws ??= { collapsed: new Set() };
+  ui.ws ??= { collapsed: new Set<any>() };
   ui.ws.host = "workspace";
   ui.wsFlush?.();
   ui.wsFlush = null;
@@ -7926,9 +7930,9 @@ async function newPage(parent = null, title = "") {
 
 function renderWsTree(side) {
   const { tree, deleted } = ui.ws.data;
-  const kids = new Map();
+  const kids = new Map<any, any>();
   for (const p of tree) (kids.get(p.parent) ?? kids.set(p.parent, []).get(p.parent)).push(p);
-  const byId = new Map(tree.map((p) => [p.id, p]));
+  const byId = new Map<any, any>(tree.map((p) => [p.id, p]));
   // Moving a page: drop it on another page to put it inside, or on the top line to bring it to the top.
   const move = (id, parent) => {
     if (!id || id === parent) return;
@@ -8101,8 +8105,8 @@ async function renderWsPage(col, id) {
   if (state.view !== (ui.ws.host ?? "workspace") || ui.ws.open !== id) return;
   const office = page.kind === "doc" || page.kind === "note";
   const kindWord = page.kind === "doc" ? "document" : page.kind === "note" ? "note" : "page";
-  const byId = new Map(ui.ws.data.tree.map((p) => [p.id, p]));
-  const trail = [];
+  const byId = new Map<any, any>(ui.ws.data.tree.map((p) => [p.id, p]));
+  const trail: any[] = [];
   for (let at = byId.get(page.parent); at; at = byId.get(at.parent)) trail.unshift(at);
 
   // ----- saving as you type -----
@@ -8156,7 +8160,7 @@ async function renderWsPage(col, id) {
   // ----- the editor, its toolbar and the slash menu -----
   const surface = h("div", { class: "wseditor md" });
   const menu = h("div", { class: "wsslash", role: "listbox", "aria-label": "Blocks", hidden: true });
-  let menuItems = [];
+  let menuItems: any[] = [];
   let menuAt = 0;
   // The same menu offers blocks after "/" and pages after "[[".
   let menuKind = "block";
@@ -8243,7 +8247,7 @@ async function renderWsPage(col, id) {
 
   // ----- the page's settings -----
   const org = activeOrg();
-  const groups = [...new Set((org.groups ?? []).map((g) => g.name).concat(org.members.map((m) => m.department)))].filter(Boolean).sort();
+  const groups = [...new Set<any>((org.groups ?? []).map((g) => g.name).concat(org.members.map((m) => m.department)))].filter(Boolean).sort();
   const patch = (body) => attempt(async () => (await api("PATCH", `workspace/pages/${id}`, body), wsReload()), col);
   const mode = page.access.private ? "private" : !page.accessSet ? "inherit" : page.access.everyone ? "everyone" : "some";
   const who = h(
@@ -8402,7 +8406,7 @@ function attachmentsPart(page, id, col) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {
         throw new Error("The microphone could not be used. Allow Talqava to use the microphone (on a Mac: System Settings › Privacy & Security › Microphone), then try again.");
       });
-      const parts = [];
+      const parts: any[] = [];
       const started = Date.now();
       recorder = new MediaRecorder(stream, { audioBitsPerSecond: 64000 });
       const tick = setInterval(() => {
@@ -8516,7 +8520,7 @@ function officePanel(page, id, surface, patch, col) {
 
 /** What the two Office screens share: load the files, keep the editor tidy, and say who can use a file. */
 async function officeLoad(view, side, col) {
-  ui.ws ??= { collapsed: new Set() };
+  ui.ws ??= { collapsed: new Set<any>() };
   ui.ws.host = view;
   ui.wsFlush?.();
   ui.wsFlush = null;
@@ -8568,7 +8572,7 @@ function parseDeck(text) {
 const writeDeck = (slides) => `${slides.map((x) => [`# ${x.title.replace(/\s+/g, " ").trim() || "Untitled slide"}`, x.body.trim(), x.notes.trim() ? `Notes: ${x.notes.trim()}` : ""].filter(Boolean).join("\n\n")).join("\n\n---\n\n")}\n`;
 /** The numbers a chart shows: a column of labels beside a column of numbers, or one row. */
 function chartPoints(eng, value, tab, range) {
-  const out = [];
+  const out: any[] = [];
   const wide = range.r1 === range.r2 && range.c2 > range.c1;
   if (wide) for (let c = range.c1; c <= range.c2; c++) out.push({ label: eng.colName(c), v: value(tab, c, range.r1) });
   else for (let r = range.r1; r <= range.r2; r++) out.push({ label: range.c2 > range.c1 ? eng.show(value(tab, range.c1, r)) : String(r + 1), v: value(tab, range.c2, r) });
@@ -8599,7 +8603,7 @@ function chartPicture(eng, type, pts) {
 
 /** A line of a slide that shows a sheet's chart: "!chart <the sheet's page id> <the chart's title>". */
 const SLIDE_CHART = /^!chart\s+([\w-]{4,80})(?:\s+(.*))?$/;
-const sheetPages = new Map();
+const sheetPages = new Map<any, any>();
 /** A sheet's page, kept for half a minute so a deck with several charts asks once. */
 const sheetPage = (id) => {
   const had = sheetPages.get(id);
@@ -8665,8 +8669,8 @@ async function pickSheetChart(done) {
 }
 /** A slide's text: Markdown, with any chart lines drawn in place. */
 function slideBody(text) {
-  const parts = [];
-  let run = [];
+  const parts: any[] = [];
+  let run: any[] = [];
   const flush = () => (run.join("\n").trim() && parts.push(renderMarkdown(run.join("\n"))), (run = []));
   for (const line of String(text ?? "").split("\n")) {
     const m = SLIDE_CHART.exec(line.trim());
@@ -8827,7 +8831,7 @@ async function renderDeck(col, id) {
         h("b", {}, `Waiting for you · ${suggestions.length}`),
         suggestions.map((sg) => {
           const next = parseDeck(sg.markdown);
-          const titles = new Set(slides.map((x) => x.title));
+          const titles = new Set<any>(slides.map((x) => x.title));
           const added = next.filter((x) => !titles.has(x.title)).map((x) => x.title || "Untitled slide");
           return h("div", { class: "reviewline" }, h("div", { class: "grow" }, h("b", {}, sg.authorName), h("div", { class: "note small" }, `${sg.note || "A change to these slides."} It would make ${next.length} slide${next.length === 1 ? "" : "s"} (now ${slides.length})${added.length ? `; new or renamed: ${added.slice(0, 5).join(", ")}` : ""}.`)), h("div", { class: "row wrap" }, h("button", { class: "small", onclick: () => presentDeck(next) }, "Look at them"), h("button", { class: "small primary", onclick: () => decide(sg, "accept") }, "Accept"), h("button", { class: "small", onclick: () => decide(sg, "decline") }, "Decline")));
         }),
@@ -8966,7 +8970,7 @@ async function startView() {
   const start = (kind) =>
     attempt(async () => {
       const page = kind === "sheet" ? await api("POST", "workspace/sheets", { title: "Untitled sheet" }) : await api("POST", "workspace/pages", { kind, title: kind === "deck" ? "Untitled slides" : "Untitled", ...(kind === "deck" ? { markdown: "# Title of the presentation\n\nA line about it" } : {}) });
-      ui.ws ??= { collapsed: new Set() };
+      ui.ws ??= { collapsed: new Set<any>() };
       ui.ws.focusTitle = true;
       openPage(page.id);
     }, col);
@@ -8991,7 +8995,7 @@ async function startView() {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) (e.preventDefault(), send());
   });
   // Three things to try, from the departments this organization has; general ones before there is a team.
-  const fromTeam = [];
+  const fromTeam: any[] = [];
   for (const b of bots) {
     const idea = (TASK_IDEAS[departmentOf(b.id)] ?? TASK_IDEAS[b.group] ?? [])[0];
     if (idea && !fromTeam.some((x) => x.idea === idea || x.dept === (departmentOf(b.id) ?? b.group))) fromTeam.push({ dept: departmentOf(b.id) ?? b.group ?? "Team", idea, bot: b });
@@ -9065,9 +9069,9 @@ async function setupView() {
   if (!state.orgs) await loadOrgs();
   if (!state.crew) await loadCrew();
   if (state.view !== "setup") return;
-  const su = (ui.setup = { step: "start", mission: "", found: null, picked: new Set(), busy: false, error: "", said: [], ...(ui.setup ?? {}) });
+  const su = (ui.setup = { step: "start", mission: "", found: null, picked: new Set<any>(), busy: false, error: "", said: [], ...(ui.setup ?? {}) });
   su.said ??= [];
-  su.picked ??= new Set();
+  su.picked ??= new Set<any>();
   const first = state.me?.person ? state.me.person.name.split(" ")[0] : "";
   const finish = (to = "start") => {
     try {
@@ -9082,8 +9086,8 @@ async function setupView() {
   const mark = () => h("span", { class: "setupmark", "aria-hidden": "true" });
   const say = (...text) => h("div", { class: "setupsay" }, mark(), h("div", {}, h("b", {}, "Your assistant"), text.map((t) => h("p", {}, t))));
   const mine = (text) => h("div", { class: "setupmine" }, text);
-  const card = (title, about, body, foot) => h("section", { class: "setupcard" }, h("div", { class: "setuphead" }, h("b", {}, title), about ? h("span", { class: "note small" }, about) : null), body, foot ? h("div", { class: "setupfoot" }, foot) : null);
-  const choice = (title, about, run, primary) => h("button", { class: `plain setupopt ${primary ? "first" : ""}`, onclick: run }, h("span", { class: "grow" }, h("b", {}, title), h("span", { class: "note small" }, about)), h("span", { "aria-hidden": "true" }, "→"));
+  const card = (title, about, body, foot?) => h("section", { class: "setupcard" }, h("div", { class: "setuphead" }, h("b", {}, title), about ? h("span", { class: "note small" }, about) : null), body, foot ? h("div", { class: "setupfoot" }, foot) : null);
+  const choice = (title, about, run, primary?) => h("button", { class: `plain setupopt ${primary ? "first" : ""}`, onclick: run }, h("span", { class: "grow" }, h("b", {}, title), h("span", { class: "note small" }, about)), h("span", { "aria-hidden": "true" }, "→"));
 
   const suggest = async () => {
     const org = activeOrg();
@@ -9095,7 +9099,7 @@ async function setupView() {
         await loadOrgs();
       }
       su.found = await api("POST", `orgs/${org.id}/suggest`, { mission: su.mission.trim() });
-      su.picked = new Set((su.found.positions ?? []).map((p) => p.bot));
+      su.picked = new Set<any>((su.found.positions ?? []).map((p) => p.bot));
       su.busy = false;
       to("pick", su.mission.trim());
     } catch (err) {
@@ -9128,7 +9132,7 @@ async function setupView() {
     const org = activeOrg();
     const noModel = needsKey(state.config);
     const team = org?.members ?? [];
-    const steps = [];
+    const steps: any[] = [];
     steps.push(say(`Hi${first ? ` ${first}` : ""}. I'm your assistant. This is where you and a team of AI agents get work done: you ask, they do it, and anything that sends, changes or deletes waits for your yes.`, "Two things get you going. Where do you want to start?"));
     if (su.step === "start") {
       steps.push(
@@ -9167,8 +9171,8 @@ async function setupView() {
     if (su.step === "pick" || su.step === "done") steps.push(mine(su.said[1] ?? su.mission));
     if (su.step === "pick") {
       const found = su.found?.positions ?? [];
-      const market = new Map((state.market ?? []).map((b) => [b.id, b]));
-      const crew = new Map((state.crew?.bots ?? []).map((b) => [b.id, b]));
+      const market = new Map<any, any>((state.market ?? []).map((b) => [b.id, b]));
+      const crew = new Map<any, any>((state.crew?.bots ?? []).map((b) => [b.id, b]));
       steps.push(
         say(found.length ? `For that, I'd start with ${found.length === 1 ? "this position" : `these ${found.length} positions`}. Untick any you don't want. You can add, remove and rearrange them later under Team.` : "I could not match positions to that. Try saying a little more about what you sell or do, or add agents yourself under Team."),
         card(
@@ -9258,7 +9262,7 @@ async function officeView() {
   const start = (kind) =>
     attempt(async () => {
       const page = kind === "sheet" ? await api("POST", "workspace/sheets", { title: "Untitled sheet" }) : await api("POST", "workspace/pages", { kind, title: kind === "deck" ? "Untitled slides" : "Untitled", ...(kind === "deck" ? { markdown: "# Title of the presentation\n\nA line about what it covers\n" } : {}) });
-      ui.ws ??= { collapsed: new Set() };
+      ui.ws ??= { collapsed: new Set<any>() };
       ui.ws.focusTitle = true;
       openPage(page.id);
     }, col);
@@ -9315,7 +9319,7 @@ async function officeView() {
       const text = q.value.trim();
       if (text.length < 2) return fill(results, everything.length ? recent() : h("p", { class: "note" }, "Nothing yet. Start something above."));
       const hits = (await api("GET", `workspace/search?q=${encodeURIComponent(text)}`).catch(() => [])).filter((x) => office.some((f) => f.id === x.page) || (data.tree ?? []).some((p) => p.kind === "page" && p.id === x.page));
-      const seen = new Set();
+      const seen = new Set<any>();
       fill(results, h("div", { class: "label" }, `Found for “${text}”`), hits.length ? hits.filter((x) => !seen.has(x.page) && seen.add(x.page)).map((x) => h("button", { class: "plain card officewait", onclick: () => openPage(x.page) }, h("b", {}, x.title), h("div", { class: "note small" }, x.text.slice(0, 200)))) : h("p", { class: "note" }, "Nothing matches that in your documents, sheets or notes."));
     }, 250);
   });
@@ -9341,7 +9345,7 @@ async function docsView() {
   const docs = data.files.filter((f) => f.kind === "doc");
   const org = activeOrg();
   const drawSide = (files = docs) => {
-    const groups = new Map();
+    const groups = new Map<any, any>();
     for (const f of files) (groups.get(f.folder || "") ?? groups.set(f.folder || "", []).get(f.folder || "")).push(f);
     const row = (f) => h("button", { class: `plain wsrow officerow ${ui.ws.open === f.id ? "on" : ""}`, "aria-current": ui.ws.open === f.id ? "true" : null, onclick: () => ((ui.ws.open = f.id), docsView()) }, h("span", { class: "grow" }, f.title), f.suggestions ? h("span", { class: "count", title: "Suggested changes waiting for you" }, String(f.suggestions)) : null);
     fill(
@@ -9351,8 +9355,8 @@ async function docsView() {
       docs.length ? null : h("p", { class: "note small", style: "padding: 8px 10px" }, "No documents yet."),
     );
   };
-  ui.ws.refreshSide = async () => ((ui.ws.data = await api("GET", "workspace/office")), state.view === "docs" && docsView.side?.(ui.ws.data.files.filter((f) => f.kind === "doc")));
-  docsView.side = drawSide;
+  ui.ws.refreshSide = async () => ((ui.ws.data = await api("GET", "workspace/office")), state.view === "docs" && flags.docsSide?.(ui.ws.data.files.filter((f) => f.kind === "doc")));
+  flags.docsSide = drawSide;
   drawSide();
   if (ui.ws.open) return renderWsPage(col, ui.ws.open);
 
@@ -9439,7 +9443,7 @@ async function sheetsView() {
     });
     input.click();
   };
-  const groups = new Map();
+  const groups = new Map<any, any>();
   for (const f of files) (groups.get(f.folder || "") ?? groups.set(f.folder || "", []).get(f.folder || "")).push(f);
   const row = (f) => h("button", { class: `plain wsrow officerow ${ui.ws.open === f.id ? "on" : ""}`, "aria-current": ui.ws.open === f.id ? "true" : null, onclick: () => ((ui.ws.open = f.id), sheetsView()) }, h("span", { class: "grow" }, f.title), f.suggestions ? h("span", { class: "count", title: "Changes waiting for you" }, String(f.suggestions)) : null);
   fill(
@@ -9538,7 +9542,7 @@ async function renderSheet(col, id) {
 
   // ----- cells waiting for the owner -----
   const pending = suggestions.map((s) => ({ s, cells: eng.diffFiles(file, eng.parseFile(s.markdown)) }));
-  const waitingRefs = () => new Set(pending.flatMap((p) => p.cells.filter((c) => c.sheet === sheet().name).map((c) => c.ref)));
+  const waitingRefs = () => new Set<any>(pending.flatMap((p) => p.cells.filter((c) => c.sheet === sheet().name).map((c) => c.ref)));
 
   // ----- the grid -----
   const bar = h("input", { class: "sheetbar mono", "aria-label": "What is in the selected cell", placeholder: "Type a value, or a formula starting with =" });
@@ -9546,7 +9550,7 @@ async function renderSheet(col, id) {
   const gridBox = h("div", { class: "sheetscroll" });
   const chartsBox = h("div", { class: "sheetcharts" });
   const tabsBox = h("div", { class: "sheettabs", role: "tablist", "aria-label": "Sheets in this file" });
-  const inputs = new Map();
+  const inputs = new Map<any, any>();
   const selName = () => eng.rangeName(sel);
   const paint = () => {
     const waiting = waitingRefs();
@@ -9576,7 +9580,7 @@ async function renderSheet(col, id) {
     const rows = Math.min(eng.MAX_ROWS, Math.max(used.rows + 4, 20) + mem.rows);
     const cols = Math.min(eng.MAX_COLS, Math.max(used.cols + 3, 8) + mem.cols);
     inputs.clear();
-    const body = [];
+    const body: any[] = [];
     for (let r = 0; r < rows; r++) {
       const cells = [h("th", { scope: "row" }, String(r + 1))];
       for (let c = 0; c < cols; c++) {
@@ -9732,8 +9736,8 @@ async function renderSheet(col, id) {
     : null;
 
   // ----- the panel: who can see it, how agents change it, asking an agent -----
-  const patch = (body, then) => attempt(async () => (Object.assign(page, await api("PATCH", `workspace/pages/${id}`, body)), then?.()), col);
-  const groupsOf = [...new Set(org.members.map((m) => m.department))];
+  const patch = (body, then?) => attempt(async () => (Object.assign(page, await api("PATCH", `workspace/pages/${id}`, body)), then?.()), col);
+  const groupsOf = [...new Set<any>(org.members.map((m) => m.department))];
   const whoSel = h("select", { "aria-label": "Who can see it" }, [["everyone", "Every agent"], ["some", "Only some groups"], ["private", "Private: no agent sees it"]].map(([v, t]) => h("option", { value: v, selected: v === (page.access.private ? "private" : page.access.everyone ? "everyone" : "some") }, t)));
   const groupBox = h("div", { class: "sheetgroups" });
   const drawGroups = () => fill(groupBox, whoSel.value === "some" ? groupsOf.map((g) => h("label", { class: "power" }, h("input", { type: "checkbox", checked: page.access.departments.includes(g), onchange: (e) => patch({ access: { departments: e.target.checked ? [...page.access.departments, g] : page.access.departments.filter((x) => x !== g) } }) }), g)) : null);
@@ -9806,8 +9810,8 @@ async function notesView() {
   const f0 = ui.notes;
   const drawSide = (files = ui.ws.data.files) => {
     const notes = files.filter((f) => f.kind === "note");
-    const notebooks = [...new Set(notes.map((n) => n.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-    const tags = [...new Set(notes.flatMap((n) => n.tags))].sort();
+    const notebooks = [...new Set<any>(notes.map((n) => n.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    const tags = [...new Set<any>(notes.flatMap((n) => n.tags))].sort();
     if (f0.notebook && !notebooks.includes(f0.notebook)) f0.notebook = null;
     if (f0.tag && !tags.includes(f0.tag)) f0.tag = null;
     const needle = f0.q.trim().toLowerCase();
@@ -10024,7 +10028,7 @@ function securityTabs(col) {
   };
   const sections = [...col.children].slice(1);
   for (const el of sections) el.dataset.tab = tabOf(el);
-  const have = new Set(sections.map((el) => el.dataset.tab));
+  const have = new Set<any>(sections.map((el) => el.dataset.tab));
   if (state.me?.mustSetUpSecondStep) ui.securityTab = "people";
   if (!have.has(ui.securityTab)) ui.securityTab = "overview";
   const bar = h("div", { class: "pills sectabs", role: "tablist", "aria-label": "Parts of Security" });
@@ -10047,7 +10051,7 @@ function backupSection(canEdit) {
     } catch (err) {
       return fill(box, h("h2", {}, "Backups and stored data"), h("div", { class: "banner error" }, err.message));
     }
-    const act = (fn, done) => attempt(async () => ((r) => (done && toast(typeof done === "function" ? done(r) : done), draw()))(await fn()), box);
+    const act = (fn, done?) => attempt(async () => ((r) => (done && toast(typeof done === "function" ? done(r) : done), draw()))(await fn()), box);
     const pass = h("input", { type: "password", autocomplete: "new-password", placeholder: b.ready ? "A new passphrase (to replace the one in use)" : "A passphrase for your backups, at least 12 characters", "aria-label": "Backup passphrase" });
     const where = h("input", { value: b.folder, placeholder: "The folder backups are kept in", "aria-label": "Backup folder" });
     const ask = (what) => prompt(`${what}\n\nType your backup passphrase:`);
@@ -10093,7 +10097,7 @@ function sentSection() {
   const num = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
   const time = (at) => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const dayWords = (day, i) => (i === 0 ? "Today" : new Date(`${day}T12:00`).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" }));
-  const draw = async (day) => {
+  const draw = async (day?) => {
     const d = await api("GET", `sent${day ? `?day=${day}` : ""}`).catch(() => null);
     if (!d) return fill(body, h("p", { class: "note" }, "This could not be loaded."));
     const out = d.ai.filter((a) => !a.local);
@@ -10243,7 +10247,7 @@ function securityOpsSection(canEdit) {
     } catch (err) {
       return fill(box, h("h2", {}, "Alerts and reviews"), h("div", { class: "banner error" }, err.message));
     }
-    const act = (fn, done) => attempt(async () => (await fn(), done && toast(done), draw()), box);
+    const act = (fn, done?) => attempt(async () => (await fn(), done && toast(done), draw()), box);
     const open = d.reviews.find((r) => !r.finishedAt);
     const last = d.reviews.find((r) => r.finishedAt);
     const url = h("input", { type: "url", value: d.feed.url, placeholder: "https://… (the address your monitoring system gives you)", disabled: !canEdit, "aria-label": "Address to send events to" });
@@ -10358,13 +10362,13 @@ const ACCESS_WORDS = { none: "No access", read: "Read", comment: "Comment", sugg
 /** In a file's panel: a level for each group and agent, when the simple settings are not enough. */
 function levelsEditor(page, id) {
   const org = activeOrg();
-  const groups = [...new Set((org.members ?? []).map((m) => m.department))];
+  const groups = [...new Set<any>((org.members ?? []).map((m) => m.department))];
   const lv = page.levels;
-  const summary = lv ? [lv.everyone ? `Every agent: ${ACCESS_WORDS[lv.everyone]}` : "Every other agent: No access", ...Object.entries(lv.departments).map(([g, l]) => `${g}: ${ACCESS_WORDS[l]}`), ...Object.entries(lv.agents).map(([a, l]) => `${org.members?.find((m) => m.bot === a)?.title ?? a}: ${ACCESS_WORDS[l]}`)].join(" · ") : "";
+  const summary = lv ? [lv.everyone ? `Every agent: ${ACCESS_WORDS[lv.everyone]}` : "Every other agent: No access", ...Object.entries<any>(lv.departments).map(([g, l]) => `${g}: ${ACCESS_WORDS[l]}`), ...Object.entries<any>(lv.agents).map(([a, l]) => `${org.members?.find((m) => m.bot === a)?.title ?? a}: ${ACCESS_WORDS[l]}`)].join(" · ") : "";
   const open = () => {
     const dialog = h("dialog", { class: "aidialog levelsdialog" });
     const close = () => (dialog.close(), dialog.remove());
-    const choice = (value, unset) => h("select", {}, unset ? h("option", { value: "", selected: !value }, unset) : null, Object.entries(ACCESS_WORDS).map(([v, t]) => h("option", { value: v, selected: value === v }, t)));
+    const choice = (value, unset?) => h("select", {}, unset ? h("option", { value: "", selected: !value }, unset) : null, Object.entries(ACCESS_WORDS).map(([v, t]) => h("option", { value: v, selected: value === v }, t)));
     const everyone = choice(lv?.everyone ?? (lv ? "none" : page.access.everyone ? (page.edit === "direct" ? "edit" : "suggest") : "none"));
     const byGroup = groups.map((g) => [g, choice(lv?.departments[g] ?? (!lv && page.access.departments.includes(g) ? (page.edit === "direct" ? "edit" : "suggest") : ""), "Same as every agent")]);
     const byAgent = (org.members ?? []).map((m) => [m, choice(lv?.agents[m.bot] ?? (!lv && page.access.agents.includes(m.bot) ? (page.edit === "direct" ? "edit" : "suggest") : ""), "Same as its group")]);
@@ -10412,7 +10416,7 @@ function projectPicker(page, id) {
  * item that became a task shows the task and how far along it is; nothing in the note itself is changed.
  */
 function checklistBox(page, id) {
-  const items = [...new Set(String(page.markdown ?? "").split("\n").map((l) => /^\s*[-*]\s+\[ \]\s+(.+)$/.exec(l)?.[1].trim()).filter(Boolean))].slice(0, 30);
+  const items = [...new Set<any>(String(page.markdown ?? "").split("\n").map((l) => /^\s*[-*]\s+\[ \]\s+(.+)$/.exec(l)?.[1].trim()).filter(Boolean))].slice(0, 30);
   if (!items.length) return null;
   const box = h("div", { class: "wstasks" });
   const mark = `page ${id}`;
@@ -10447,7 +10451,7 @@ function linksBox(id) {
 
 /** In a file's panel: who can see it: every agent, only some groups or agents, or nobody. */
 function accessPicker(page, patch, org) {
-  const groups = [...new Set((org.members ?? []).map((m) => m.department))];
+  const groups = [...new Set<any>((org.members ?? []).map((m) => m.department))];
   const mode = () => (page.access.private ? "private" : page.access.everyone ? "everyone" : "some");
   const sel = h("select", { "aria-label": "Who can see it" }, [["everyone", "Every agent"], ["some", "Only some groups or agents"], ["private", "Private: no agent sees it"]].map(([v, t]) => h("option", { value: v, selected: mode() === v }, t)));
   const box = h("div", { class: "sheetgroups" });
@@ -10631,7 +10635,7 @@ function columnsDialog(t, types, done) {
   const status = h("p", { class: "note", role: "status" });
   const TYPE_WORDS = { text: "Text", number: "Number", date: "Date", choice: "Choice (pick one)", person: "Person (you or an agent)" };
   const list = h("div", { class: "colrows" });
-  const addRow = (c = { name: "", type: "text" }) => {
+  const addRow = (c: any = { name: "", type: "text" }) => {
     const name = h("input", { value: c.name, placeholder: "Column name", "aria-label": "Column name" });
     const type = h("select", { "aria-label": "Type" }, types.map((x) => h("option", { value: x, selected: x === c.type }, TYPE_WORDS[x] ?? x)));
     const options = h("input", { value: (c.options ?? []).join(", "), placeholder: "Choices, separated by commas", "aria-label": "Choices", hidden: c.type !== "choice" });
@@ -10776,7 +10780,7 @@ const guideFor = (view) => (view === "integrations" && ui.integration === "ai-mo
 /** Shows a user guide in a reader beside the page. Links between guides open in the reader; the list of guides is on the left. */
 async function showGuide(id) {
   let doc;
-  let list = [];
+  let list: any[] = [];
   try {
     [doc, list] = await Promise.all([api("GET", `guide/${encodeURIComponent(id)}`), api("GET", "guide").catch(() => [])]);
   } catch (err) {
@@ -10817,7 +10821,7 @@ window.talqavaShowGuide = showGuide;
 // For the desktop app's menu bar item: start a new session from anywhere.
 window.talqavaNewSession = () => go("chat");
 // A link to one of Talqava's own documents never leaves the page; the reader showing it opens it.
-document.addEventListener("click", (e) => e.target.closest?.("a.doclink") && e.preventDefault(), true);
+document.addEventListener("click", (e) => (e.target as Element).closest?.("a.doclink") && e.preventDefault(), true);
 
 /** Shows one of the app's documents (terms, privacy policy, licence, notices…) in a reader. Links between them open here. */
 async function showLegal(id) {
@@ -10870,7 +10874,7 @@ async function pageHistory(page) {
         "div",
         { class: "row" },
         h("button", { class: "plain grow wsrevbtn", onclick: async () => fill(view, renderMarkdown((await api("GET", `workspace/pages/${page.id}/revisions/${v.rev}`)).markdown || "(empty)")) }, `${when(v.at)} · ${v.author}${i === 0 ? " · current" : ""}`),
-        i === 0 ? null : h("button", { class: "small", onclick: () => confirm("Put this version back? The page as it is now stays in the history.") && attempt(async () => (await api("POST", `workspace/pages/${page.id}/revisions/${v.rev}`), document.querySelector("dialog.libdialog")?.close(), document.querySelector("dialog.libdialog")?.remove(), workspaceView())) }, "Put back"),
+        i === 0 ? null : h("button", { class: "small", onclick: () => confirm("Put this version back? The page as it is now stays in the history.") && attempt(async () => (await api("POST", `workspace/pages/${page.id}/revisions/${v.rev}`), document.querySelector<HTMLDialogElement>("dialog.libdialog")?.close(), document.querySelector("dialog.libdialog")?.remove(), workspaceView())) }, "Put back"),
       ),
     ),
   );
@@ -10952,7 +10956,7 @@ async function refreshTasks(full = false) {
 function drawBoard() {
   const col = ui.tasksCol;
   const org = activeOrg();
-  const crew = new Map((state.crew?.bots ?? []).map((b) => [b.id, b]));
+  const crew = new Map<any, any>((state.crew?.bots ?? []).map((b) => [b.id, b]));
   ui.taskFilter ??= { who: "", q: "", cancelled: false, plan: "" };
   const f = ui.taskFilter;
   const twoWeeks = Date.now() - 14 * 86400_000;
@@ -10968,7 +10972,7 @@ function drawBoard() {
     (ui.projects ?? []).filter((p) => p.status !== "done").map((p) => h("option", { value: `project:${p.id}`, selected: f.plan === `project:${p.id}` }, `Project: ${p.title}`)),
   );
   const search = h("input", { type: "search", value: f.q, placeholder: "Find a task", "aria-label": "Find a task" });
-  search.addEventListener("input", () => ((f.q = search.value), drawBoard(), document.querySelector(".tasks input[type=search]")?.focus()));
+  search.addEventListener("input", () => ((f.q = search.value), drawBoard(), document.querySelector<HTMLElement>(".tasks input[type=search]")?.focus()));
   const who = h("select", { "aria-label": "Whose tasks", onchange: (e) => ((f.who = e.target.value), drawBoard()) }, h("option", { value: "" }, "Everyone"), org.members.map((m) => h("option", { value: m.bot, selected: f.who === m.bot }, m.title)));
   const counts = Object.fromEntries(TASK_COLUMNS.map(([key]) => [key, shown.filter((t) => columnOf(t) === key).length]));
   const card = (t) => {
@@ -11026,7 +11030,7 @@ function todayStrip(f) {
  */
 function pauseBar(org, who) {
   const paused = ui.pausedAgents ?? [];
-  const pausedIds = new Set(paused.map((a) => a.bot));
+  const pausedIds = new Set<any>(paused.map((a) => a.bot));
   const everyone = org.members.length > 0 && org.members.every((m) => pausedIds.has(m.bot));
   const send = (action, body) => attempt(async () => (await api("POST", `work/agents/${action}`, body), await refreshTasks(true)), ui.tasksCol);
   const whoName = who ? org.members.find((m) => m.bot === who)?.title : "";
@@ -11062,7 +11066,7 @@ async function drawTaskPanel(id) {
   if (ui.taskOpen !== id) return;
   const { item: t, comments, subtasks, quest } = data;
   const org = activeOrg();
-  const crew = new Map((state.crew?.bots ?? []).map((b) => [b.id, b]));
+  const crew = new Map<any, any>((state.crew?.bots ?? []).map((b) => [b.id, b]));
   const act = (fn) => attempt(async () => (await fn(), await refreshTasks(true)), panel);
   const patch = (body) => act(() => api("PATCH", `work/${id}`, body));
   const title = h("input", { class: "tasktitlebox", value: t.title, maxlength: 140, "aria-label": "Task title" });
@@ -11442,7 +11446,7 @@ async function projectView() {
     attempt(async () => {
       const made = kind === "sheet" ? await api("POST", "workspace/sheets", { title: `${p.title}: sheet` }) : await api("POST", "workspace/pages", { kind, title: kind === "deck" ? `${p.title}: slides` : "Untitled", project: p.id, ...(kind === "deck" ? { markdown: `# ${p.title}\n\nA line about what it covers\n` } : {}) });
       if (kind === "sheet") await api("PATCH", `workspace/pages/${made.id}`, { project: p.id });
-      ui.ws ??= { collapsed: new Set() };
+      ui.ws ??= { collapsed: new Set<any>() };
       ui.ws.focusTitle = true;
       openPage(made.id);
     }, col);

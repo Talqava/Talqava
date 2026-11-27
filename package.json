@@ -34,7 +34,7 @@
   "scripts": {
     "start": "node src/local/main.ts",
     "test": "node --test \"test/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.ui.json",
     "check": "npm run typecheck && npm test",
     "eval": "node evals/run.ts",
     "licenses": "node scripts/licenses.mjs",
