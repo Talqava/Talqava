@@ -164,6 +164,8 @@ export interface Tool {
   name: string;
   /** What is sent to Claude to describe the tool. */
   definition: Anthropic.Beta.BetaToolUnion;
+  /** True for a tool of a connected service: when there are many, the edition may list it only once it is looked up. */
+  lazy?: boolean;
   /** A plain JSON-schema description, for models other than Claude. Tools without one are Claude-only. */
   portable?: { description: string; parameters: Record<string, unknown> };
   /** Returns a problem with the input, or null if it is fine. */
