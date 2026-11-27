@@ -8,6 +8,8 @@ At the top are the **Board** and **Goals** switch and one button. On the Board i
 
 **On the Board**
 
+Before there is any task, the Board shows one card, **No tasks yet**, with **Give the first task**. What follows appears with the first task.
+
 A row of filters sits above the columns:
 
 - **Find a task** searches task numbers, titles and agent names.
