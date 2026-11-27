@@ -9,11 +9,11 @@ Chat is where you talk with your assistant, or with one of your agents, in a con
 **On the left:**
 
 - **Project**: a menu to choose which project's chats you see, with **＋ New project**. "General" is the default.
-- **New chat**.
-- Your chats, with **Pinned** ones at the top. A dot means a chat is working, or waiting for your approval.
-- **Team tasks**: the last few tasks you gave, so you can jump to them.
+- **New session**.
+- Your sessions: chats and the tasks you gave your agents, in one list. **Pinned** ones are at the top, then **Today**, then **Earlier**. A green dot means it is working, an amber one that it waits for you, a red one that it stopped before finishing.
+- Point at a row and press **⋯** to **Pin**, **Rename**, **Archive** or (for a chat) **Delete** it. **Show archived** at the bottom lists the ones you put away; **Bring back** returns one to the list.
 
-**In the middle:** the conversation, and a message box with **Send** at the bottom. At the top are the chat's title, how much it has used, and buttons to **Pin**, **Delete** and move it to another project. A chat with the assistant also has a menu to choose the AI model.
+**In the middle:** the conversation, and a message box with **Send** at the bottom. At the top are the chat's title, how much it has used, and buttons to **Pin**, **Delete** and move it to another project. Under the message box you choose the AI model and how hard it thinks (for a chat with the assistant), and there is a microphone if your copy of Talqava can write out speech. A chat with the assistant also has a menu to choose the AI model.
 
 A new chat opens with a greeting and a few ideas to start from.
 

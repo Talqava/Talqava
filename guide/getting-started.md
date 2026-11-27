@@ -81,7 +81,7 @@ The box at the top finds anything: files by name or by the words inside, tasks, 
 
 **New** (the green button): Where Talqava opens. One box: ask for anything in your own words and press Enter. Plain words go to your assistant as a chat. Start with **@** and an agent's name to give that agent a task. Under the box are three things to try, and links to make a document, sheet, presentation or note. Below that: what is waiting on you, what is being worked on, and what got done today. **Your earlier chats** at the bottom opens the chat page. See [Chat](chat.md).
 
-**Chats**: Your conversations with the assistant.
+**Sessions**: One list of everything you have asked for: your chats with the assistant and the tasks you gave your agents, newest first. Point at a row and press **⋯** to pin it to the top, rename it or archive it; **Show archived** at the bottom of the list brings archived ones back into view. Opening a chat shows the conversation; opening a task shows the agent's work. The box you type in lets you choose the AI model and how hard it thinks, and has a microphone if your copy of Talqava can write out speech.
 
 **Inbox** (near the bottom of the strip, with a number when something waits on you): Everything that needs you, in one place: plans to approve, questions, finished work to review, changes agents want to make, and reminders.
 

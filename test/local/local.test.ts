@@ -2198,6 +2198,20 @@ test("a schedule with an agent becomes a task in its queue; without one, or if t
     assert.equal(runs[0].conversationId, chat.conversationId);
     await call("DELETE", `jobs/${job.id}`);
     assert.equal((await call("GET", "jobs/runs")).data.find((r: { job: string }) => r.job === job.id).gone, true);
+    // Sessions: chats and the tasks the owner started stand in one list; each can be renamed, pinned and archived.
+    const sessions = (await call("GET", "sessions")).data as { id: string; kind: string; title: string; pinned: boolean; archived: boolean; state: string }[];
+    assert.ok(sessions.some((x) => x.kind === "task" && x.title === "Weekly pipeline"), "the task the automation started is a session");
+    assert.ok(sessions.some((x) => x.kind === "chat" && x.id === chat.conversationId), "and so is the chat it ran in");
+    const renamed = (await call("PATCH", `conversations/${chat.conversationId}`, { title: "  Monday   pipeline, in chat ", pinned: true })).data;
+    assert.deepEqual([renamed.title, renamed.pinned, renamed.archived], ["Monday pipeline, in chat", true, false]);
+    assert.equal((await call("PATCH", `conversations/${chat.conversationId}`, { title: "  " })).status, 400);
+    const away = (await call("PATCH", `conversations/${chat.conversationId}`, { archived: true })).data;
+    assert.deepEqual([away.archived, away.pinned], [true, false], "archiving unpins");
+    const taskSession = sessions.find((x) => x.kind === "task" && x.title === "Weekly pipeline")!;
+    await call("PATCH", `conversations/${taskSession.id}`, { title: "Pipeline, week 48" });
+    const after = (await call("GET", "sessions")).data as typeof sessions;
+    assert.equal(after.find((x) => x.id === taskSession.id)!.title, "Pipeline, week 48", "a task is renamed like a chat");
+    assert.equal(after.find((x) => x.id === chat.conversationId)!.archived, true);
     // The set-aside parts: all off to begin with; only known ones can be switched on, and switching one on shows it.
     assert.deepEqual((await call("GET", "state")).data.labs, []);
     assert.deepEqual((await call("PUT", "settings", { labs: ["git", "made-up", "office"] })).data.labs, ["office", "git"]);

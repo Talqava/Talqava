@@ -24,6 +24,8 @@ export interface Conversation {
   space?: string;
   /** Pinned chats stay at the top of the list. */
   pinned?: boolean;
+  /** Put away: kept, and left out of the list of sessions unless the owner asks to see them. */
+  archived?: boolean;
   /** For a chat with one bot in its role: that bot's id. None means the general agent. */
   bot?: string;
   messages: Message[];
