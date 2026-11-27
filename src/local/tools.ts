@@ -1,5 +1,6 @@
 // Tools that only make sense on the user's own machine: a shell and direct
 // file access. The hosted edition never loads this file.
+import { hideSecrets, refusedCommand } from "./safety.ts";
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -204,7 +205,8 @@ export const makeBashTool = (root: string): Tool => ({
     description: "Runs a bash command in the workspace folder and returns its output. Each command starts in a fresh shell.",
     parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
   },
-  validate: (input) => (isObject(input) && (input.restart === true || typeof input.command === "string") ? null : "missing command"),
+  // A command on the never-run list is refused here, before an approval is offered (see safety.ts).
+  validate: (input) => (isObject(input) && (input.restart === true || typeof input.command === "string") ? (input.restart === true ? null : refusedCommand(input.command)) : "missing command"),
   needsApproval: (input: BashInput) => input.restart !== true,
   run: (input: BashInput, { signal }) => runBash(input, signal, root),
 });
@@ -716,7 +718,10 @@ export function localRunSpec(jobs: JobBook) {
     const { result, levels, model } = await preparing(() => build(conversation));
     // What the task has read so far decides whether it may still send things out (see sensitivity.ts).
     const read = readOf(conversation.id);
-    const spec = guard(result, quest ? `the ${quest.bot.title || quest.bot.name}` : "the assistant");
+    const guarded = guard(result, quest ? `the ${quest.bot.title || quest.bot.name}` : "the assistant");
+    // A session the owner reaches from Telegram cannot run commands on this computer at all: the request comes from
+    // outside the app, and an approval cannot be seen there. Saved secrets are taken out of every tool's result.
+    const spec = { ...guarded, tools: conversation.via === "telegram" ? guarded.tools.filter((t) => t.name !== "bash") : guarded.tools, clean: hideSecrets };
     return { ...spec, tools: spec.tools.map((t) => ({ ...t, run: (input: any, context: any) => withLevels(levels, () => ((t.name === "http_request" && !["GET", "HEAD"].includes(String(input?.method ?? "GET").toUpperCase())) || (t.name === "browser" && input?.action === "type") ? leaving(t.name === "browser" ? "a web page" : "a web address", conversation.id) : null, t.run(input, context)), model, read) }) as Tool) };
   };
 }

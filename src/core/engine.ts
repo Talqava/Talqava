@@ -232,10 +232,11 @@ export class Engine {
     }
     // Written to the journal before running, so a restart knows this call may have partly happened.
     this.#emit(conversation.id, { type: "tool_start", id: call.id, name: call.name });
+    const clean = (output: ToolResult["content"]) => (spec.clean ? spec.clean(output) : output);
     try {
-      return result(capOutput(await tool.run(call.input, { signal: run.abort.signal, conversation })));
+      return result(clean(capOutput(await tool.run(call.input, { signal: run.abort.signal, conversation }))));
     } catch (err) {
-      return result(`Error: ${err instanceof Error ? err.message : String(err)}`, true);
+      return result(clean(`Error: ${err instanceof Error ? err.message : String(err)}`), true);
     }
   }
 

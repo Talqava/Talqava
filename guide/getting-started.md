@@ -128,6 +128,7 @@ Nothing is deleted when a part is off. Whatever you made with it is kept, agents
 ## Good habits from day one
 
 - **Keep approvals on.** With **Ask**, agents stop before commands, file changes and writes to other services.
+- **Two things hold whatever you choose.** Some commands are never run, even if you told an agent not to ask: wiping a disk or your home folder, switching the computer off, taking administrator rights, running a program straight from a web address, reading the passwords saved on your computer. And a key or password that Talqava holds is taken out of anything a tool returns before the AI model or the session's record sees it. Neither is a sandbox: a script an agent runs can still do what it likes, which is why approvals matter.
 - **Set budgets.** Every task has a budget ($1 and 40 steps unless you change it). Give each agent and group a monthly budget too: at 80% you get a warning, at 100% no new work starts.
 - **Add a backup model** from a second AI service, so work carries on if one is down.
 - **Share only what agents need.** Keep sensitive files private in the Library.
