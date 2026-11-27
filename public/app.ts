@@ -4397,7 +4397,7 @@ async function servicePage(col, again, id) {
       "div",
       { class: "card form" },
       h("div", { class: "row" }, h("div", { class: "grow" }, h("b", {}, c.label), h("div", { class: "note small" }, `Connected ${new Date(c.addedAt).toLocaleDateString()}`)), h("span", { class: `chip ${c.problem ? "bad" : "on"}` }, c.problem ? "Needs attention" : "Connected")),
-      c.problem ? h("div", { class: "banner error" }, `${c.problem} Make a new key and connect again below; the account keeps its settings.`) : null,
+      c.problem ? h("div", { class: "banner error" }, `${c.problem} ${svc.browser ? `Sign in to ${svc.name} again below` : "Make a new key and connect again below"}; the account keeps its settings.`) : null,
       h("label", {}, "What agents may do with this account", rule),
       whoMay(c),
       actionSwitches(c),
@@ -4575,6 +4575,8 @@ async function integrationsView() {
   let list, git;
   try {
     [list, git] = await Promise.all([api("GET", "integrations"), ["git", "mcp", "openrouter"].includes(ui.integration) ? api("GET", `integrations/${ui.integration}`) : null]);
+    // What has stopped working, for the line at the top of the list.
+    state.serviceProblems = await api("GET", "gateway/problems").catch(() => state.serviceProblems ?? []);
   } catch (err) {
     return fill(col, h("div", { class: "banner error" }, err.message));
   }
@@ -4650,6 +4652,10 @@ async function integrationsView() {
   fill(
     col,
     h("div", {}, h("h1", {}, "Connections"), h("p", { class: "lead" }, "Connect the tools your business already uses, so your agents can work where the work is. Each integration says exactly what agents can and cannot do with it.")),
+    // Anything that has stopped working is said first, with the way to put it right.
+    (state.serviceProblems ?? []).length
+      ? h("div", { class: "banner error brokenlist", role: "alert" }, h("b", {}, (state.serviceProblems ?? []).length === 1 ? "One connection has stopped working." : `${state.serviceProblems.length} connections have stopped working.`), (state.serviceProblems ?? []).map((p) => h("div", { class: "row" }, h("span", { class: "grow" }, `${p.name}: ${p.problem}`), p.integration ? h("button", { class: "small", onclick: () => ((ui.integration = p.integration), again()) }, "Put it right") : null)))
+      : null,
     h("div", { class: "row ifind" }, search, catPick),
     showPills,
     none,
@@ -7503,6 +7509,11 @@ async function jobsView() {
             else if (r.conversationId) go("chat", r.conversationId);
           }, col),
         ),
+        pick(j.limit ? `Monthly limit: ${money(j.limit)}…` : "Set a monthly limit…", async () => {
+          const box = h("input", { id: "auto-limit", inputmode: "decimal", value: j.limit ? String(j.limit) : "", placeholder: "No limit", "aria-label": "Most it may spend a month, in US dollars" });
+          const said = await libDialog(`The most “${j.name}” may spend a month`, h("div", { class: "composeform" }, h("label", {}, "US dollars a month", box), h("p", { class: "note small" }, `So far this month: ${money(j.spent || 0)}. Once it reaches the limit, its timed runs are left out until the month turns or you raise it, and your Inbox says so. Leave it empty for no limit of its own.`)), [["Save", () => ({ v: box.value.trim() }), true]]);
+          if (said) act(() => api("PATCH", `jobs/${j.id}`, { limit: said.v === "" ? null : Number(said.v.replace(/^\$/, "")) }), said.v === "" ? "It has no limit of its own now." : "Limit saved.");
+        }),
         pick("Edit", () => (b ? briefingEdit(b).then((ok) => ok && again()) : ((edit.hidden = false), fill(edit.firstChild, h("div", { class: "card form" }, h("h4", {}, `Change “${j.name}”`), scheduleForm(col, j, again)))))),
         j.lastTaskId ? pick("Open the last run", () => ((ui.taskOpen = j.lastTaskId), go("tasks"))) : j.lastConversationId ? pick("Open the last run", () => go("chat", j.lastConversationId)) : null,
         pick(b ? "Switch off for good" : "Delete", () => confirm(b ? `Switch ${j.name} off for good? You can switch it on again later.` : `Delete the automation “${j.name}”?\n\nPast runs are kept.`) && act(() => api("DELETE", b ? `jobs/briefings/${b.id}` : `jobs/${j.id}`), b ? `${j.name} is switched off.` : "Deleted."), "danger"),
@@ -7516,7 +7527,7 @@ async function jobsView() {
         h("td", {}, b?.when ?? j.plain),
         h("td", { class: "autonum" }, j.enabled ? when(j.nextRunAt) : "paused"),
         h("td", { class: "autonum" }, j.lastRunAt ? when(j.lastRunAt) : "not yet", j.last && j.last.outcome !== "done" ? h("span", { class: `autoout ${OUTCOME_WORDS[j.last.outcome]?.[1] ?? ""}`, title: j.last.words }, OUTCOME_WORDS[j.last.outcome]?.[0]) : null),
-        h("td", { class: "autonum", title: costWords(j.costs) }, costWords(j.costs, { short: true })),
+        h("td", { class: "autonum", title: costWords(j.costs) }, costWords(j.costs, { short: true }), j.limit ? h("span", { class: `autoby ${(j.spent || 0) >= j.limit ? "autobad" : ""}` }, `${money(j.spent || 0)} of ${money(j.limit)} this month`) : null),
         h("td", { class: "autoend" }, toggle),
         h("td", { class: "autoend" }, menu),
       ),
@@ -9920,6 +9931,7 @@ async function securityView() {
       col,
       head,
       securityCenter(),
+      guaranteesCard(),
       h("div", { class: "card form" }, h("b", {}, "Right now: one person, no sign-in"), h("p", { class: "note" }, "Anyone who can use this computer can open Talqava and do everything. That is fine for one owner on their own computer.")),
       !lab("company") ? h("p", { class: "note" }, "Features for a company with several people (each with their own sign-in and role, single sign-on, and rules for sensitive information) are set aside. Switch them on under Settings › Labs.") : h(
         "form",
@@ -10013,6 +10025,7 @@ async function securityView() {
     col,
     head,
     securityCenter(),
+      guaranteesCard(),
     mine,
     h(
       "section",
@@ -10358,6 +10371,30 @@ function securityOpsSection(canEdit) {
 }
 
 /** Security › the center: which protections are on, what needs attention, and a report to download. */
+/**
+ * What holds whatever an agent is told or reads. Each of these is done by Talqava itself, in its own code, and not
+ * by asking the AI model to behave: an instruction lost in a long conversation, or words planted in a web page or
+ * an email, cannot switch any of them off.
+ */
+function guaranteesCard() {
+  const line = (title, words) => h("li", {}, h("b", {}, title), " ", words);
+  return h(
+    "section",
+    { class: "isec guarantees" },
+    h("h2", {}, "What agents cannot get around"),
+    h("p", { class: "note" }, "These are enforced by Talqava itself, not by instructions to the AI model. An agent that forgets what it was told, or reads something written to mislead it, still cannot do any of this."),
+    h(
+      "ul",
+      { class: "guaranteelist" },
+      line("Your yes comes first.", "A step that sends, changes or deletes waits for your answer in the Inbox or the chat, unless you chose to let that agent run without asking."),
+      line("Some commands are never run.", "Wiping a disk or your home folder, switching the computer off, taking administrator rights, running a program straight from the web, reading the passwords saved on this computer: refused before an approval is even offered."),
+      line("Your keys stay out of sight.", "A key, token or password saved in Talqava is taken out of anything a tool returns before the AI model sees it."),
+      line("Spending stops at the limit.", "A task stops at its budget, and no new work starts once a monthly limit is reached, until you raise it."),
+      line("Telegram cannot run commands.", "A session reached from Telegram has no command line, and approvals are only ever given in the app."),
+    ),
+  );
+}
+
 function securityCenter() {
   const box = h("section", { class: "isec seccenter" });
   api("GET", "security-center")

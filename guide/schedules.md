@@ -9,6 +9,7 @@ Open **Automations** (the clock on the strip at the left).
 - **Tabs across the top:** **All**, **Active**, **Paused**, **Run history** and **Ready-made**, each with a count.
 - **One table** of everything that runs by itself, whether you wrote it or switched on a ready-made one. Each row shows its name and who does it, when it runs in plain words (for example "Every weekday at 8:00 am"), when it runs next (or **paused**), when it last ran (with **Did not work**, **Left out** or **Needs you** beside it when the last run was not a plain success), and about what it costs a month.
 - **A switch on each row** turns it on or pauses it.
+- **A monthly limit for one automation.** **Set a monthly limit…** under ⋯ sets the most it may spend in a calendar month. Once its runs have cost that much, its timed runs are left out until the month turns or you raise the limit, and your Inbox says so. The Cost column then shows what it has spent of its limit. Nothing is spent between runs: an automation uses your AI model only when it runs.
 - **The ⋯ button on each row** opens **Run now** (or **Send one now**), **Edit**, **Open the last run** and **Delete** (or **Switch off for good**).
 - **+ New automation** opens a form with **Name**, **When**, **Who does it** and **Instructions**.
 - **Run history** lists every run, newest first: which automation, when, how it turned out (**Done**, **Working**, **Needs you**, **Did not work** or **Left out**, with the reason) and what it cost. The last 300 runs are kept.

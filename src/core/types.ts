@@ -108,6 +108,8 @@ export interface Job {
   topic?: string;
   /** The AI model the owner chose for this routine ("service/model"). None: the agent's own, or the organization's. */
   model?: string;
+  /** The most it may spend in a calendar month, in US dollars. Once reached, its timed runs are left out until the month turns or the owner raises it. None: no limit of its own. */
+  limit?: number | null;
 }
 
 export interface Secret {
