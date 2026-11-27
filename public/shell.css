@@ -174,3 +174,7 @@
 .composetools select { width: auto; max-width: 220px; border: 0; background: none; color: var(--soft); padding: 4px 6px; font-size: 12.5px; }
 .composetools select:hover { color: var(--text); }
 .composetools .askchip { font-size: 12px; }
+
+/* ---------- Files: one list, filtered by kind ---------- */
+.fileskinds { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.fileskinds .mpill .autocount { margin-left: 6px; }

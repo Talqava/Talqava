@@ -95,9 +95,10 @@ The box at the top finds anything: files by name or by the words inside, tasks, 
 - **Organization**: your org chart. Add positions, draw who reports to whom, group them into teams with leads, and set budgets.
 - **Marketplace**: ready-made agents, teams, company templates, playbooks, page packs, Office templates and connectors, free.
 
-**Files**: What you make and what your agents work from. Its tabs:
-- **Office**, **Documents** and **Notes**: what you and your agents make together. See [Office](office.md). **Sheets** and **Slides** are set aside; see Labs below.
-- **Workspace** (procedures, price lists and decisions as pages), **Library** (your files, in folders), **Memory** (what agents should always remember) and **Skills** (procedures agents wrote down for themselves).
+**Files**: What you make and what your agents work from, in one place.
+- **All files** lists everything together, newest change first: documents, notes, workspace pages and the files in your library. Buttons above the list show one kind at a time. The search box finds documents, notes and pages by the words inside them. Start a document or a note from the top, or ask an agent to make one.
+- **Work in one kind**, lower on the page, opens the full page for Documents, Notes, Workspace pages or the Library (where you add and organize files). See [Office](office.md), [Workspace](workspace.md) and [Library](library.md). **Sheets** and **Slides** are set aside; see Labs below.
+- **Memory** (what agents should always remember) and **Skills** (procedures agents wrote down for themselves) have their own tabs.
 
 **Search**: Puts you in the box at the top, which finds anything.
 

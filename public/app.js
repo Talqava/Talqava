@@ -349,7 +349,7 @@ function render() {
 const AREAS = {
   tasks: { name: "Tasks", views: [["tasks", "Tasks"], ["projects", "Projects"], ["jobs", "Automations"]], also: { project: "projects" } },
   team: { name: "Team", views: [["home", "Agents"], ["team", "Organization"], ["market", "Marketplace"]], also: { quest: "home", bot: "home", marketbot: "market" } },
-  files: { name: "Files", views: [["office", "Office"], ["docs", "Documents"], ["sheets", "Sheets"], ["slides", "Slides"], ["notes", "Notes"], ["workspace", "Workspace"], ["library", "Library"], ["memory", "Memory"], ["skills", "Skills"]] },
+  files: { name: "Files", views: [["office", "All files"], ["docs", "Documents"], ["sheets", "Sheets"], ["slides", "Slides"], ["notes", "Notes"], ["workspace", "Workspace"], ["library", "Library"], ["memory", "Memory"], ["skills", "Skills"]] },
   more: { name: "Account", views: [["integrations", "Connections"], ["security", "Security"], ["audit", "Activity log"], ["usage", "Usage"], ["settings", "Settings"]] },
 };
 /**
@@ -367,6 +367,11 @@ const lab = (id) => (state.config?.labs ?? []).includes(id);
 /** Pages that belong to a set-aside part. */
 const LAB_VIEWS = { sheets: "office", slides: "office" };
 const viewShown = (view) => !LAB_VIEWS[view] || lab(LAB_VIEWS[view]);
+/**
+ * Pages that are part of one place and have no tab of their own: documents, notes, workspace pages and the library
+ * are all reached from Files, which lists them together. Their own pages still open, with Files marked as where you are.
+ */
+const FOLDED = { docs: "office", notes: "office", workspace: "office", library: "office", sheets: "office", slides: "office" };
 
 /** The tab a page belongs under: itself, or the page it was opened from (a task under Agents, a project under Projects). */
 const tabOf = (area, view) => AREAS[area].also?.[view] ?? view;
@@ -375,7 +380,7 @@ const areaOf = (view) => (view === "quest" && ui.questFrom === "sessions" ? null
 const lastIn = (area) => {
   try {
     const v = localStorage.getItem(`talqava.area.${area}`);
-    return AREAS[area].views.some(([x]) => x === v) && viewShown(v) ? v : AREAS[area].views[0][0];
+    return AREAS[area].views.some(([x]) => x === v) && viewShown(v) && !FOLDED[v] ? v : AREAS[area].views[0][0];
   } catch {
     return AREAS[area].views[0][0];
   }
@@ -390,7 +395,7 @@ function renderAreaTabs() {
     localStorage.setItem(`talqava.area.${area}`, at);
   } catch {}
   ui.tabs.setAttribute("aria-label", `Parts of ${AREAS[area].name}`);
-  fill(ui.tabs, h("span", { class: "areaname" }, AREAS[area].name), AREAS[area].views.filter(([v]) => viewShown(v) || v === at).map(([v, label]) => h("button", { class: `areatab ${at === v ? "on" : ""}`, "aria-current": at === v ? "page" : null, onclick: () => go(v) }, label)));
+  fill(ui.tabs, h("span", { class: "areaname" }, AREAS[area].name), AREAS[area].views.filter(([v]) => !FOLDED[v]).map(([v, label]) => h("button", { class: `areatab ${(FOLDED[at] ?? at) === v ? "on" : ""}`, "aria-current": (FOLDED[at] ?? at) === v ? "page" : null, onclick: () => go(v) }, label)));
 }
 
 // Line icons for the rail, drawn on a 20 px grid.
@@ -9210,9 +9215,9 @@ async function officeView() {
   ui.wsFlush?.();
   const col = h("div", { class: "integrations officehomepage" });
   fill(ui.body, h("main", { class: "center" }, col));
-  let data, templates;
+  let data, templates, library;
   try {
-    [data, templates] = await Promise.all([api("GET", "workspace/office"), api("GET", "workspace/office-templates"), state.crew ? null : loadCrew(), state.orgs ? null : loadOrgs()]);
+    [data, templates, library] = await Promise.all([api("GET", "workspace/office"), api("GET", "workspace/office-templates"), api("GET", "library").catch(() => ({ documents: [] })), state.crew ? null : loadCrew(), state.orgs ? null : loadOrgs()]);
   } catch (err) {
     return fill(col, h("div", { class: "banner error" }, err.message));
   }
@@ -9237,37 +9242,60 @@ async function officeView() {
       else if (quest?.queued) openTask(quest.queued.id);
     }, col);
   const waiting = data.files.filter((f) => f.suggestions);
-  const q = h("input", { type: "search", placeholder: "Search every document, sheet and note, including the words inside", "aria-label": "Search Office" });
+  const q = h("input", { type: "search", placeholder: "Search documents, notes and pages, including the words inside", "aria-label": "Search Office" });
   const results = h("div");
-  const recent = () =>
-    h(
-      "div",
-      { class: "card officetable" },
-      h(
-        "table",
-        {},
-        h("thead", {}, h("tr", {}, ["Name", "Kind", "Last change", "Who can read it", "Sensitivity"].map((t) => h("th", { scope: "col" }, t)))),
-        h("tbody", {}, data.files.slice(0, 15).map((f) => h("tr", {}, h("td", {}, h("button", { class: "plain link", onclick: () => openPage(f.id) }, f.title), f.pinned ? h("span", { class: "tag" }, "pinned") : null), h("td", {}, `${KIND[f.kind]?.[0] ?? "Page"}${f.folder ? ` · ${f.folder}` : ""}`), h("td", {}, `${f.updatedBy} · ${officeDay(f.updatedAt)}`), h("td", {}, officeWho(f)), h("td", {}, LEVEL_NAMES[f.level] ?? "Internal")))),
-      ),
-    );
+  // Everything in one list: documents and notes, workspace pages, and the files in the library, newest change first.
+  const KIND_WORDS = { doc: "Document", note: "Note", page: "Page", file: "Library file", sheet: "Sheet", deck: "Slides" };
+  const office = data.files.filter((f) => lab("office") || (f.kind !== "sheet" && f.kind !== "deck"));
+  const aside = data.files.length - office.length;
+  const everything = [
+    ...office.map((f) => ({ kind: f.kind, title: f.title, sub: f.folder, when: f.updatedAt, by: f.updatedBy, who: officeWho(f), level: f.level, pinned: f.pinned, open: () => openPage(f.id) })),
+    ...(data.tree ?? []).filter((p) => p.kind === "page").map((p) => ({ kind: "page", title: p.title, sub: "", when: p.updatedAt, by: p.updatedBy, who: p.access ? officeWho(p) : "", level: p.level, pinned: false, open: () => openPage(p.id) })),
+    ...(library.documents ?? []).map((d) => ({ kind: "file", title: d.name, sub: d.path.includes("/") ? d.path.slice(0, d.path.lastIndexOf("/")) : "", when: new Date(d.modified).toISOString(), by: "", who: d.access ? officeWho(d) : "", level: d.level, pinned: false, open: () => ((ui.libFind = d.name), go("library")) })),
+  ].sort((a, b) => Number(b.pinned) - Number(a.pinned) || String(b.when).localeCompare(String(a.when)));
+  const kinds = ["doc", "note", "page", "file", "sheet", "deck"].filter((k) => everything.some((x) => x.kind === k));
+  const recent = () => {
+    const pick = kinds.includes(ui.filesKind) ? ui.filesKind : "all";
+    const rows = everything.filter((x) => pick === "all" || x.kind === pick);
+    const most = ui.filesAll ? rows.length : 50;
+    const again = () => fill(results, recent());
+    return [
+      h("div", { class: "fileskinds", role: "tablist", "aria-label": "Kind of file" }, [["all", "Everything"], ...kinds.map((k) => [k, k === "deck" ? "Slides" : `${KIND_WORDS[k]}s`])].map(([k, label]) => h("button", { class: `mpill ${pick === k ? "on" : ""}`, role: "tab", "aria-selected": String(pick === k), onclick: () => ((ui.filesKind = k), (ui.filesAll = false), again()) }, label, h("span", { class: "autocount" }, String(k === "all" ? everything.length : everything.filter((x) => x.kind === k).length))))),
+      rows.length
+        ? h(
+            "div",
+            { class: "card officetable" },
+            h(
+              "table",
+              {},
+              h("thead", {}, h("tr", {}, ["Name", "Kind", "Last change", "Who can read it", "Sensitivity"].map((t) => h("th", { scope: "col" }, t)))),
+              h("tbody", {}, rows.slice(0, most).map((f) => h("tr", {}, h("td", {}, h("button", { class: "plain link", onclick: f.open }, f.title), f.pinned ? h("span", { class: "tag" }, "pinned") : null), h("td", {}, `${KIND_WORDS[f.kind] ?? "Page"}${f.sub ? ` · ${f.sub}` : ""}`), h("td", {}, `${f.by ? `${f.by} · ` : ""}${officeDay(f.when)}`), h("td", {}, f.who), h("td", {}, LEVEL_NAMES[f.level] ?? "Internal")))),
+            ),
+          )
+        : h("p", { class: "note" }, "Nothing of this kind yet."),
+      rows.length > most ? h("button", { class: "plain link", onclick: () => ((ui.filesAll = true), again()) }, `Show all ${rows.length}`) : null,
+      aside ? h("p", { class: "note small" }, `${aside} sheet${aside === 1 ? " or presentation is" : "s and presentations are"} set aside and not listed. Switch on Sheets and Slides under Settings › Labs to see ${aside === 1 ? "it" : "them"}.`) : null,
+    ];
+  };
   let timer = null;
   q.addEventListener("input", () => {
     clearTimeout(timer);
     timer = setTimeout(async () => {
       const text = q.value.trim();
-      if (text.length < 2) return fill(results, h("div", { class: "label" }, "Recent"), data.files.length ? recent() : h("p", { class: "note" }, "Nothing yet. Start something above."));
-      const hits = (await api("GET", `workspace/search?q=${encodeURIComponent(text)}`).catch(() => [])).filter((x) => data.files.some((f) => f.id === x.page));
+      if (text.length < 2) return fill(results, everything.length ? recent() : h("p", { class: "note" }, "Nothing yet. Start something above."));
+      const hits = (await api("GET", `workspace/search?q=${encodeURIComponent(text)}`).catch(() => [])).filter((x) => office.some((f) => f.id === x.page) || (data.tree ?? []).some((p) => p.kind === "page" && p.id === x.page));
       const seen = new Set();
       fill(results, h("div", { class: "label" }, `Found for “${text}”`), hits.length ? hits.filter((x) => !seen.has(x.page) && seen.add(x.page)).map((x) => h("button", { class: "plain card officewait", onclick: () => openPage(x.page) }, h("b", {}, x.title), h("div", { class: "note small" }, x.text.slice(0, 200)))) : h("p", { class: "note" }, "Nothing matches that in your documents, sheets or notes."));
     }, 250);
   });
   fill(
     col,
-    h("div", {}, h("h1", {}, "Office"), h("p", { class: "lead" }, "Documents, sheets and notes that you and your agents work on together. Everything stays on this computer.")),
+    h("div", {}, h("h1", {}, "Files"), h("p", { class: "lead" }, "Everything you and your agents make and work from, in one place: documents, notes, pages and the files in your library. It all stays on this computer.")),
     q,
     h("section", { class: "isec" }, h("h2", {}, "Start something"), h("div", { class: "mgrid wide" }, Object.entries(KIND).filter(([kind]) => lab("office") || (kind !== "sheet" && kind !== "deck")).map(([kind, [name, about]]) => h("button", { class: "plain card officestart", onclick: () => start(kind) }, h("b", {}, `+ ${name}`), h("div", { class: "note small" }, about)))), org.members.length ? h("form", { class: "card form officeask", onsubmit: (e) => (e.preventDefault(), ask()) }, h("b", {}, "Or ask an agent to make it"), h("div", { class: "row wrap" }, what, who, h("button", {}, "Give the task"))) : null),
     waiting.length ? h("section", { class: "isec" }, h("h2", {}, `Waiting for you · ${waiting.length}`), waiting.map((f) => h("button", { class: "plain card officewait", onclick: () => openPage(f.id) }, h("b", {}, f.title), h("span", { class: "note small" }, ` · ${KIND[f.kind]?.[0] ?? ""} · ${f.suggestions} change${f.suggestions === 1 ? "" : "s"} from an agent to review`)))) : null,
-    h("section", { class: "isec" }, results),
+    h("section", { class: "isec" }, h("h2", {}, "All files"), results),
+    h("section", { class: "isec filesmore" }, h("h2", {}, "Work in one kind"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Each kind has its own page, with folders and its own tools."), h("div", { class: "row wrap" }, [["docs", "Documents"], ["notes", "Notes"], ["workspace", "Workspace pages"], ["library", "Library: add and organize files"], ...(lab("office") ? [["sheets", "Sheets"], ["slides", "Slides"]] : [])].map(([v, label]) => h("button", { onclick: () => go(v) }, label)))),
     h("section", { class: "isec" }, h("h2", {}, "Start from a template"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Ready-made files with the parts to fill in marked in [SQUARE BRACKETS]."), h("div", { class: "mgrid wide" }, templates.map(officeTemplateCard))),
   );
   q.dispatchEvent(new Event("input"));
