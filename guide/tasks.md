@@ -4,7 +4,14 @@ The Tasks page shows every piece of work in your organization, from the moment y
 
 ## What you'll see
 
-At the top are the **Board** and **Goals** switch and one button. On the Board it is **+ New task**. On Goals it is **+ Goal**.
+At the top are the **List**, **Board** and **Goals** switch and one button: **Give a task** (on Goals, **+ Goal**).
+
+**On the List**, where the page opens
+
+- **Needs you**: tasks that are finished and waiting for you to accept, that ask you a question, or that are stuck. Each has one button: **Read and accept**, **Answer** or **Have a look**.
+- **Being worked on**: what an agent is doing now (**Working now**) and what is next on each agent's list (**Waiting its turn**).
+- **Done this week**: the newest three, with who did each and what it cost; **Show the other…** lists the rest.
+- Click any task to open it beside the list. **Show as a board**, at the bottom, switches to the columns, where you can also search and filter.
 
 **On the Board**
 

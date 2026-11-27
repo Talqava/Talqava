@@ -4,10 +4,10 @@ A project is one folder for a body of work, such as onboarding a client, a launc
 
 ## What you'll see
 
-- **Tasks** in the menu, then the **Projects** tab.
-- **A card for each project**, grouped by **Active**, **Planning**, **Paused** and **Done** (Done folds away). A card shows the name, how it is doing (**On track**, **At risk** or **Off track**), its lead and goal, tasks done out of the total, how many chats it has, its due day, and how many things need you.
-- **Filters** above the cards: **Needs me**, **Any goal** and **Any lead**.
-- **+ New project** at the top right.
+- **Projects** on the strip at the left.
+- **A card for each project**: its name, the goal it serves, a bar and a line for tasks done out of the total with what they have cost so far and its due day, one line on where it stands (**Needs you**, **On track**, **At risk**, **Behind**, **Paused** or **Finished**), who is on it, and **Open**.
+- Projects that need you come first. **Show finished projects** at the bottom brings the finished ones into view.
+- **New project** at the top right, and a **Start a project** card after the last one.
 - **A project's page**, when you click a card: its name, lead, goal and due day, a status menu, **Edit** and **Remove**, and three parts: **Overview**, **Tasks** and **Chats**.
 
 ## Key ideas

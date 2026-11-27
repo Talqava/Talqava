@@ -313,3 +313,96 @@ td.autonum .autoby { display: block; }
 .modelservice { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border: 0; border-radius: 8px; background: none; color: var(--soft); font-size: 13.5px; text-align: left; min-height: 0; }
 .modelnote { padding: 4px 8px; margin: 0; }
 .modeladd { align-self: flex-start; padding: 2px 8px; }
+
+/* =====================================================================
+   Simpler screens: a rail with words, and pages that are one list.
+   What needs the owner is first and in amber; one green button a page.
+   ===================================================================== */
+:root { --rail-width: 84px; }
+.rail .railitem { width: 72px; height: auto; min-height: 0; padding: 8px 0 6px; flex-direction: column; gap: 4px; color: var(--soft); }
+.rail .railitem .raillabel { font: 500 11px/14px var(--sans); white-space: nowrap; }
+.rail .railitem.on { color: var(--text); }
+/* New is a plain button here: the green is kept for the one thing to do on the page. */
+.rail .railitem.railnew, .rail .railitem.railnew:hover, .rail .railitem.railnew.on { background: var(--panel); color: var(--text); border: 1px solid var(--line); filter: none; margin-bottom: 4px; }
+.rail .railitem.railnew .ico { color: var(--text); }
+.rail .railitem .count { top: 2px; right: 14px; }
+
+.simplepage { max-width: 860px; margin: 0 auto; gap: 24px; padding-bottom: 48px; }
+.simplepage.wide { max-width: 1000px; }
+.simplehead { align-items: flex-start; gap: 16px; }
+.simplehead h1 { margin: 0 0 4px; }
+.simplehead .lead { margin: 0; }
+.simplelabel { margin: 0; font: 600 12px/16px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.simplelabel.needs { color: var(--warn); }
+.simpleask { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.simpleask input[type="text"] { height: 48px; font-size: 15px; }
+.simpleasktools { align-items: center; gap: 12px; }
+.simplechips { gap: 8px; }
+.simplechip { height: 40px; padding: 0 16px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--soft); font: 500 13px/20px var(--sans); }
+.simplechip:hover { color: var(--text); }
+.simplechip.on { background: var(--raised); color: var(--text); }
+.simplelist { display: flex; flex-direction: column; gap: 20px; }
+.simplegroup { display: flex; flex-direction: column; gap: 8px; }
+.simplecard { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.simplerow { display: flex; align-items: center; gap: 10px; padding: 0 12px 0 0; border-bottom: 1px solid var(--line); }
+.simplerow:last-child { border-bottom: 0; }
+.simplerowmain { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; padding: 14px 4px 14px 16px; text-align: left; color: var(--text); border-radius: 12px; min-height: 0; }
+.simplerowmain:hover b { text-decoration: underline; text-underline-offset: 3px; }
+.simplewords { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.simplewords b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.simplewords .note { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.simplestate { font-size: 13px; line-height: 20px; color: var(--muted); white-space: nowrap; font-family: var(--mono); }
+.simplestate.wait { color: var(--warn); font-weight: 600; font-family: var(--sans); }
+.simplestate.ok { color: var(--accent-ink, var(--accent)); font-weight: 600; font-family: var(--sans); }
+.simplestate.bad { color: var(--bad-ink); font-weight: 600; font-family: var(--sans); }
+.simpletile { flex: 0 0 36px; height: 36px; border-radius: 9px; border: 1px solid var(--line2); background: var(--bg); display: grid; place-items: center; color: var(--soft); }
+.simplespace { width: auto; max-width: 220px; }
+.simplerow .sessmenu { position: relative; }
+.simplerow .sessmenu { position: relative; right: auto; top: auto; transform: none; }
+.simplerow .sessmenu > summary { opacity: 1; width: 32px; height: 32px; }
+.rail .railitem .raillabel { text-transform: none; letter-spacing: 0; }
+.rail .railitem { text-transform: none; letter-spacing: 0; }
+.simplepage h2.simplelabel, .simplepage .simplelabel { font: 600 12px/16px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; margin: 0; }
+.simplewords b { color: var(--text); }
+
+/* Tasks as a list. */
+.simpletasks { max-width: 860px; }
+.tasks:has(.simpletasks) { max-width: 860px; margin: 0 auto; }
+.simplerow.on { background: var(--surface-selected); }
+.simpletick { flex: 0 0 36px; text-align: center; color: var(--accent-ink, var(--accent)); font-weight: 700; }
+.simplerowmain.done .simplewords span { color: var(--soft); }
+.simpleempty { padding: 12px 16px; margin: 0; }
+.simplemore { display: block; padding: 12px 16px; }
+.simplecalm { margin: 0; }
+
+/* Projects as cards. */
+.projgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+.projcard { display: flex; flex-direction: column; gap: 14px; padding: 20px; margin: 0; }
+.projcardhead h2 { margin: 0 0 4px; font-size: 20px; line-height: 28px; font-weight: 600; }
+.projcardhead .note { margin: 0; }
+.projprogress { display: grid; gap: 6px; }
+.projbar { display: block; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.projbar i { display: block; height: 6px; background: var(--text); }
+.projfigures { font: 500 13px/20px var(--mono); color: var(--muted); }
+.projstands { margin: 0; }
+.projstands b { color: var(--text); }
+.projstands .simplestate { font-family: var(--sans); }
+.projcardend { align-items: center; gap: 12px; margin-top: auto; }
+.projstart { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 200px; padding: 20px; border: 1px dashed var(--line2); border-radius: 12px; color: var(--soft); text-align: center; }
+.projstart b { color: var(--text); }
+.projstart .note { max-width: 260px; margin: 0; }
+.projstart:hover { border-color: var(--accent); }
+
+/* Team as cards. */
+.persongrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.personcard { display: flex; flex-direction: column; gap: 12px; padding: 16px; margin: 0; }
+.personhead { display: flex; align-items: center; gap: 12px; text-align: left; padding: 0; min-height: 0; color: var(--text); }
+.personname { display: flex; flex-direction: column; min-width: 0; }
+.personname b { font-size: 16px; line-height: 24px; font-weight: 600; }
+.personhead:hover .personname b { text-decoration: underline; text-underline-offset: 3px; }
+.persondept { font: 600 12px/16px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; }
+.personnow { margin: 0; }
+.personnow b { color: var(--text); }
+.personnow .simplestate { font-family: var(--sans); }
+.personend { align-items: center; gap: 12px; margin-top: auto; }
+.personname b, .simplerowmain b { color: var(--text); }
