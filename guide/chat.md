@@ -6,13 +6,9 @@ Chat is where you talk with your assistant, or with one of your agents, in a con
 
 **On the right: Overview**, once there is something to show. Three short lists, so you can see where things stand without leaving the chat: **Waiting on you** (what needs your yes, in amber), **Working** (what your agents are doing now) and **Done today**. Click any line to open it in the Inbox. With nothing waiting, running or done, the panel is not shown; in a narrow window it is hidden too. The Inbox shows the same things.
 
-**On the left**, once you have a session or a project (before that, the page is just the question and the box):
+**The list of your sessions is on Home.** An open session is only the conversation; **‹ Home**, at its top left, takes you back to the list, where you pin, rename and archive sessions and choose a project.
 
-- **Project**: a menu to choose which project's chats you see, with **＋ New project**. "General" is the default.
-- Your sessions: chats and the tasks you gave your agents, in one list. **Pinned** ones are at the top, then **Today**, then **Earlier**. A green dot means it is working, an amber one that it waits for you, a red one that it stopped before finishing.
-- Point at a row and press **⋯** to **Pin**, **Rename**, **Archive** or (for a chat) **Delete** it. **Show archived** at the bottom lists the ones you put away; **Bring back** returns one to the list.
-
-**In the middle:** the conversation, and a message box with **Send** at the bottom. At the top are the chat's title, how much it has used, and buttons to **Pin**, **Delete** and move it to another project. Under the message box a button names the AI model in use (for a chat with the assistant; how hard it thinks is **Effort**, under Settings). Press it for a short list: the model in use, the ones you kept with the star, the ones you used lately and your backups. Type a few letters to find any other model, or open a service to see its models. It never shows every model at once, and there is a microphone if your copy of Talqava can write out speech. A chat with the assistant also has a menu to choose the AI model.
+**In the middle:** the conversation, and a message box with **Send** at the bottom. At the top are **‹ Home**, the chat's title, about what it has cost (point at it for the detail), and buttons to **Pin**, **Delete** and move it to another project. Under the message box a button names the AI model in use (for a chat with the assistant; how hard it thinks is **Effort**, under Settings). Press it for a short list: the model in use, the ones you kept with the star, the ones you used lately and your backups. Type a few letters to find any other model, or open a service to see its models. It never shows every model at once, and there is a microphone if your copy of Talqava can write out speech. A chat with the assistant also has a menu to choose the AI model.
 
 A new chat opens with a greeting and a few ideas to start from.
 

@@ -81,7 +81,7 @@ This page is **Work in progress**. It is set aside to keep Team simple: switch o
 1. Double-click an agent on the left, or click **Edit**.
 2. Under **Role**, set its **Name**, **Job title**, **Department**, **Kind of work** and **Instructions**.
 3. Under **Model**, keep the **Default model** or give it **A model of its own**.
-4. Under **Powers**, tick the tools it may use, such as **Web search and read pages** or **Files**.
+4. Under **What it may do**, tick what it is allowed to do, such as **Search the web and read pages** or **Read and write files**. Its name, department, AI model and per-task limits are under **Advanced**; its symbol and colour are under **Change how it looks**.
 5. Under **Limits**, choose **Approvals**, and set **Budget per run ($)**, **Steps per run** and **Monthly budget ($)**.
 6. Click **Save**.
 
