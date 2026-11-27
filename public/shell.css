@@ -406,3 +406,18 @@ td.autonum .autoby { display: block; }
 .personnow .simplestate { font-family: var(--sans); }
 .personend { align-items: center; gap: 12px; margin-top: auto; }
 .personname b, .simplerowmain b { color: var(--text); }
+
+/* Home: what is missing to get going. */
+.simpleset { display: grid; gap: 10px; padding: 16px; margin: 0; }
+.simplesetslot:empty { display: none; }
+/* Settings: what the owner uses. */
+.usescard { display: grid; gap: 10px; }
+.useslist { display: grid; gap: 4px; }
+.usesrow { display: grid; grid-template-columns: 180px 1fr 40px; align-items: center; gap: 10px; font-size: 13px; }
+.usesbar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.usesbar i { display: block; height: 6px; background: var(--soft); }
+.usescount { text-align: right; font-family: var(--mono); color: var(--muted); }
+
+/* What needs the owner, in one line, with the way to the Inbox. */
+.needsline { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line2)); border-radius: 12px; background: color-mix(in srgb, var(--warn) 6%, var(--panel)); color: var(--soft); font-size: 13.5px; }
+.needsline b { color: var(--warn); }

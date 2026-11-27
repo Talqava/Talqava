@@ -79,17 +79,16 @@ In a narrow window or on a phone the strip stays where it is, and pages with two
 
 The box at the top finds anything: files by name or by the words inside, tasks, chats, agents, and any page of the app.
 
-**New**: Where Talqava opens, and the quickest place to ask. Type what you need in your own words and press Enter: plain words go to your assistant, and the answer starts a session. Start with **@** and an agent's name to give that agent a task. Every place on the strip at the left has its name under its icon.
+The strip at the left has five places, each with its name under its icon: **Home**, **Tasks**, **Team**, **Files** and **Inbox**. The round button at the bottom is your account.
 
-**Sessions**: One list of everything you have asked for: your chats with the assistant and the tasks you gave your agents, newest first. The box at the top starts something new. Each line says who did it and how it stands in plain words (**Needs your yes**, **Working**, **Done** with what it cost), and one that needs you has a **Review** button. The buttons above the list show only what needs you, what is being worked on, or what is done. Press **⋯** on a line to pin it to the top, rename it or archive it; **Show archived sessions** at the bottom brings archived ones back into view. Opening a session shows the conversation. See [Chat](chat.md).
+**Home**: Where Talqava opens, and the one place to ask. Type what you need in the box and press **Send**: plain words go to your assistant; start with **@** and an agent's name to give that agent a task. Below the box is one list of everything you have asked for, newest first. Each line says who did it and how it stands in plain words (**Needs your yes**, **Working**, **Done** with what it cost). The buttons above the list show only what needs you, what is being worked on, or what is done. Press **⋯** on a line to pin it, rename it or archive it; **Show archived sessions** brings archived ones back. Opening a line shows the conversation. When something waits on you, a line at the top says how many and leads to the Inbox. See [Chat](chat.md).
 
-**Inbox** (near the bottom of the strip, with a number when something waits on you): Everything that needs you, in one place: plans to approve, questions, finished work to review, changes agents want to make, and reminders.
+**Inbox** (near the bottom of the strip, with a number when something waits on you): the one place you act on what needs you: plans to approve, questions, finished work to accept, changes agents want to make, and reminders. A **Review**, **Answer** or **Read and accept** button anywhere else in the app opens that item here.
 
-**Tasks**: The work you handed to your team, as one list in three groups: **Needs you** (each with the button that deals with it), **Being worked on** and **Done this week**. **Board** shows the same tasks in columns, with search; **Goals** shows what the work is for. See [Tasks](tasks.md).
-
-**Projects**: One card for each piece of work, with its goal, how far along it is, what it has cost and whether it needs you. See [Projects](projects.md).
-
-**Automations** (the clock): repeating work your agents do on their own, such as a morning news digest every weekday. See [Automations](schedules.md).
+**Tasks**: All the work, in three tabs.
+- **Tasks**: the work you handed to your team, as one list in three groups: **Needs you**, **Being worked on** and **Done this week**. **Board** shows the same tasks in columns, with search. See [Tasks](tasks.md).
+- **Repeating**: work your agents do by themselves on a schedule, such as a morning news digest every weekday. See [Automations](schedules.md).
+- **By project**: one card for each piece of work, with its goal, how far along it is, what it has cost and whether it needs you. See [Projects](projects.md).
 
 **Team**: Who does the work, and what they know. Its tabs:
 - **People**: one card for each agent: its job, what it is doing now, what it got done this week, and a **Give a task** button (or **Answer**, when it is waiting for you). **Add someone** opens the marketplace of ready-made agents and teams.

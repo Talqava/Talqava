@@ -4,7 +4,7 @@ The Tasks page shows every piece of work in your organization, from the moment y
 
 ## What you'll see
 
-At the top are the **List**, **Board** and **Goals** switch and one button: **Give a task** (on Goals, **+ Goal**).
+At the top are the **List** and **Board** switch and one button: **Give a task**. (**Goals** joins the switch when Goals is switched on under Settings › Labs, or once you have a goal; there the button is **+ Goal**.)
 
 **On the List**, where the page opens
 
