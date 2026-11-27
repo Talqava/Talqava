@@ -1017,14 +1017,69 @@ function summarize(name, input: any = {}) {
   return text === "{}" ? "" : text;
 }
 
-const NAMES = { bash: "Shell", str_replace_based_edit_tool: "Files", web_search: "Web search", web_fetch: "Read page", http_request: "API call", memory: "Memory", skill: "Skill", schedule: "Schedule", browser: "Browser", conversation_search: "Search chats", code_execution: "Code", assign_task: "Handed off" };
+const NAMES = { bash: "Command", str_replace_based_edit_tool: "Files", web_search: "Web search", web_fetch: "Read page", http_request: "Web service", memory: "Memory", skill: "Skill", schedule: "Schedule", browser: "Browser", conversation_search: "Search chats", code_execution: "Calculation", assign_task: "Handed off" };
+
+/**
+ * One step of the work, said so that anyone understands it: what was done, never the command or the address in full.
+ * The exact command stays one click away, inside the step, for whoever wants it.
+ */
+function plainStep(name, input: any = {}) {
+  const file = (path) => String(path ?? "").split("/").filter(Boolean).pop() || "a file";
+  const site = (url) => {
+    try {
+      return new URL(String(url)).hostname.replace(/^www\./, "");
+    } catch {
+      return "";
+    }
+  };
+  const quote = (text, n = 70) => ((t) => (t ? `“${t.length > n ? `${t.slice(0, n)}…` : t}”` : ""))(String(text ?? "").replace(/\s+/g, " ").trim());
+  if (name === "bash") return input.command ? "Ran a command on this computer" : "Restarted its command line";
+  if (name === "str_replace_based_edit_tool") return input.command === "view" ? `Read ${file(input.path)}` : input.command === "create" ? `Wrote ${file(input.path)}` : `Changed ${file(input.path)}`;
+  if (name === "web_search") return `Searched the web for ${quote(input.query) || "something"}`;
+  if (name === "web_fetch") return `Read a page on ${site(input.url) || "the web"}`;
+  if (name === "http_request") return /^(GET|HEAD)$/i.test(String(input.method ?? "GET")) ? `Read from ${site(input.url) || "a web service"}` : `Sent data to ${site(input.url) || "a web service"}`;
+  if (name === "browser") return site(input.url) ? `Opened ${site(input.url)} in the browser` : "Used the browser";
+  if (name === "conversation_search") return `Looked through past chats for ${quote(input.query) || "something"}`;
+  if (name === "assign_task") return `Gave a task to ${input.to || "someone on the team"}`;
+  if (name === "memory") return "Looked at what it remembers";
+  if (name === "skill") return input.action === "save" || input.action === "create" ? `Saved a skill ${quote(input.name, 40)}`.trim() : `Read a skill ${quote(input.name, 40)}`.trim();
+  if (name === "schedule") return "Looked at or changed an automation";
+  if (name === "code_execution") return "Worked something out";
+  if (name === "find_tools") return "Looked for the right tool";
+  // A connected service's step is named "<service>__<what it does>".
+  const [service, action] = String(name).split("__");
+  if (action) return `${service.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase())}: ${action.replace(/_/g, " ")}`;
+  return `Used ${NAMES[name] || String(name).replace(/_/g, " ")}`;
+}
 
 function toolCard(id, name, input, done) {
-  const stateEl = h("span", { class: `state ${done ? "ok" : ""}` }, done ? "done" : "running…");
-  const body = h("div", { class: "body" }, h("div", { class: "label" }, "Input"), h("pre", {}, typeof input === "string" ? input : JSON.stringify(input, null, 2)));
-  const card = h("details", { class: "tool" }, h("summary", {}, h("span", { class: "name" }, NAMES[name] || name), h("span", { class: "what" }, summarize(name, input)), stateEl), body);
+  const stateEl = h("span", { class: `state ${done ? "ok" : ""}` }, done ? "done" : "working…");
+  const body = h("div", { class: "body" }, h("div", { class: "label" }, "The exact step"), h("pre", {}, typeof input === "string" ? input : JSON.stringify(input, null, 2)));
+  const card = h("details", { class: "tool", "data-words": plainStep(name, input) }, h("summary", {}, h("span", { class: "what plain" }, plainStep(name, input)), stateEl), body);
   ui.cards.set(id, { card, body, stateEl });
   return card;
+}
+
+/**
+ * The steps of one piece of work are kept together under a single line ("7 steps · Read prices.pdf"), closed to
+ * begin with, so a conversation reads as what was said and what came of it. Opening it shows each step in plain
+ * words; opening a step shows exactly what was run.
+ */
+function addStep(node, words?) {
+  const last = ui.working?.isConnected ? ui.working.previousElementSibling : ui.log.lastElementChild;
+  let box: any = last?.classList?.contains("worklog") ? last : null;
+  if (!box) {
+    box = h("details", { class: "worklog" }, h("summary", {}, h("span", { class: "worksum" }), h("span", { class: "workshow" })));
+    box.steps = 0;
+    add(box);
+  }
+  box.append(node);
+  if (words) {
+    box.steps += 1;
+    box.last = words;
+  }
+  box.querySelector(".worksum").textContent = box.steps ? `${box.steps} step${box.steps === 1 ? "" : "s"} · ${box.last}` : "Thought it through";
+  return node;
 }
 
 /**
@@ -1117,22 +1172,28 @@ function fillResult(block) {
 
 function addAssistant(content) {
   const box = h("div", { class: "msg" });
+  const steps: any[] = [];
   for (const block of content) {
     if (block.type === "text" && block.text.trim()) {
       box.append(h("div", { class: "md" }, renderMarkdown(block.text)));
     } else if (block.type === "thinking" && block.thinking?.trim()) {
-      box.append(h("details", { class: "think" }, h("summary", {}, "Thinking"), h("div", { class: "body" }, block.thinking)));
+      steps.push([h("details", { class: "think" }, h("summary", {}, "Thought about it"), h("div", { class: "body" }, block.thinking)), ""]);
     } else if (block.type === "tool_use" && block.name === "memory") {
-      box.append(memoryNote(block.id, block.input));
+      const note = memoryNote(block.id, block.input);
+      // What it saves to memory is said in the conversation itself; only a look at memory is a step.
+      if (note.classList.contains("tool")) steps.push([note, plainStep(block.name, block.input)]);
+      else box.append(note);
     } else if (block.type === "tool_use" || block.type === "mcp_tool_use") {
-      box.append(toolCard(block.id, block.name, block.input, false));
+      steps.push([toolCard(block.id, block.name, block.input, false), plainStep(block.name, block.input)]);
     } else if (block.type === "server_tool_use") {
-      box.append(toolCard(block.id, block.name, block.input, true));
+      steps.push([toolCard(block.id, block.name, block.input, true), plainStep(block.name, block.input)]);
     } else if (/_tool_result$/.test(block.type) && block.tool_use_id) {
       fillResult(block);
     }
   }
   if (box.childNodes.length) add(box);
+  // The steps go under one line, after what was said.
+  for (const [node, words] of steps) addStep(node, words);
 }
 
 function streamDelta(delta) {
@@ -1144,7 +1205,7 @@ function streamDelta(delta) {
   if (delta.kind === "thinking") {
     s.thinking += delta.text;
     if (!s.think) s.box.prepend((s.think = h("div", { class: "note" })));
-    s.think.textContent = `Thinking: ${s.thinking.slice(-300)}`;
+    s.think.textContent = "Thinking it through…";
   } else if (delta.kind === "text") {
     s.text += delta.text;
     if (!s.md) s.box.append((s.md = h("div", { class: "md" })));
@@ -1156,7 +1217,7 @@ function streamDelta(delta) {
       });
     }
   } else if (delta.kind === "tool") {
-    s.box.append(h("div", { class: "note" }, `Preparing: ${NAMES[delta.text] || delta.text}…`));
+    s.box.append(h("div", { class: "note" }, "Getting the next step ready…"));
   }
 }
 
@@ -1658,7 +1719,7 @@ function renderBoard() {
   const flow = (q, depth = 0) => {
     const approval = q.approvals?.[0];
     const pct = q.budget?.steps ? Math.min(100, Math.round(((q.steps || 0) / q.budget.steps) * 100)) : null;
-    const doing = approval ? `Wants to use ${NAMES[approval.name] || approval.name}` : q.checking ? "Checking the result" : q.activity ? `${NAMES[q.activity.name] || q.activity.name}: ${summarize(q.activity.name, q.activity.input)}` : "Thinking";
+    const doing = approval ? `Wants to use ${NAMES[approval.name] || approval.name}` : q.checking ? "Checking the result" : q.activity ? plainStep(q.activity.name, q.activity.input) : "Thinking";
     const kindWord = q.kind === "question" ? "Question" : q.kind === "decision" ? "Decision" : /^Request: /.test(q.title) ? "Request" : null;
     return [
       h(
@@ -1823,7 +1884,7 @@ function questCard(q) {
     }, ui.board);
   };
   const approval = q.approvals[0];
-  const doing = q.activity ? `${NAMES[q.activity.name] || q.activity.name}: ${summarize(q.activity.name, q.activity.input)}` : "Thinking";
+  const doing = q.activity ? plainStep(q.activity.name, q.activity.input) : "Thinking";
   const showOutput = q.activity && q.status === "running" && (q.activity.name === "bash" ? `$ ${q.activity.input?.command ?? ""}\n${q.activity.output}` : q.activity.output);
   return h(
     "article",
@@ -1927,7 +1988,7 @@ function updateCard(q, { compact = false } = {}) {
   const failed = q.status === "failed" || q.status === "budget" || (q.check && !q.check.passed);
   const headline = waiting ? "needs your approval" : live ? "is working on" : q.status === "failed" ? "could not finish" : q.status === "budget" ? "stopped at its budget" : q.status === "stopped" ? "was stopped on" : "finished";
   const parts = q.chain?.tasks > 1 ? `${q.chain.finished} of ${q.chain.tasks - 1} parts finished${q.chain.working ? `, ${q.chain.working} under way` : ""} (${(q.chain.who ?? []).join(", ")})` : "";
-  const doing = live && !waiting ? (q.activity ? `${NAMES[q.activity.name] || q.activity.name}: ${summarize(q.activity.name, q.activity.input)}` : "Thinking") : "";
+  const doing = live && !waiting ? (q.activity ? plainStep(q.activity.name, q.activity.input) : "Thinking") : "";
   const words = q.status === "failed" && q.note ? q.note : q.said;
   const unread = !live && String(q.updatedAt) > seenUpdates();
   return h(
