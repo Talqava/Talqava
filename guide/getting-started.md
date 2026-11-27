@@ -99,6 +99,7 @@ The box at the top finds anything: files by name or by the words inside, tasks, 
 - **Marketplace**: ready-made agents, teams, page packs and Office templates, free.
 
 **Files**: What you make and what your agents work from, in one place.
+- Before you have made anything, the page shows only the ways to start: a document, a note, files from your computer, or a template.
 - **All files** lists everything together, newest change first: documents, notes, workspace pages and the files in your library. Buttons above the list show one kind at a time. The search box finds documents, notes and pages by the words inside them. Start a document or a note from the top, or ask an agent to make one.
 - **Work in one kind**, lower on the page, opens the full page for Documents, Notes, Workspace pages or the Library (where you add and organize files). See [Office](office.md), [Workspace](workspace.md) and [Library](library.md). **Sheets** and **Slides** are set aside; see Labs below.
 

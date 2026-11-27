@@ -34,6 +34,21 @@ const SUPPLIED = {
     source: "https://github.com/standard-webhooks/standard-webhooks",
   },
 };
+const ISC_TEXT = (holder) => `ISC License
+
+Copyright (c) ${holder}
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.`;
 const MIT_TEXT = (holder) => `MIT License
 
 Copyright (c) ${holder}
@@ -224,6 +239,18 @@ const ADAPTED = [
     license: "MIT",
     copyright: "Copyright (c) 2026 OpenClaw Foundation",
     text: MIT_TEXT("2026 OpenClaw Foundation"),
+  },
+  {
+    name: "Radix Colors (github.com/radix-ui/colors): steps of the sage and red scales, used as the greys and reds in public/shell.css",
+    license: "MIT",
+    copyright: "Copyright (c) 2021-2022 Modulz; Copyright (c) 2022-Present WorkOS",
+    text: MIT_TEXT("2021-2022 Modulz\nCopyright (c) 2022-Present WorkOS"),
+  },
+  {
+    name: "Lucide (github.com/lucide-icons/lucide): fifteen icons drawn in public/app.ts (the ICONS entries that start with \"<\")",
+    license: "ISC",
+    copyright: "Copyright (c) 2026 Lucide Icons and Contributors",
+    text: ISC_TEXT("2026 Lucide Icons and Contributors"),
   },
 ];
 const RUNTIME_DATA = [
