@@ -1195,6 +1195,21 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
     return send(res, 200, result);
   }
 
+  // Sessions: every chat and every task the owner started, in one list, newest first. A task handed on from
+  // another task belongs to that one, so only the first of a chain is listed.
+  if (route === "GET sessions") {
+    return send(
+      res,
+      200,
+      conversations.list().flatMap((c) => {
+        const quest = c.source === "quest" ? questStore.get(c.id) : undefined;
+        if (c.source === "quest" && (!quest || quest.kind || (quest.parent && questStore.get(quest.parent.id)))) return [];
+        const live = engine.isRunning(c.id);
+        const waits = engine.awaitingApproval(c.id) || quest?.status === "asking" || quest?.plan?.status === "proposed";
+        return [{ id: c.id, kind: quest ? "task" : "chat", title: quest?.title ?? c.title, updatedAt: quest && quest.updatedAt > c.updatedAt ? quest.updatedAt : c.updatedAt, pinned: c.pinned, archived: c.archived, space: c.space ?? null, scheduled: c.source === "schedule", bot: quest ? { id: quest.bot.id, name: quest.bot.name, type: quest.bot.type, title: quest.bot.title, character: quest.bot.character } : null, chatBot: c.bot ?? null, state: waits ? "waiting" : live || quest?.status === "running" ? "working" : quest ? (quest.status === "failed" || quest.status === "budget" ? "stopped" : "done") : "idle" }];
+      }),
+    );
+  }
   if (parts[0] === "conversations") {
     const [, id, action, actionId] = parts;
     if (!id) {
@@ -1222,13 +1237,26 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
         if (body.pinned) conversation.pinned = true;
         else delete conversation.pinned;
       }
+      // Putting a session away, or bringing it back. It is kept either way.
+      if ("archived" in body) {
+        if (body.archived) (conversation.archived = true), delete conversation.pinned;
+        else delete conversation.archived;
+      }
+      // A new name, for a chat or a task alike.
+      if ("title" in body) {
+        const title = String(body.title ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+        if (!title) throw new HttpError(400, "Give it a name.");
+        conversation.title = title;
+        const quest = questStore.get(id);
+        if (quest) questStore.save({ ...quest, title });
+      }
       if ("space" in body) {
         if (body.space && !spaces.get(String(body.space))) throw new HttpError(400, "No such project.");
         if (body.space) conversation.space = String(body.space);
         else delete conversation.space;
       }
       conversations.save(conversation, { touch: false });
-      return send(res, 200, { ok: true, space: conversation.space ?? null, pinned: Boolean(conversation.pinned) });
+      return send(res, 200, { ok: true, space: conversation.space ?? null, pinned: Boolean(conversation.pinned), archived: Boolean(conversation.archived), title: conversation.title });
     }
     if (!action && req.method === "DELETE") {
       engine.stop(id);

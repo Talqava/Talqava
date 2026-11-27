@@ -281,6 +281,10 @@ async function refreshList() {
   try {
     state.convs = await api("GET", "conversations");
   } catch {}
+  // Chats and tasks together, for the one list of sessions.
+  try {
+    state.sessions = await api("GET", "sessions");
+  } catch {}
 }
 
 let ticks = 0;
@@ -366,7 +370,7 @@ const viewShown = (view) => !LAB_VIEWS[view] || lab(LAB_VIEWS[view]);
 
 /** The tab a page belongs under: itself, or the page it was opened from (a task under Agents, a project under Projects). */
 const tabOf = (area, view) => AREAS[area].also?.[view] ?? view;
-const areaOf = (view) => Object.keys(AREAS).find((a) => AREAS[a].views.some(([v]) => v === view) || AREAS[a].also?.[view]) ?? null;
+const areaOf = (view) => (view === "quest" && ui.questFrom === "sessions" ? null : Object.keys(AREAS).find((a) => AREAS[a].views.some(([v]) => v === view) || AREAS[a].also?.[view]) ?? null);
 /** The part of an area last open, so the menu returns there. */
 const lastIn = (area) => {
   try {
@@ -445,7 +449,7 @@ function renderRail() {
       "div",
       { class: "railgroup" },
       item("start", "New", v === "start" || v === "setup", "new", "railnew"),
-      item("chat", "Chats", v === "chat", "chat"),
+      item("chat", "Sessions", v === "chat" || (v === "quest" && ui.questFrom === "sessions"), "chat"),
       item(lastIn("tasks") === "jobs" ? "tasks" : lastIn("tasks"), "Tasks and projects", area === "tasks" && v !== "jobs", "tasks"),
       item("jobs", "Automations", v === "jobs", "jobs"),
       item(lastIn("team"), "Team", area === "team", "team"),
@@ -523,6 +527,8 @@ function renderRecent() {
 
 function go(view, id = null) {
   ui.wsFlush?.();
+  // A task opened from the list of sessions stays part of Sessions; opened from anywhere else, it belongs to Team.
+  if (view !== "quest") ui.questFrom = null;
   if (!["workspace", "docs", "notes", "sheets", "slides"].includes(view)) (ui.wsEditor?.destroy(), (ui.wsEditor = null), (ui.wsFlush = null));
   state.view = view;
   state.convId = view === "chat" || view === "quest" ? id : null;
@@ -613,7 +619,7 @@ function renderSpent() {
 // ---------- the command box ----------
 const COMMANDS = [
   ["Home", () => go("start")],
-  ["New chat", () => go("chat")],
+  ["New session", () => go("chat")],
   ["Inbox", () => go("inbox")],
   ["Tasks", () => go("tasks")],
   ["Projects", () => go("projects")],
@@ -6327,7 +6333,7 @@ function botView() {
 }
 
 // ---------- chats ----------
-function conversationPane() {
+function conversationPane({ tools = false } = {}) {
   ui.log = h("div", { class: "col" });
   ui.scroll = h("div", { class: "scroll" }, ui.log);
   ui.input = h("textarea", { rows: 1, placeholder: `Message ${speaker()}…` });
@@ -6347,6 +6353,13 @@ function conversationPane() {
   });
   ui.send.addEventListener("click", () => (state.running ? attempt(() => api("POST", `conversations/${state.convId}/stop`)) : submit()));
   state.running = false;
+  // In a chat, the box carries the choices: which AI model answers and how hard it thinks, beside the microphone and send.
+  if (tools) {
+    const c = state.config;
+    const effort = h("select", { class: "effortpick", "aria-label": "Effort", title: "How long the model thinks before it answers. Higher is slower and costs more. For Claude models." }, c.efforts.map((e) => h("option", { value: e, selected: e === c.effort }, `${e[0].toUpperCase()}${e.slice(1)} effort`)));
+    effort.addEventListener("change", () => attempt(async () => (state.config = await api("PUT", "settings", { effort: effort.value }))));
+    return h("div", { class: "convo" }, ui.scroll, h("div", { class: "compose" }, h("div", { class: "col composebox" }, ui.input, h("div", { class: "composetools" }, h("span", { class: "askchip", title: "It asks you before it sends, changes or deletes anything, unless you told it otherwise." }, "Asks before it changes anything"), h("span", { class: "grow" }), chatBotOf() ? null : modelPicker(), chatBotOf() ? null : effort, state.canSpeak ? micButton(ui.input, "chatmic") : null, ui.send))));
+  }
   return h("div", { class: "convo" }, ui.scroll, h("div", { class: "compose" }, h("div", { class: "col" }, ui.input, state.canSpeak ? micButton(ui.input, "chatmic") : null, ui.send)));
 }
 
@@ -6385,7 +6398,7 @@ function chatView() {
   ui.body.className = "body two over";
   ui.chatSide = h("aside", { class: "side" });
   const withBot = chatBotOf();
-  ui.title = h("h1", {}, "New chat");
+  ui.title = h("h1", {}, "New session");
   ui.meta = h("span", { class: "meta" });
   ui.remove = h("button", { class: "plain danger", title: "Delete this chat", onclick: deleteChat, hidden: !state.convId }, "Delete");
   // An open chat shows the space it belongs to, wherever it was opened from.
@@ -6394,8 +6407,8 @@ function chatView() {
   ui.move = moveChatPicker();
   ui.pin = h("button", { class: "plain", hidden: true, onclick: () => pinChat({ id: state.convId }, !state.convs.find((c) => c.id === state.convId)?.pinned) }, "Pin");
   syncPin();
-  const pane = conversationPane();
-  fill(ui.body, ui.chatSide, h("main", { class: "center flush" }, h("div", { class: "chathead", style: withBot ? botStyle(withBot) : "" }, withBot ? keycap(withBot, 28, "", withBot.type) : null, ui.title, withBot ? h("span", { class: "small muted", title: "This chat is with one agent, in its role. It uses that agent's instructions, powers, model and limits." }, roleLine(withBot, roleOf(withBot.id)?.title)) : null, ui.meta, ui.move, withBot ? null : modelPicker(), ui.pin, ui.remove), pane));
+  const pane = conversationPane({ tools: true });
+  fill(ui.body, ui.chatSide, h("main", { class: "center flush" }, h("div", { class: "chathead", style: withBot ? botStyle(withBot) : "" }, withBot ? keycap(withBot, 28, "", withBot.type) : null, ui.title, withBot ? h("span", { class: "small muted", title: "This chat is with one agent, in its role. It uses that agent's instructions, powers, model and limits." }, roleLine(withBot, roleOf(withBot.id)?.title)) : null, ui.meta, ui.move, ui.pin, ui.remove), pane));
   ui.over = h("aside", { class: "overpane", "aria-label": "Overview" });
   ui.body.append(ui.over);
   renderOverview();
@@ -6411,7 +6424,7 @@ function chatView() {
         { class: "empty hero" },
         heroVideo(),
         h("h2", {}, `Hello. I'm ${state.config.agentName}.`),
-        h("p", {}, "Ask me anything. I can search the web, work with files and remember what matters to you. Pick any AI model at the top right."),
+        h("p", {}, "Ask me anything. I can search the web, work with files and remember what matters to you. Pick any AI model under the box below."),
         state.space
           ? h("p", { class: "note" }, `This chat is in ${spaceName(state.space)}. I use ${spaceName(state.space)}'s memory along with your general memory, and what I learn here stays in ${spaceName(state.space)}.`)
           : null,
@@ -6566,50 +6579,70 @@ function syncPin() {
 function renderChatList(force = false) {
   if (!ui.chatSide || state.view !== "chat") return;
   if (!force && ui.chatSide.contains(document.activeElement) && document.activeElement.matches("input, select")) return; // not while the person is choosing or typing
-  const here = state.convs.filter((c) => (c.space || "") === state.space);
-  const row = (c) =>
-    h(
-      "div",
-      { class: `chatrow ${c.id === state.convId ? "on" : ""} ${c.pinned ? "pinned" : ""}` },
+  if (!force && ui.chatSide.querySelector(".sessmenu[open]")) return; // nor while a session's menu is open
+  // One list of sessions: every chat and every task you started, newest first. Each can be pinned, renamed and archived.
+  const all = (state.sessions ?? state.convs.map((c) => ({ ...c, kind: "chat", state: c.needsApproval ? "waiting" : c.running ? "working" : "idle" }))).filter((x) => (x.space || "") === state.space || x.kind === "task");
+  const open = (x) => (x.kind === "task" ? ((ui.questFrom = "sessions"), go("quest", x.id)) : go("chat", x.id));
+  const change = (x, patch, done) =>
+    attempt(async () => {
+      await api("PATCH", `conversations/${x.id}`, patch);
+      await refreshList();
+      renderChatList(true);
+      if (x.id === state.convId) syncPin();
+      if (done) toast(done);
+    }, ui.chatSide);
+  const rename = async (x) => {
+    const box = h("input", { id: "session-name", value: x.title, maxlength: 80, "aria-label": "Name" });
+    const name = await libDialog("Rename this session", h("div", { class: "composeform" }, h("label", {}, "Name", box)), [["Save", () => box.value.trim(), true]]);
+    if (name && name !== x.title) change(x, { title: name }).then(() => x.id === state.convId && ui.title && (ui.title.textContent = name));
+  };
+  const STATE_WORDS2 = { waiting: "Waiting for you", working: "Working", stopped: "Stopped before it finished" };
+  const row = (x) => {
+    const menu = h("details", { class: "sessmenu" }, h("summary", { "aria-label": `More for ${x.title}`, title: "Pin, rename, archive" }, "⋯"));
+    const pick = (label, run, cls = "") => h("button", { class: `plain ${cls}`, onclick: () => (menu.removeAttribute("open"), run()) }, label);
+    menu.append(
       h(
-        "button",
-        { class: `navlink ${c.id === state.convId ? "on" : ""}`, title: c.title, onclick: () => go("chat", c.id) },
-        c.pinned ? h("span", { class: "pinmark", "aria-hidden": "true" }, "★") : null,
-        chatBotOf(c.id) ? keycap(chatBotOf(c.id), 18, "", chatBotOf(c.id).type) : null,
-        h("span", { class: "title" }, c.title),
-        c.needsApproval ? h("i", { class: "dot wait", title: "Waiting for your approval" }) : c.running ? h("i", { class: "dot", title: "Working" }) : null,
-      ),
-      h(
-        "span",
-        { class: "chatactions" },
-        h("button", { class: "plain", title: c.pinned ? "Unpin" : "Pin to the top", "aria-label": `${c.pinned ? "Unpin" : "Pin"} ${c.title}`, onclick: () => pinChat(c, !c.pinned) }, c.pinned ? "★" : "☆"),
-        h("button", { class: "plain", title: "Delete chat", "aria-label": `Delete ${c.title}`, onclick: () => deleteChatFromList(c) }, "✕"),
+        "div",
+        { class: "automenulist" },
+        x.archived ? null : pick(x.pinned ? "Unpin" : "Pin to the top", () => change(x, { pinned: !x.pinned })),
+        pick("Rename…", () => rename(x)),
+        pick(x.archived ? "Bring back" : "Archive", () => change(x, { archived: !x.archived }, x.archived ? "Brought back." : "Archived. Find it under Show archived.")),
+        x.kind === "chat" ? pick("Delete…", () => deleteChatFromList(x), "danger") : null,
       ),
     );
-  const pinned = here.filter((c) => c.pinned);
-  const rest = here.filter((c) => !c.pinned);
-  fill(ui.chatSide, 
+    const who = x.kind === "task" ? x.bot : chatBotOf(x.id);
+    return h(
+      "div",
+      { class: `chatrow sessrow ${x.id === state.convId ? "on" : ""} ${x.pinned ? "pinned" : ""}` },
+      h(
+        "button",
+        { class: `navlink ${x.id === state.convId ? "on" : ""}`, title: x.kind === "task" ? `${x.bot?.title || x.bot?.name || "An agent"}: ${x.title}` : x.title, onclick: () => open(x) },
+        who ? keycap(who, 18, "", who.type) : h("span", { class: "sesskind", "aria-hidden": "true" }, icon("chat")),
+        h("span", { class: "title" }, x.title),
+        STATE_WORDS2[x.state] ? h("i", { class: `dot ${x.state === "waiting" ? "wait" : x.state === "stopped" ? "bad" : ""}`, title: STATE_WORDS2[x.state] }) : null,
+      ),
+      menu,
+    );
+  };
+  const shown = all.filter((x) => !x.archived);
+  const archived = all.filter((x) => x.archived);
+  const today = new Date().toDateString();
+  const pinned = shown.filter((x) => x.pinned);
+  const now = shown.filter((x) => !x.pinned && new Date(x.updatedAt).toDateString() === today);
+  const earlier = shown.filter((x) => !x.pinned && new Date(x.updatedAt).toDateString() !== today).slice(0, 60);
+  const part = (label, list) => (list.length ? [h("div", { class: "listlabel" }, label), ...list.map(row)] : null);
+  fill(ui.chatSide,
     spacePicker(),
-    h("button", { class: "primary", onclick: () => go("chat") }, "New chat"),
+    h("button", { class: "primary", onclick: () => go("chat") }, "New session"),
     h(
       "div",
       { class: "chatlist" },
-      pinned.length ? [h("div", { class: "listlabel" }, "Pinned"), ...pinned.map(row), rest.length ? h("div", { class: "listlabel" }, "Chats") : null] : null,
-      rest.map(row),
-      here.length ? null : h("p", { class: "note small", style: "padding: 0 8px" }, state.space ? `No chats in ${spaceName(state.space)} yet.` : "No chats yet."),
-      ((tasks) =>
-        tasks.length
-          ? [
-              h("div", { class: "listlabel" }, "Team tasks"),
-              tasks.map((q) =>
-                h(
-                  "div",
-                  { class: "chatrow" },
-                  h("button", { class: "navlink", title: `${q.bot.name}: ${q.title}`, onclick: () => go("quest", q.id) }, keycap(q.bot, 18, "", q.bot.type), h("span", { class: "title" }, q.title), q.approvals?.length ? h("i", { class: "dot wait", title: "Waiting for your approval" }) : isLive(q) ? h("i", { class: "dot", title: "Working" }) : String(q.updatedAt) > seenUpdates() ? h("i", { class: "dot new", title: "New result" }) : null),
-                ),
-              ),
-            ]
-          : null)(ownTasks().slice(0, 8)),
+      part("Pinned", pinned),
+      part("Today", now),
+      part("Earlier", earlier),
+      shown.length ? null : h("p", { class: "note small", style: "padding: 0 8px" }, state.space ? `Nothing in ${spaceName(state.space)} yet.` : "No sessions yet. Ask for something to start one."),
+      archived.length ? h("button", { class: "plain link small sessarch", onclick: () => ((ui.showArchived = !ui.showArchived), renderChatList(true)) }, ui.showArchived ? "Hide archived" : `Show archived · ${archived.length}`) : null,
+      ui.showArchived ? part("Archived", archived) : null,
     ),
     navFooter("chat"),
   );
