@@ -105,6 +105,7 @@ The box at the top finds anything: files by name or by the words inside, tasks, 
 - **Connections**: connect AI models, other services, and keys.
 - **Security**: who can open Talqava and what each person may do, which AI services may receive sensitive information, rules every agent must follow, alerts, and backups. See [Security](security.md).
 - **Activity log**: a full record of every operation, by you and by each agent, sealed so that changes to it show.
+- **Usage**: what your AI models cost, day by day, and which model and which agent it went to. Choose the last 7, 30 or 90 days, or 12 months. It counts from the day this page arrived, and the figures are estimates from list prices: your bill from the AI service is what counts.
 - **Settings**: approvals, budgets, cost saving, privacy and how Talqava looks.
 
 **Help**: Opens these guides, at the page that explains the screen you are on.

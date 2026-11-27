@@ -67,6 +67,7 @@ import { finishOpenRouterSignIn, openrouterIntegration, openrouterModels, remove
 import { autoSetupGit, cloneRepository, disconnectRepository, gitIntegration, githubAccounts, githubRepos, installGit, listIntegrations, pollGithubSignIn, removeGitIntegration, startGithubSignIn, testGithub } from "./integrations.ts";
 import { ASSIGN_RULES, INDUSTRIES, REQUEST_RULES, STRUCTURES, seatsFor } from "./structures.ts";
 import { budgetBlock, groupSpend, monthlyBudgets, spentToday } from "./spend.ts";
+import { recordUsage, usageReport } from "./usage.ts";
 import { decide, listProposals } from "./proposals.ts";
 import { exportOrg, importOrg } from "./portable.ts";
 import { fileReport, parseDeck, workspace, writeDeck } from "./workspace.ts";
@@ -158,6 +159,8 @@ function auditEvent(id: string, event: RunEvent) {
   const who = { ...actorOf(id), task: id };
   if (event.type === "assistant") {
     if (event.step) noteModelCall(event.step.model, who.actorName, event.step.input);
+    // And counted for the Usage page: which model, who asked, and what it cost.
+    if (event.step) recordUsage(event.step, who.actorName);
     for (const block of event.content as { type: string; name?: string; input?: unknown }[]) {
       if (block.type !== "tool_use" && block.type !== "server_tool_use") continue;
       const input = (block.input ?? {}) as Record<string, unknown>;
@@ -2159,6 +2162,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
       return { ok: true };
     }));
   }
+  if (route === "GET usage") return send(res, 200, usageReport(url.searchParams.get("days") ?? 30));
   // The history of runs, newest first, with the name each automation has now.
   if (route === "GET jobs" && parts[1] === "runs") {
     const names = new Map((await jobs.list()).map((j) => [j.id, j.name]));
