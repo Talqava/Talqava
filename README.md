@@ -187,8 +187,6 @@ and open <http://localhost:8787>. Tailscale, or an HTTPS reverse proxy such as C
 | Address | `HOST`, `PORT` in `.env` | Default `127.0.0.1:8787` |
 | Data folder | `TALQAVA_DATA_DIR` in `.env` | Default `./data` |
 
-For pages that need clicking or typing, install the optional browser (`npm install playwright`, then `npx playwright install chromium`) and restart: agents gain a `browser` tool.
-
 ## For developers
 
 ### How the code is laid out

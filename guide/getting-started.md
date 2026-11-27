@@ -97,8 +97,8 @@ The strip at the left has five places, each with its name under its icon: **Home
 
 **Files**: What you make and what your agents work from, in one place.
 - Before you have made anything, the page shows only the ways to start: a document, a note, files from your computer, or a template.
-- **All files** lists everything together, newest change first: documents, notes, workspace pages and the files in your library. Buttons above the list show one kind at a time. The search box finds documents, notes and pages by the words inside them. Start a document or a note from the top, or ask an agent to make one.
-- **Work in one kind**, lower on the page, opens the full page for Documents, Notes, Workspace pages or the Library (where you add and organize files). See [Office](office.md), [Workspace](workspace.md) and [Library](library.md). **Sheets** and **Slides** are set aside; see Labs below.
+- **All files** lists everything together, newest change first. Files come in two kinds: **Written in Talqava** (documents, notes and pages alike) and **From your computer**. Buttons above the list show one kind at a time, and the search box finds what is written here by the words inside.
+- **Start something** has two ways in: **Write something**, and **Files from your computer**. At the foot of the page, **Folders, notebooks and the older pages for one kind of file** opens the separate pages for Documents, Notes, Workspace pages and the Library. See [Office](office.md), [Workspace](workspace.md) and [Library](library.md).
 
 **The box at the top** of every page finds anything: a file, a task, an agent, a page of the app.
 

@@ -436,3 +436,10 @@ details.briefall > summary { cursor: pointer; padding: 10px 0; list-style: none;
 details.briefall > summary::-webkit-details-marker { display: none; }
 details.briefall > summary::after { content: " ›"; }
 details.briefall[open] > summary::after { content: " ⌄"; }
+
+/* Files: the pages for one kind, folded at the foot. */
+details.filesfold > summary { cursor: pointer; color: var(--soft); list-style: none; font-size: 13.5px; }
+details.filesfold > summary::-webkit-details-marker { display: none; }
+details.filesfold > summary::after { content: " ›"; }
+details.filesfold[open] > summary::after { content: " ⌄"; }
+details.filesfold[open] > summary { margin-bottom: 8px; }
