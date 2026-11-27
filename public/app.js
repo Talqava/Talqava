@@ -346,7 +346,7 @@ const AREAS = {
   tasks: { name: "Tasks", views: [["tasks", "Tasks"], ["projects", "Projects"], ["jobs", "Automations"]], also: { project: "projects" } },
   team: { name: "Team", views: [["home", "Agents"], ["team", "Organization"], ["market", "Marketplace"]], also: { quest: "home", bot: "home", marketbot: "market" } },
   files: { name: "Files", views: [["office", "Office"], ["docs", "Documents"], ["sheets", "Sheets"], ["slides", "Slides"], ["notes", "Notes"], ["workspace", "Workspace"], ["library", "Library"], ["memory", "Memory"], ["skills", "Skills"]] },
-  more: { name: "Account", views: [["integrations", "Connections"], ["security", "Security"], ["audit", "Activity log"], ["settings", "Settings"]] },
+  more: { name: "Account", views: [["integrations", "Connections"], ["security", "Security"], ["audit", "Activity log"], ["usage", "Usage"], ["settings", "Settings"]] },
 };
 /**
  * Parts of Talqava that are set aside: built, but shown only when the owner switches them on under Settings › Labs.
@@ -393,6 +393,7 @@ function renderAreaTabs() {
 const ICONS = {
   new: "M10 4.5v11M4.5 10h11",
   search: "M9 14.5a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zM13 13l3.5 3.5",
+  usage: "M4 16V9.5M8 16V4.5M12 16v-5M16 16V7",
   chat: "M4 5.5A2.5 2.5 0 0 1 6.5 3h7A2.5 2.5 0 0 1 16 5.5v5a2.5 2.5 0 0 1-2.5 2.5H9l-3.5 3v-3A2.5 2.5 0 0 1 4 10.5z",
   inbox: "M3.5 11.5l2-7h9l2 7M3.5 11.5v3a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-3M3.5 11.5h4l1 2h3l1-2h4",
   team: "M10 3.5v3M10 6.5H5v3M10 6.5h5v3M3 9.5h4v3H3zM13 9.5h4v3h-4zM8 13.5h4v3H8zM10 6.5v7",
@@ -490,6 +491,7 @@ function accountMenu(anchor) {
     row("integrations", "Connections", () => go("integrations")),
     row("security", "Security", () => go("security")),
     row("audit", "Activity log", () => go("audit")),
+    row("usage", "Usage", () => go("usage")),
     row("settings", "Settings", () => go("settings")),
     h("div", { class: "acctsep" }),
     h("div", { class: "acctlabel" }, "Look"),
@@ -554,7 +556,7 @@ function renderBody() {
   state.source = null;
   ui.log = null;
   ui.body.className = "body";
-  const views = { setup: setupView, home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView, security: securityView, start: startView, office: officeView, slides: slidesView, docs: docsView, notes: notesView, sheets: sheetsView };
+  const views = { usage: usageView, setup: setupView, home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView, security: securityView, start: startView, office: officeView, slides: slidesView, docs: docsView, notes: notesView, sheets: sheetsView };
   (views[state.view] || homeView)();
 }
 
@@ -616,6 +618,7 @@ const COMMANDS = [
   ["Tasks", () => go("tasks")],
   ["Projects", () => go("projects")],
   ["Automations", () => go("jobs")],
+  ["Usage", () => go("usage")],
   ["Agents", () => go("home")],
   ["Create an agent", () => go("bot", "new")],
   ["Organization", () => go("team")],
@@ -7112,6 +7115,48 @@ async function briefingOn(b) {
     toast(err.message);
     return false;
   }
+}
+
+/** Usage: what the AI models cost, day by day, and which model and who it went to. */
+async function usageView() {
+  const span = [7, 30, 90, 365].includes(ui.usageDays) ? ui.usageDays : 30;
+  const pick = h("select", { id: "usage-days", "aria-label": "Period", onchange: (e) => ((ui.usageDays = Number(e.target.value)), usageView()) }, [[7, "Last 7 days"], [30, "Last 30 days"], [90, "Last 90 days"], [365, "Last 12 months"]].map(([v, label]) => h("option", { value: v, selected: v === span }, label)));
+  const body = h("div", { class: "usagebody" });
+  const col = page("Usage", "What your AI models were asked to do and what it cost, day by day, and which model and who it went to.", h("div", { class: "row" }, h("span", { class: "grow" }), pick), body);
+  const u = await attempt(() => api("GET", `usage?days=${span}`), col);
+  if (!u || state.view !== "usage") return;
+  if (!u.since) return fill(body, h("div", { class: "card" }, h("b", {}, "Nothing to show yet."), h("p", { class: "note" }, "Each time a model answers, from now on, it is counted here: which model, who asked, and what it cost.")));
+  const tokens = (n) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+  const top = Math.max(...u.byDay.map((d) => d.cost), 0.0001);
+  const dayWords = (key) => new Date(`${key}T12:00:00`).toLocaleDateString([], { day: "numeric", month: "short" });
+  const fact = (value, label) => h("div", { class: "usagefact" }, h("b", {}, value), h("span", {}, label));
+  const table = (title, firstHead, rows) =>
+    h(
+      "section",
+      { class: "usagepart" },
+      h("h3", {}, title),
+      rows.length
+        ? h("div", { class: "tablewrap" }, h("table", { class: "autotable" }, h("thead", {}, h("tr", {}, [firstHead, "Answers", "Sent", "Written", "Cost"].map((x) => h("th", {}, x)))), h("tbody", {}, rows.map((r) => h("tr", {}, h("td", {}, h("b", {}, r.name)), h("td", { class: "autonum" }, String(r.calls)), h("td", { class: "autonum" }, `${tokens(r.input + r.cached)} tokens`), h("td", { class: "autonum" }, `${tokens(r.output)} tokens`), h("td", { class: "autonum" }, money(r.cost)))))))
+        : h("p", { class: "note" }, "Nothing in this period."),
+    );
+  fill(
+    body,
+    h("div", { class: "usagefacts" }, fact(money(u.total.cost), "spent in this period"), fact(String(u.total.calls), u.total.calls === 1 ? "answer from a model" : "answers from models"), fact(tokens(u.total.input + u.total.cached), "tokens sent"), fact(tokens(u.total.output), "tokens written")),
+    h(
+      "section",
+      { class: "usagepart" },
+      h("h3", {}, "Day by day"),
+      h(
+        "div",
+        { class: "usagechart", role: "img", "aria-label": `Cost for each of the last ${u.byDay.length} days. The most in one day was ${money(top)}.` },
+        u.byDay.map((d) => h("div", { class: "usagebar", title: `${dayWords(d.day)}: ${money(d.cost)}, ${d.calls} answer${d.calls === 1 ? "" : "s"}` }, h("i", { style: `height: ${d.cost ? Math.max(3, Math.round((d.cost / top) * 100)) : 0}%` }))),
+      ),
+      h("div", { class: "usageaxis" }, h("span", {}, dayWords(u.byDay[0].day)), h("span", {}, `Most in a day: ${money(top < 0.001 ? 0 : top)}`), h("span", {}, dayWords(u.byDay.at(-1).day))),
+    ),
+    table("By AI model", "Model", u.models),
+    table("By who asked", "Who", u.who),
+    h("p", { class: "note small" }, `Counted since ${dayWords(u.since)}. Costs are estimates from each service's list prices; your bill from the service is what counts.${u.unpriced ? " A model with no known price shows its tokens and $0.00." : ""} Nothing that was said is kept here.`),
+  );
 }
 
 /** Automations: every automation and briefing in one table, with a history of runs and the ready-made ones a press away. */

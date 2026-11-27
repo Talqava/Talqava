@@ -167,7 +167,7 @@ export function mayDo(role: Role, method: string, area: string, sub = ""): boole
   if (role === "owner" || role === "admin") return true;
   const reading = method === "GET";
   if (area === "people") return reading && (role === "auditor" || (role === "manager" && sub !== "sessions"));
-  if (area === "audit" || area === "sent") return reading && role !== "member";
+  if (area === "audit" || area === "sent" || area === "usage") return reading && role !== "member";
   if (role === "auditor") return reading;
   if (reading) return true;
   if (ADMIN_AREAS.has(area)) return false;
