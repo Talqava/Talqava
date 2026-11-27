@@ -4,7 +4,7 @@ A project is one folder for a body of work, such as onboarding a client, a launc
 
 ## What you'll see
 
-- **Projects** on the strip at the left.
+- **Tasks** on the strip at the left, then the **By project** tab.
 - **A card for each project**: its name, the goal it serves, a bar and a line for tasks done out of the total with what they have cost so far and its due day, one line on where it stands (**Needs you**, **On track**, **At risk**, **Behind**, **Paused** or **Finished**), who is on it, and **Open**.
 - Projects that need you come first. **Show finished projects** at the bottom brings the finished ones into view.
 - **New project** at the top right, and a **Start a project** card after the last one.

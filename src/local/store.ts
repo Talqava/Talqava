@@ -188,7 +188,7 @@ export function getConfig(): Config {
 }
 
 /** The parts of Talqava that can be set aside: spreadsheets and slides, the organization designer, features for a company with several people, company templates and playbooks, and Git repositories. */
-export const LABS = ["office", "org", "company", "templates", "git"];
+export const LABS = ["office", "org", "company", "templates", "git", "goals", "desk", "chart"];
 
 export function saveConfig(patch: Partial<Config>): Config {
   const cfg = { ...getConfig(), ...patch };

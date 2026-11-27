@@ -9,7 +9,7 @@ const state: any = {
   convs: [],
   quests: [],
   crew: null,
-  view: "chat", // The app opens on a new session; "home" is the older name of the Agents page
+  view: "sessions", // The app opens on Home: the box to ask for something, and everything asked for
   convId: null,
   botId: null,
   quest: null,
@@ -350,8 +350,8 @@ function render() {
 /** Areas of the app that have several parts: the menu shows the area once, and its parts are tabs across the top. */
 const AREAS = {
   // Automations has its own place on the rail, so it is not a tab of Tasks.
-  tasks: { name: "Tasks", views: [["tasks", "Tasks"]] },
-  projects: { name: "Projects", views: [["projects", "Projects"]], also: { project: "projects" } },
+  // Tasks is all the work: what was handed out, what repeats by itself, and the same work grouped by project.
+  tasks: { name: "Tasks", views: [["tasks", "Tasks"], ["jobs", "Repeating"], ["projects", "By project"]], also: { project: "projects" } },
   // Team is who does the work and what they know. What they know is one tab, Knowledge, with two parts: what is
   // remembered (Memory) and how things are done (Skills).
   team: { name: "Team", views: [["people", "People"], ["home", "Work in progress"], ["memory", "What they know"], ["team", "Who reports to whom"]], also: { market: "people", quest: "home", bot: "people", marketbot: "market", skills: "memory" } },
@@ -368,6 +368,9 @@ const LABS = [
   ["company", "Company features", "People with their own sign-in and roles, single sign-on, and rules for sensitive information, under Security."],
   ["templates", "Company templates and playbooks", "Whole-company starting points and ready-made processes, in the Marketplace."],
   ["git", "Git repositories", "Let agents work on code in repositories on this computer, under Connections."],
+  ["goals", "Goals", "Measurable goals for the organization and each group, and which projects serve them, under Tasks."],
+  ["desk", "Work in progress page", "The older control-room page under Team: every running task, the week's figures by department, and ready-made tasks."],
+  ["chart", "Organization chart views", "The extra views of who reports to whom: the chart, the list, access and the organization's memory."],
 ];
 const lab = (id) => (state.config?.labs ?? []).includes(id);
 /** Pages that belong to a set-aside part. */
@@ -469,11 +472,8 @@ function renderRail() {
     h(
       "div",
       { class: "railgroup" },
-      item("chat", "New", (v === "chat" && !state.convId) || v === "setup", "new", "railnew", () => go("chat")),
-      item("sessions", "Sessions", v === "sessions" || (v === "chat" && Boolean(state.convId)) || (v === "quest" && ui.questFrom === "sessions"), "chat"),
-      item("tasks", "Tasks", v === "tasks", "tasks"),
-      item("projects", "Projects", area === "projects", "projects"),
-      item("jobs", "Automations", v === "jobs", "jobs"),
+      item("sessions", "Home", v === "sessions" || v === "chat" || v === "setup" || (v === "quest" && ui.questFrom === "sessions"), "start"),
+      item(lastIn("tasks"), "Tasks", area === "tasks", "tasks"),
       item("people", "Team", area === "team", "team"),
       item(lastIn("files"), "Files", area === "files", "office"),
     ),
@@ -551,7 +551,15 @@ function renderRecent() {
 function go(view, id = null) {
   ui.wsFlush?.();
   // There is one place to ask: a new session. What used to be a separate home page leads there.
-  if (view === "start") (view = "chat"), (id = null);
+  if (view === "start") (view = "sessions"), (id = null);
+  // A count, kept on this computer only and sent nowhere, of which pages get opened: what the owner can look at
+  // under Settings to see what they use.
+  try {
+    const uses = JSON.parse(localStorage.getItem("talqava.uses") ?? "{}");
+    uses.since ??= new Date().toISOString();
+    uses.pages = { ...(uses.pages ?? {}), [view]: (uses.pages?.[view] ?? 0) + 1 };
+    localStorage.setItem("talqava.uses", JSON.stringify(uses));
+  } catch {}
   // A task opened from the list of sessions stays part of Sessions; opened from anywhere else, it belongs to Team.
   if (view !== "quest") ui.questFrom = null;
   if (!["workspace", "docs", "notes", "sheets", "slides"].includes(view)) (ui.wsEditor?.destroy(), (ui.wsEditor = null), (ui.wsFlush = null));
@@ -1591,7 +1599,7 @@ async function peopleView() {
         { class: "card personcard" },
         h("button", { class: "plain personhead", onclick: () => go("bot", bot.id), title: "Open this agent's page: its instructions, abilities and limits" }, keycap(bot, 44, waiting ? "waiting" : q ? "working" : "", bot.type), h("span", { class: "personname" }, h("b", {}, role?.title || bot.title || bot.name), h("span", { class: "persondept", style: `color:${colour}` }, departmentOf(bot.id)))),
         h("p", { class: "note small personnow" }, now),
-        h("div", { class: "row personend" }, h("span", { class: "projfigures grow" }, `${done.length} done this week${spent >= 0.005 ? ` · ${money(spent)}` : ""}`), waiting ? h("button", { class: "small", onclick: () => go("quest", q.id) }, "Answer") : h("button", { class: "small", onclick: () => newTaskDialog({ owner: bot.id }) }, "Give a task")),
+        h("div", { class: "row personend" }, h("span", { class: "projfigures grow" }, `${done.length} done this week${spent >= 0.005 ? ` · ${money(spent)}` : ""}`), waiting ? h("button", { class: "small", onclick: () => openNeed({ quest: q.id }) }, "Answer") : h("button", { class: "small", onclick: () => newTaskDialog({ owner: bot.id }) }, "Give a task")),
       );
     };
     const all = quests.filter((x) => Date.parse(x.updatedAt ?? x.createdAt) > week);
@@ -6566,6 +6574,30 @@ function renderOverview() {
   );
 }
 
+/**
+ * One place to act on what needs the owner: the Inbox. Everywhere else says that something is waiting and leads
+ * there, so an approval, an answer or a review is always given in the same place, in the same way.
+ */
+function waitingOnOwner(): any[] {
+  try {
+    return mailMessages().filter((m) => (m.label === "needs" || m.label === "failed") && !markOf(m).archived && !markOf(m).deletedAt);
+  } catch {
+    return [];
+  }
+}
+/** Opens one waiting thing in the Inbox: the one for this task or this chat, or the Inbox itself when it is not found. */
+async function openNeed({ quest = null, chat = null }: { quest?: string | null; chat?: string | null } = {}) {
+  if (!state.mail) await loadMail().catch(() => {});
+  const found = waitingOnOwner().find((m) => (quest && m.q?.id === quest) || (chat && m.need?.c?.id === chat));
+  if (found) ui.mailOpen = found.id;
+  go("inbox");
+}
+/** The line that says how much is waiting, with the way to it. Nothing when nothing waits. */
+function needsLine() {
+  const n = waitingOnOwner().length;
+  return n ? h("div", { class: "needsline", role: "status" }, h("span", { class: "grow" }, h("b", {}, `${n} thing${n === 1 ? "" : "s"} need${n === 1 ? "s" : ""} you.`), " Approvals, questions and finished work to accept are all in your Inbox."), h("button", { class: "small", onclick: () => go("inbox") }, "Open the Inbox")) : null;
+}
+
 /** How a session stands, as words in its colour. */
 const SESSION_WORDS = { waiting: ["Needs your yes", "wait"], working: ["Working", "ok"], stopped: ["Did not finish", "bad"], done: ["Done", ""], idle: ["Done", ""] };
 
@@ -6587,8 +6619,17 @@ async function sessionsView() {
     ui.pendingAsk = text;
     go("chat");
   };
-  const box = h("form", { class: "card simpleask", onsubmit: (e) => (e.preventDefault(), send()) }, h("label", { class: "simplelabel", for: "sessions-ask" }, "Start something new"), ask, h("div", { class: "row wrap simpleasktools" }, h("span", { class: "note small grow" }, "It asks you before it sends, changes or deletes anything."), state.config && !needsKey(state.config) ? modelPicker() : null, h("button", { class: "primary" }, "Send")));
+  const box = h("form", { class: "card simpleask", onsubmit: (e) => (e.preventDefault(), send()) }, ask, h("div", { class: "row wrap simpleasktools" }, h("span", { class: "note small grow" }, "It asks you before it sends, changes or deletes anything."), state.config && !needsKey(state.config) ? modelPicker() : null, h("button", { class: "primary" }, "Send")));
   const list = h("div", { class: "simplelist" });
+  // Before the app can do anything: an AI model to think with, and a team to do the work.
+  const setupCard = () => {
+    const steps = [
+      ["Connect an AI model", "Your agents think with it. Pick a service and paste its key, or use a free model on this computer.", !needsKey(state.config), "Connect", () => ((ui.integration = "ai-models"), go("integrations"))],
+      ["Set up your team", "Say what kind of business you run; Talqava suggests who you need.", !state.orgs || activeOrg().members?.length > 0, "Set up", () => ((ui.setup = { step: "mission" }), go("setup"))],
+    ].filter((x) => !x[2]);
+    return steps.length ? h("div", { class: "card form askset simpleset" }, h("b", {}, steps.length === 2 ? "Two things first" : "One thing first"), steps.map(([title, about, , label, run], i) => h("div", { class: "istep" }, h("span", { class: "istepmark", "aria-hidden": "true" }, String(i + 1)), h("div", { class: "grow" }, h("b", {}, title), h("div", { class: "note small" }, about)), h("button", { class: i === 0 ? "primary" : "", onclick: run }, label)))) : null;
+  };
+  const setupSlot = h("div", { class: "simplesetslot" });
   const change = (x, patch, done?) =>
     attempt(async () => {
       await api("PATCH", `conversations/${x.id}`, patch);
@@ -6626,7 +6667,7 @@ async function sessionsView() {
         h("span", { class: "simplewords" }, h("b", {}, x.pinned ? `★ ${x.title}` : x.title), h("span", { class: "note small" }, [who ? who.title || who.name : "Your assistant", x.scheduled ? "an automation" : "", when(x.updatedAt)].filter(Boolean).join(" · "))),
         h("span", { class: `simplestate ${tone}` }, x.cost >= 0.005 && !tone ? `${words} · ${money(x.cost)}` : words),
       ),
-      x.state === "waiting" ? h("button", { class: "small", onclick: () => open(x) }, "Review") : null,
+      x.state === "waiting" ? h("button", { class: "small", onclick: () => openNeed(x.kind === "task" ? { quest: x.id } : { chat: x.id }) }, "Review") : null,
       menu,
     );
   };
@@ -6645,6 +6686,7 @@ async function sessionsView() {
     const chip = (id, label) => h("button", { class: `simplechip ${f === id ? "on" : ""}`, "aria-pressed": String(f === id), onclick: () => ((ui.sessFilter = id), draw()) }, `${label} · ${live.filter(is[id]).length}`);
     fill(
       list,
+      needsLine(),
       live.length ? h("div", { class: "row wrap simplechips", role: "group", "aria-label": "Show" }, chip("all", "All"), chip("needs", "Needs you"), chip("working", "Working"), chip("done", "Done")) : null,
       group("Today", now),
       group("Earlier", earlier),
@@ -6655,9 +6697,12 @@ async function sessionsView() {
   };
   const spaces = state.spaces?.length ? h("select", { class: "simplespace", "aria-label": "Project", title: "Show one project's sessions" }, h("option", { value: "", selected: !state.space }, "General"), state.spaces.map((sp) => h("option", { value: sp.id, selected: sp.id === state.space }, sp.name))) : null;
   spaces?.addEventListener("change", () => (setSpace(spaces.value), draw()));
-  fill(col, h("div", { class: "row wrap simplehead" }, h("div", { class: "grow" }, h("h1", {}, "Sessions"), h("p", { class: "lead" }, "Everything you have asked for, newest first. Open one to carry on.")), spaces), box, list);
+  const first = state.me?.person ? state.me.person.name.split(" ")[0] : "";
+  fill(col, h("div", { class: "row wrap simplehead" }, h("div", { class: "grow" }, h("h1", {}, first ? `What do you need done, ${first}?` : "What do you need done?"), h("p", { class: "lead" }, "Ask in your own words. Everything you have asked for is below, newest first.")), spaces), setupSlot, box, list);
+  fill(setupSlot, setupCard());
   draw();
-  await Promise.all([refreshList(), state.crew ? null : loadCrew().catch(() => {})]);
+  await Promise.all([refreshList(), state.crew ? null : loadCrew().catch(() => {}), state.orgs ? null : loadOrgs().catch(() => {}), state.mail ? null : loadMail().catch(() => {})]);
+  if (state.view === "sessions") fill(setupSlot, setupCard());
   again();
 }
 
@@ -8202,6 +8247,8 @@ function settingsView() {
   );
   // Last on the page: the parts of Talqava that are set aside.
   col.append(
+    h("h3", {}, "What you use"),
+    usesCard(),
     h("h3", {}, "Labs"),
     h("p", { class: "note" }, "Parts of Talqava that are set aside to keep it simple. Switch one on to show it. Nothing is deleted when one is off: whatever you made with it is kept, and agents can still use it."),
     h(
@@ -11233,6 +11280,26 @@ const columnOf = (t) => (t.status === "waiting" || t.status === "blocked" ? "nee
 const ordinal = (n) => (n === 1 ? "Next" : `${n}${n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"} in queue`);
 
 /** The Tasks page's heading, with the Board / Goals switch. */
+/** Settings › What you use: how often each page was opened on this computer. Counted here, sent nowhere. */
+function usesCard() {
+  let uses: any = {};
+  try {
+    uses = JSON.parse(localStorage.getItem("talqava.uses") ?? "{}");
+  } catch {}
+  const NAMES_OF = { sessions: "Home", chat: "A session", tasks: "Tasks", jobs: "Repeating work", projects: "Projects", project: "A project", people: "Team", home: "Work in progress", team: "Who reports to whom", memory: "Memory", skills: "Skills", market: "Marketplace", office: "Files", docs: "Documents", notes: "Notes", workspace: "Workspace pages", library: "Library", sheets: "Sheets", slides: "Slides", inbox: "Inbox", integrations: "Connections", security: "Security", audit: "Activity log", usage: "Usage", settings: "Settings", quest: "A task's page", bot: "An agent's page", setup: "Team set-up" };
+  const rows = Object.entries(uses.pages ?? {}).filter(([v]) => NAMES_OF[v]).sort((a: any, b: any) => b[1] - a[1]);
+  const most = Math.max(1, ...rows.map(([, n]: any) => n));
+  const never = Object.keys(NAMES_OF).filter((v) => !(uses.pages ?? {})[v] && !["chat", "quest", "bot", "project", "setup"].includes(v)).map((v) => NAMES_OF[v]);
+  return h(
+    "div",
+    { class: "card usescard" },
+    h("p", { class: "note small" }, `How often each page has been opened on this computer${uses.since ? ` since ${new Date(uses.since).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : ""}. It is counted here and sent nowhere; it is for deciding what can be put away.`),
+    rows.length ? h("div", { class: "useslist" }, rows.map(([v, n]: any) => h("div", { class: "usesrow" }, h("span", { class: "usesname" }, NAMES_OF[v]), h("span", { class: "usesbar", "aria-hidden": "true" }, h("i", { style: `width:${(n / most) * 100}%` })), h("span", { class: "usescount" }, String(n))))) : h("p", { class: "note small" }, "Nothing counted yet."),
+    never.length ? h("p", { class: "note small" }, `Not opened yet: ${never.join(", ")}.`) : null,
+    h("div", {}, h("button", { class: "plain link small", onclick: () => (localStorage.removeItem("talqava.uses"), settingsView()) }, "Start counting again")),
+  );
+}
+
 /** Draws the Tasks page the way it is being looked at: the list (to begin with), the board, or the goals. */
 function drawTasks() {
   const mode = ui.tasksMode ?? "list";
@@ -11246,7 +11313,7 @@ function tasksHead() {
     "div",
     { class: "tasks-head" },
     h("div", { class: "grow" }, h("h1", {}, "Tasks"), h("p", { class: "lead" }, mode === "goals" ? "What the work is for: measurable goals for your organization and each group, and the projects that move them forward. Agents are told the goal their task serves." : mode === "list" ? "Work you handed to your team. What needs you is always at the top." : "Every task in your organization. Each agent works through its own queue, one task at a time, most important first. Finished work comes back to you to accept or send back.")),
-    h("div", { class: "segmented tasks-mode", role: "tablist", "aria-label": "View" }, tab("list", "List"), tab("board", "Board"), tab("goals", "Goals")),
+    h("div", { class: "segmented tasks-mode", role: "tablist", "aria-label": "View" }, tab("list", "List"), tab("board", "Board"), lab("goals") || (ui.goals ?? []).length ? tab("goals", "Goals") : null),
     mode === "goals" ? h("button", { class: "primary", onclick: () => goalDialog() }, "+ Goal") : h("button", { class: "primary", onclick: () => newTaskDialog() }, "Give a task"),
   );
 }
@@ -11311,7 +11378,7 @@ function drawTaskList() {
   const done = tasks.filter((t) => t.status === "done" && Date.parse(t.updatedAt) > week).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const needRow = (t) => {
     const [words, button] = t.status === "review" ? [`${t.ownerName} finished it. Accept it, or send it back with a comment.`, "Read and accept"] : t.status === "blocked" ? [`${t.ownerName} is stuck${t.detail ? `: ${t.detail}` : "."}`, "Have a look"] : [`${t.ownerName} asks${t.detail ? `: ${t.detail}` : " for your answer."}`, "Answer"];
-    return h("div", { class: `simplerow needs ${ui.taskOpen === t.id ? "on" : ""}` }, h("button", { class: "plain simplerowmain", onclick: () => open(t), title: t.title }, tile(t, t.status === "blocked" ? "stuck" : "waiting"), h("span", { class: "simplewords" }, h("b", {}, t.title), h("span", { class: "note small" }, words))), h("button", { class: "small", onclick: () => open(t) }, button));
+    return h("div", { class: `simplerow needs ${ui.taskOpen === t.id ? "on" : ""}` }, h("button", { class: "plain simplerowmain", onclick: () => open(t), title: t.title }, tile(t, t.status === "blocked" ? "stuck" : "waiting"), h("span", { class: "simplewords" }, h("b", {}, t.title), h("span", { class: "note small" }, words))), h("button", { class: "small", onclick: () => (t.quest ? openNeed({ quest: t.quest }) : open(t)) }, button));
   };
   const goingRow = (t) => {
     const [words, tone] = t.status === "working" ? ["Working now", "ok"] : t.status === "paused" ? ["Paused", ""] : ["Waiting its turn", ""];
@@ -11773,7 +11840,7 @@ async function projectsView() {
     h("div", { class: "projgrid" }, open.map(card), start),
     finished.length ? h("button", { class: "plain link small", onclick: () => ((ui.projectsDone = !ui.projectsDone), projectsView()) }, ui.projectsDone ? "Hide finished projects" : `Show finished projects · ${finished.length}`) : null,
     ui.projectsDone && finished.length ? h("div", { class: "projgrid" }, finished.map(card)) : null,
-    data.goals.length ? h("p", { class: "note small" }, "Goals, and which projects serve them, are under ", h("button", { class: "plain link", onclick: () => ((ui.tasksMode = "goals"), go("tasks")) }, "Tasks › Goals"), ".") : null,
+    data.goals.length || lab("goals") ? h("p", { class: "note small" }, "Goals, and which projects serve them, are under ", h("button", { class: "plain link", onclick: () => ((ui.tasksMode = "goals"), go("tasks")) }, "Tasks › Goals"), ".") : null,
   );
 }
 
