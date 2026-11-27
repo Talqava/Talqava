@@ -102,7 +102,7 @@ The box at the top finds anything: files by name or by the words inside, tasks, 
 - **All files** lists everything together, newest change first: documents, notes, workspace pages and the files in your library. Buttons above the list show one kind at a time. The search box finds documents, notes and pages by the words inside them. Start a document or a note from the top, or ask an agent to make one.
 - **Work in one kind**, lower on the page, opens the full page for Documents, Notes, Workspace pages or the Library (where you add and organize files). See [Office](office.md), [Workspace](workspace.md) and [Library](library.md). **Sheets** and **Slides** are set aside; see Labs below.
 
-**Search**: Puts you in the box at the top, which finds anything.
+**The box at the top** of every page finds anything: a file, a task, an agent, a page of the app.
 
 **The account button**, the round one at the very bottom. It opens a menu with:
 - **Connections**: connect AI models, other services, and keys.
@@ -141,6 +141,6 @@ Every word Talqava uses, in one place: [Words Talqava uses](glossary.md).
 
 ## Where to get help
 
-- Press **Guide** at the top right of any page for that page's guide, or open **Help** from the account button at the bottom left.
+- Open **Help with this page** from the account button at the bottom left for the guide to the page you are on. **Show the welcome again** is in the same menu.
 - Each page's guide has an **If something goes wrong** section with the common messages and fixes.
 - Visit talqava.com, or report a problem on the project's GitHub page (github.com/Talqava/Talqava/issues).
