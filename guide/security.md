@@ -5,7 +5,7 @@ Security is where you decide who can open Talqava, how they prove who they are, 
 ## What you'll see
 
 - The account button at the bottom left, then **Security**.
-- **Tabs across the top**: **Overview**, **People and sign-in**, **Information**, **Agents**, **Watching** and **Backups**. The sections named in this guide are under these tabs: sign-in rules and single sign-on under **People and sign-in**; **Sensitive information** under **Information**; **Agent guardrails** under **Agents**; **Alerts and reviews** under **Watching**; **Backups and stored data** under **Backups**.
+- **One page**, when you are the only person using Talqava: where you stand, what agents cannot get around, the note about signing in, the agents' rules, and backups. Once you add people, or switch on **Company features** under Settings › Labs, the page has tabs: **Overview**, **People and sign-in**, **Information**, **Agents**, **Watching** and **Backups**, and the sections named in this guide are under them.
 - **Where you stand**, under **Overview**: how many protections are on, anything that needs you now, each protection in plain words with what to do next, and **Download a security report**. The report states your settings for your records or an auditor; it is not a certificate.
 - **Before you turn it on:** a note that one person uses Talqava without signing in, and a form to make your own account.
 - **After you turn it on:**

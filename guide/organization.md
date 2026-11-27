@@ -6,7 +6,7 @@ The Organization page is your org chart. It is where you decide which AI agents 
 
 - **The heading.** Your organization's name and its mission underneath. If you have more than one organization, a drop-down next to the name lets you switch. The **Settings** button sits on the right.
 - **The summary strip.** How many positions and groups you have, and the most your agents can spend in a month (their monthly budgets added up). If none are set, it says **No monthly limits set**.
-- **Five views:** **Groups**, **Chart**, **List**, **Access** and **Memory**.
+- **One view to begin with: Groups.** Four more (**Chart**, **List**, **Access** and **Memory**) appear when you switch on **Organization chart views** under Settings › Labs.
   - **Groups** shows a **You, the owner** bar at the top, then one box per group. Each box shows the group's lead first, with the rest of the group nested under whoever they report to.
   - **Chart** shows the whole tree, starting from you.
   - **List** puts each position on one row. You can change its group, who it reports to, and its dotted line right there in the row.

@@ -6,7 +6,7 @@ Connections connect Talqava to the tools your business already uses, so your age
 
 - **Connections** at the top, with a **search box**: type a service's name, or what you want to do, such as "email" or "invoice".
 - Beside the search box, a menu to show one kind of service, from **Email and calendar** to **Advanced**.
-- **All**, **Connected** and **Planned, not built yet** buttons, each with a count, to show only those.
+- **All** and **Connected** buttons, each with a count. A service that is planned but not built yet is not listed; it shows up, marked **Coming**, if you search for it.
 - A card for each service with its name, a one-line status, a short summary of what agents could do with it, and a badge: **Connected**, **Not set up**, **Unavailable** or **Coming**.
 - **Set up →**, **See what it can do →** or **Manage →** on each card. A service marked **Coming** is planned and cannot be connected yet; it is listed so you know where it stands.
 - **← All integrations** on a service's own page takes you back.

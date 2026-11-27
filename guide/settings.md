@@ -7,7 +7,8 @@ Settings is where you choose how careful, how thrifty and how independent your a
 The page is one long column, in this order:
 
 - **Look**: light or dark appearance, and an accent colour.
-- **Agent**: your agent's name, which model your team uses (with **Check this model**), effort, cost saving, the two steps before a task starts, approvals and budgets. Press **Save** after changing anything here.
+- **Agent**: three everyday choices are in view: which AI model your team uses (with **Check this model**), whether agents ask before they act (**Approvals**), and the **Monthly budget** for all agents together. **Advanced** opens the rest: your agent's name, effort, cost saving, the two steps before a task starts, the daily check-in, what happens when a task gets stuck, privacy, and the per-run and per-task budgets. **Save** saves them all.
+- **What you use**: how often each page has been opened on this computer. It is counted here and sent nowhere.
 - Under most settings, **What this does** opens the full explanation.
 - **About and legal**, with where your files and data are kept on this computer.
 

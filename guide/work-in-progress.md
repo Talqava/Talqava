@@ -1,6 +1,6 @@
 # Agents
 
-This page is **Work in progress**, the second tab under **Team**. (The first tab, **People**, shows one card for each agent with what it is doing and a **Give a task** button.) Work in progress is your control room. You hand out work, clear what is waiting on you, and watch what each agent is doing right now. From here you can also open any single task to follow it step by step, or open an agent to change how it works.
+This page is **Work in progress**. It is set aside to keep Team simple: switch on **Work in progress page** under Settings › Labs and it becomes the second tab under **Team**. (The first tab, **People**, shows one card for each agent with what it is doing and a **Give a task** button.) Work in progress is your control room. You hand out work, clear what is waiting on you, and watch what each agent is doing right now. From here you can also open any single task to follow it step by step, or open an agent to change how it works.
 
 ## What you'll see
 
