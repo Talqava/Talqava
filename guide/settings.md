@@ -8,7 +8,7 @@ The page is one long column, in this order:
 
 - **Look**: light or dark appearance, and an accent colour.
 - **Agent**: your agent's name, which model your team uses (with **Check this model**), effort, cost saving, the two steps before a task starts, approvals and budgets. Press **Save** after changing anything here.
-- **Connections**: a link to **Connections**, where AI models, repositories, connectors and API keys now live.
+- Under most settings, **What this does** opens the full explanation.
 - **About and legal**, with where your files and data are kept on this computer.
 
 If no AI service is connected yet, a banner at the top links to **Connections → AI models**.
