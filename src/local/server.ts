@@ -68,6 +68,7 @@ import { autoSetupGit, cloneRepository, disconnectRepository, gitIntegration, gi
 import { ASSIGN_RULES, INDUSTRIES, REQUEST_RULES, STRUCTURES, seatsFor } from "./structures.ts";
 import { budgetBlock, groupSpend, monthlyBudgets, spentToday } from "./spend.ts";
 import { recordUsage, usageReport } from "./usage.ts";
+import { connectTelegram, disconnectTelegram, renewTelegramCode, startTelegram, telegramStatus, type Answer } from "./telegram-chat.ts";
 import { decide, listProposals } from "./proposals.ts";
 import { exportOrg, importOrg } from "./portable.ts";
 import { fileReport, parseDeck, workspace, writeDeck } from "./workspace.ts";
@@ -832,6 +833,46 @@ function chartSize(seats: ReturnType<typeof seatsFor>) {
   const categories = new Map(loadMarketplace().bots.map((m) => [m.bot.id, m.listing.category]));
   const depth = (bot: string): number => ((m) => (m ? 1 + depth(m) : 1))(seats.find((x) => x.bot === bot)?.manager ?? null);
   return { agents: seats.length, departments: new Set(seats.map((x) => x.department ?? categories.get(x.bot) ?? "Other")).size, levels: seats.length ? Math.max(...seats.map((x) => depth(x.bot))) : 0 };
+}
+
+/** The words the assistant last said in a conversation, after the owner's latest message. */
+function lastReply(id: string): string {
+  const messages = conversations.get(id)?.messages ?? [];
+  let said = "";
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role === "user" && typeof m.content === "string") break;
+    if (m.role === "user" && Array.isArray(m.content) && m.content.some((b) => (b as { type?: string }).type === "text")) break;
+    if (m.role !== "assistant" || !Array.isArray(m.content)) continue;
+    const text = (m.content as { type: string; text?: string }[]).filter((b) => b.type === "text" && b.text?.trim()).map((b) => b.text!.trim()).join("\n\n");
+    if (text) said = said ? `${text}\n\n${said}` : text;
+  }
+  return said;
+}
+
+/**
+ * The owner's words from Telegram, given to the assistant as a message in a chat of its own. The same rules apply
+ * as in the app: a step that needs the owner's yes waits in the Inbox, and what the assistant says after that yes
+ * is handed back later.
+ */
+async function askFromTelegram(conversation: string | null, text: string): Promise<Answer> {
+  const chat = (conversation ? conversations.get(conversation) : null) ?? conversations.create({ title: "Telegram" });
+  if (engine.isRunning(chat.id)) return { conversation: chat.id, reply: "", busy: true };
+  if (getConfig().model.startsWith("anthropic/") && !publicConfig().hasApiKey) throw new Error("no AI model is connected in Talqava yet. Open Talqava, then Connections › AI models.");
+  const { done } = await engine.startRun(chat.id, text, { keepTitle: true });
+  const finished = done.then(() => "done" as const);
+  let watch: NodeJS.Timeout | undefined;
+  const needsYes = new Promise<"yes">((resolve) => (watch = setInterval(() => engine.awaitingApproval(chat.id) && resolve("yes"), 1000)));
+  const first = await Promise.race([finished, needsYes, new Promise<"long">((resolve) => setTimeout(() => resolve("long"), 600_000).unref())]);
+  clearInterval(watch);
+  if (first === "done") return { conversation: chat.id, reply: lastReply(chat.id) };
+  const before = lastReply(chat.id);
+  // What it says once the owner has answered in the app, or once a long piece of work ends.
+  const later = finished.then(() => {
+    const after = lastReply(chat.id);
+    return after && after !== before ? (after.startsWith(before) ? after.slice(before.length).trim() : after) : "";
+  });
+  return first === "yes" ? { conversation: chat.id, reply: before, waiting: true, later } : { conversation: chat.id, reply: before || "This is taking a while. I will write again when it is done.", waiting: false, later };
 }
 
 /** The sound sent with a request, as it is: plain WAV, at most twenty minutes. */
@@ -1949,6 +1990,11 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
         }));
       }
     }
+    // Talking to the assistant from Telegram: a bot's token, a code to pair the owner's chat, and switching it off.
+    if (route === "GET integrations" && parts[1] === "telegram") return send(res, 200, telegramStatus());
+    if (route === "POST integrations" && parts[1] === "telegram" && parts[2] === "connect") return send(res, 200, await attempt(() => connectTelegram(body.token)));
+    if (route === "POST integrations" && parts[1] === "telegram" && parts[2] === "code") return send(res, 200, await attempt(async () => renewTelegramCode()));
+    if (route === "POST integrations" && parts[1] === "telegram" && parts[2] === "remove") return send(res, 200, await attempt(async () => disconnectTelegram()));
     if (route === "GET integrations" && parts[1] === "openrouter") return send(res, 200, await openrouterIntegration());
     if (route === "POST integrations" && parts[1] === "openrouter") {
       // Sign-in starts from the address the app is open on, so OpenRouter can send the person back to it.
@@ -2267,6 +2313,7 @@ export function start() {
     } catch {}
   });
   jobs.start(runJob);
+  startTelegram(askFromTelegram);
   // The public list of model prices, so receipts are priced from the start (kept for a day; offline is fine).
   void loadModelList().catch(() => {});
   // Each connected service is checked now and every few hours, so a dead key is found before a task fails.

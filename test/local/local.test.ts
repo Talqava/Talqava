@@ -679,7 +679,8 @@ test("examples differ in size, copying never shrinks a chart, and Git reports it
   // and a planned service is shown as coming, never twice.
   const dir = await listIntegrations();
   assert.ok(dir.integrations.every((i) => dir.categories.includes(i.category)), "every entry has a category that is shown");
-  for (const gone of ["Stripe", "Langfuse", "Shopify", "WooCommerce", "Freshdesk", "Brevo", "Telegram"]) assert.equal(dir.integrations.some((i) => i.name === gone), false, `${gone} is no longer offered`);
+  assert.equal(dir.integrations.find((i) => i.id === "telegram")?.state, "needs-setup", "Telegram is back as a way to talk to the assistant, not as a service for agents");
+  for (const gone of ["Stripe", "Langfuse", "Shopify", "WooCommerce", "Freshdesk", "Brevo"]) assert.equal(dir.integrations.some((i) => i.name === gone), false, `${gone} is no longer offered`);
   assert.equal(dir.integrations.find((i) => i.name === "Gmail")?.state, "needs-setup", "Gmail is built in, signing in through the browser");
   assert.equal(dir.integrations.find((i) => i.name === "Salesforce")?.state, "coming");
   assert.equal(new Set(dir.integrations.map((i) => i.name.toLowerCase())).size, dir.integrations.length, "no service is listed twice");

@@ -147,7 +147,17 @@ export async function listIntegrations(): Promise<{ categories: string[]; integr
     state: wpSites.length ? "connected" : "needs-setup",
     status: wpSites.length ? `${wpSites.length} site${wpSites.length === 1 ? "" : "s"} connected` : "Connect your site",
   };
-  const own = [aiModels, wordpress, line(openrouter), line(git), line(mcp), apiKeys].map((i) => ({ ...i, category: FILED_UNDER[i.id] ?? "Advanced" }));
+  const { telegramStatus } = await import("./telegram-chat.ts");
+  const tg = telegramStatus();
+  const telegram: IntegrationInfo = {
+    id: "telegram",
+    name: "Telegram",
+    category: "Team chat",
+    summary: "Talk to your assistant from your phone, in a private Telegram chat. It answers only you, and anything that would send, change or delete still waits for your yes in the Inbox.",
+    state: tg.state === "on" ? "connected" : "needs-setup",
+    status: tg.state === "on" ? `Answering ${tg.who ?? "you"} as @${tg.bot}` : tg.state === "pairing" ? "Waiting for you to type the code in Telegram" : "Connects with a bot you make in Telegram",
+  };
+  const own = [aiModels, wordpress, line(openrouter), line(git), line(mcp), apiKeys, telegram].map((i) => ({ ...i, category: FILED_UNDER[i.id] ?? "Advanced" }));
   const services: IntegrationInfo[] = [];
   // And the services built on Talqava's own connector kit.
   const { listServices } = await import("./connector-kit.ts");
