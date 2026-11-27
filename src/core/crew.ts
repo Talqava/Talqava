@@ -22,7 +22,7 @@ export type Texture = (typeof TEXTURES)[number];
 const TYPE_TEXTURES: Record<string, Texture> = { scout: "dots", scribe: "lines", maker: "hatch", keeper: "solid", counter: "grid", spark: "zigzag" };
 export const defaultTexture = (type: string): Texture => TYPE_TEXTURES[type] ?? "plain";
 
-/** Neon colours a bot's key glows in. The window draws each one (see public/app.js). */
+/** Neon colours a bot's key glows in. The window draws each one (see public/app.ts). */
 export const COLORS = ["green", "cyan", "magenta", "lime", "amber", "violet", "pink", "yellow", "mint"] as const;
 export type Color = (typeof COLORS)[number];
 const TYPE_COLORS: Record<string, Color> = { scout: "cyan", scribe: "violet", maker: "lime", keeper: "mint", counter: "yellow", spark: "magenta" };
@@ -43,9 +43,9 @@ export function defaultColor(type: string, name: string): Color {
 export const SHAPES = ["key", "round", "tall", "wide", "soft"] as const;
 export const EYES = ["dots", "wide", "sleepy", "visor", "specs"] as const;
 export const TOPS = ["none", "antenna", "ears", "horns", "tuft", "halo"] as const;
-/** The white symbol on an agent's tile; "auto" picks it from the role. Names match SYMBOLS in public/app.js. */
+/** The white symbol on an agent's tile; "auto" picks it from the role. Names match SYMBOLS in public/app.ts. */
 export const SYMBOLS = ["auto", "flag", "chart", "ledger", "receipt", "code", "shield", "pen", "megaphone", "envelope", "target", "chat", "people", "scales", "search", "check", "layers", "calendar", "flow", "initials"] as const;
-/** The colour of an agent's cursor block; "auto" takes its department's. Names match TINTS in public/app.js. */
+/** The colour of an agent's cursor block; "auto" takes its department's. Names match TINTS in public/app.ts. */
 export const TINTS = ["auto", "executive", "finance", "sales", "marketing", "operations", "technology", "people", "legal", "customers", "research", "product", "neutral"] as const;
 export type Symbol = (typeof SYMBOLS)[number];
 export type Tint = (typeof TINTS)[number];

@@ -1,4 +1,5 @@
 // Web server of the local edition: serves the chat page and the small JSON API behind it.
+import { stripTypeScriptTypes } from "node:module";
 import http from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import fs from "node:fs";
@@ -431,9 +432,29 @@ async function readBody(req: IncomingMessage): Promise<any> {
   }
 }
 
+/**
+ * The page's own code is written in TypeScript (public/app.ts) and has no build step: when the browser asks for
+ * app.js, the types are taken out here, the way Node does for the server's own files. The result is kept until
+ * the file changes. A TypeScript file is never handed over as it is.
+ */
+const pageCode = new Map<string, { stamp: number; code: Buffer }>();
+function codeFor(source: string): Buffer {
+  const stamp = fs.statSync(source).mtimeMs;
+  const had = pageCode.get(source);
+  if (had?.stamp === stamp) return had.code;
+  const code = Buffer.from(stripTypeScriptTypes(fs.readFileSync(source, "utf8")));
+  pageCode.set(source, { stamp, code });
+  return code;
+}
+
 function serveStatic(res: ServerResponse, urlPath: string) {
   const file = path.join(PUBLIC, urlPath === "/" ? "index.html" : urlPath);
-  if (!file.startsWith(PUBLIC + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+  if (!file.startsWith(PUBLIC + path.sep) || file.endsWith(".ts")) throw new HttpError(404, "Not found.");
+  const written = file.endsWith(".js") && !fs.existsSync(file) ? `${file.slice(0, -3)}.ts` : "";
+  if (written && fs.existsSync(written)) {
+    return send(res, 200, codeFor(written), { "content-type": TYPES[".js"], "content-security-policy": "default-src 'self'; img-src 'self' data:; media-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'" });
+  }
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
     throw new HttpError(404, "Not found.");
   }
   send(res, 200, fs.readFileSync(file), {

@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "noEmit": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "erasableSyntaxOnly": true,
+    "skipLibCheck": true,
+    "types": [],
+    "paths": {
+      "/markdown.js": ["./public/markdown.ts"],
+      "/sheet-engine.js": ["./public/sheet-engine.d.ts"]
+    }
+  },
+  "include": ["public/*.ts"]
+}

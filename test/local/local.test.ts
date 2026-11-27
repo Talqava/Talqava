@@ -2133,7 +2133,7 @@ test("an organization's older task table gets the goal and project links", async
 test("the user guides: one for every page, and every link between them leads somewhere", () => {
   const dir = path.join(import.meta.dirname, "..", "..", "guide");
   const files = fs.readdirSync(dir).filter((f) => f.endsWith(".md"));
-  const views = fs.readFileSync(path.join(import.meta.dirname, "..", "..", "public", "app.js"), "utf8").match(/const GUIDES_BY_VIEW = (\{[^}]+\})/)![1];
+  const views = fs.readFileSync(path.join(import.meta.dirname, "..", "..", "public", "app.ts"), "utf8").match(/const GUIDES_BY_VIEW = (\{[^}]+\})/)![1];
   for (const id of new Set(Object.values(JSON.parse(views.replace(/(\w[\w-]*):/g, '"$1":')) as Record<string, string>))) assert.ok(files.includes(`${id}.md`), `${id}.md is written`);
   const server = fs.readFileSync(path.join(import.meta.dirname, "..", "..", "src", "local", "server.ts"), "utf8");
   for (const f of files) {
@@ -2198,6 +2198,16 @@ test("a schedule with an agent becomes a task in its queue; without one, or if t
     assert.equal(runs[0].conversationId, chat.conversationId);
     await call("DELETE", `jobs/${job.id}`);
     assert.equal((await call("GET", "jobs/runs")).data.find((r: { job: string }) => r.job === job.id).gone, true);
+    // The page's code is written in TypeScript and handed to the browser as JavaScript, with no build step.
+    const site = base.replace(/\/api$/, "");
+    const page = await fetch(`${site}/app.js`);
+    const code = await page.text();
+    assert.deepEqual([page.status, page.headers.get("content-type")], [200, "text/javascript; charset=utf-8"]);
+    assert.ok(code.includes("function renderRail()") && !code.includes("const state: any") && !/\bas HTMLElement\b/.test(code), "the types are taken out");
+    assert.equal((await fetch(`${site}/markdown.js`)).status, 200);
+    assert.equal((await fetch(`${site}/app.ts`)).status, 404, "the TypeScript file itself is not handed over");
+    assert.equal((await fetch(`${site}/globals.d.ts`)).status, 404);
+    assert.equal((await fetch(`${site}/nothing.js`)).status, 404);
     // Sessions: chats and the tasks the owner started stand in one list; each can be renamed, pinned and archived.
     const sessions = (await call("GET", "sessions")).data as { id: string; kind: string; title: string; pinned: boolean; archived: boolean; state: string }[];
     assert.ok(sessions.some((x) => x.kind === "task" && x.title === "Weekly pipeline"), "the task the automation started is a session");
