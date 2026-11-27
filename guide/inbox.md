@@ -30,7 +30,7 @@ The Inbox is your short list of decisions. Anything that needs your yes waits he
 - **Suggested change**: an agent wants to edit a page in your Workspace.
 - **Proposal**: a lead suggests adding a new position to your organization.
 - A note when a chat is waiting for your approval.
-- A **briefing** you switched on, such as the morning news or the Monday plan. It arrives under **Updates**, marked **Briefing**, with **Pause** and **Edit** at its top. See [Routines](schedules.md).
+- A **briefing** you switched on, such as the morning news or the Monday plan. It arrives under **Updates**, marked **Briefing**, with **Pause** and **Edit** at its top. See [Automations](schedules.md).
 - **Daily check-in from your leads**: once a day, for every group, what moved since yesterday morning, what is stuck or waiting on you, and what is next, each with a link to its task. It is built from your tasks, so it costs nothing. Switch it off under **Settings → Leads' daily check-in**.
 - **… is not working**: an AI service you connected stopped working, with what is wrong.
 

@@ -343,7 +343,7 @@ function render() {
 
 /** Areas of the app that have several parts: the menu shows the area once, and its parts are tabs across the top. */
 const AREAS = {
-  tasks: { name: "Tasks", views: [["tasks", "Tasks"], ["projects", "Projects"], ["jobs", "Routines"]], also: { project: "projects" } },
+  tasks: { name: "Tasks", views: [["tasks", "Tasks"], ["projects", "Projects"], ["jobs", "Automations"]], also: { project: "projects" } },
   team: { name: "Team", views: [["home", "Agents"], ["team", "Organization"], ["market", "Marketplace"]], also: { quest: "home", bot: "home", marketbot: "market" } },
   files: { name: "Files", views: [["office", "Office"], ["docs", "Documents"], ["sheets", "Sheets"], ["slides", "Slides"], ["notes", "Notes"], ["workspace", "Workspace"], ["library", "Library"], ["memory", "Memory"], ["skills", "Skills"]] },
   more: { name: "Account", views: [["integrations", "Connections"], ["security", "Security"], ["audit", "Activity log"], ["settings", "Settings"]] },
@@ -430,7 +430,7 @@ function renderRail() {
       item("start", "New", v === "start" || v === "setup", "new", "railnew"),
       item("chat", "Chats", v === "chat", "chat"),
       item(lastIn("tasks") === "jobs" ? "tasks" : lastIn("tasks"), "Tasks and projects", area === "tasks" && v !== "jobs", "tasks"),
-      item("jobs", "Routines", v === "jobs", "jobs"),
+      item("jobs", "Automations", v === "jobs", "jobs"),
       item(lastIn("team"), "Team", area === "team", "team"),
       item(lastIn("files"), "Files", area === "files", "office"),
       item("search", "Search", false, "search", "", () => ui.palette?.focus()),
@@ -598,7 +598,7 @@ const COMMANDS = [
   ["Inbox", () => go("inbox")],
   ["Tasks", () => go("tasks")],
   ["Projects", () => go("projects")],
-  ["Routines", () => go("jobs")],
+  ["Automations", () => go("jobs")],
   ["Agents", () => go("home")],
   ["Create an agent", () => go("bot", "new")],
   ["Organization", () => go("team")],
@@ -2243,7 +2243,7 @@ function renderInbox() {
       { class: "inboxreadtools" },
       h("button", { class: "plain small inboxback", onclick: () => ((ui.mailOpen = null), renderInbox()) }, "← Back"),
       brief ? h("span", { class: "briefmark", title: `${brief.name}: ${brief.when}` }, "Briefing") : null,
-      brief?.on?.enabled ? h("button", { class: "plain link small", title: "Stop sending it until you switch it back on, under Tasks › Routines", onclick: () => attempt(async () => (await api("PATCH", `jobs/${brief.on.job}`, { enabled: false }), toast(`${brief.name} is paused. Switch it back on under Tasks › Routines.`), await loadMail(), renderInbox())) }, "Pause") : null,
+      brief?.on?.enabled ? h("button", { class: "plain link small", title: "Stop sending it until you switch it back on, under Tasks › Automations", onclick: () => attempt(async () => (await api("PATCH", `jobs/${brief.on.job}`, { enabled: false }), toast(`${brief.name} is paused. Switch it back on under Tasks › Automations.`), await loadMail(), renderInbox())) }, "Pause") : null,
       brief?.on ? h("button", { class: "plain link small", title: "Change its answer or when it arrives", onclick: () => briefingEdit(brief).then(async (ok) => ok && (await loadMail(), renderInbox())) }, "Edit") : null,
       h("span", { class: "grow" }),
       h("button", { class: "plain link small", title: "Show it as not read yet", onclick: () => ((ui.mailOpen = null), (ui.mailReadKey = null), mailMark([open.id], { read: false })) }, "Mark unread"),
@@ -2903,14 +2903,14 @@ function renderOrg() {
     const mine = new Set(canHand.map((x) => x.bot));
     const canRequest = members.filter((x) => x.bot !== m.bot && !mine.has(x.bot) && x.department !== m.department && groups.find((gg) => gg.name === x.department)?.lead === x.bot);
     // Repeating work this position does. It stays with the position when a different agent fills it.
-    const routinesBox = h("div", { class: "panelrules" }, h("div", { class: "label" }, "Routines"));
+    const routinesBox = h("div", { class: "panelrules" }, h("div", { class: "label" }, "Automations"));
     api("GET", "jobs")
       .then((all) => {
         const mine = all.filter((j) => j.owner === m.bot);
         if (!routinesBox.isConnected) return;
         routinesBox.append(
           ...(mine.length ? mine.map((j) => h("p", {}, h("b", {}, j.name), ` · ${j.plain}${j.enabled ? "" : " · paused"}`)) : [h("p", { class: "note small" }, "No repeating work yet.")]),
-          h("div", { class: "row" }, h("button", { class: "plain small", onclick: () => ((ui.routineFor = m.bot), go("jobs")) }, "+ Routine"), mine.length ? h("button", { class: "plain small", onclick: () => go("jobs") }, "See all routines") : null),
+          h("div", { class: "row" }, h("button", { class: "plain small", onclick: () => ((ui.routineFor = m.bot), go("jobs")) }, "+ Automation"), mine.length ? h("button", { class: "plain small", onclick: () => go("jobs") }, "See all automations") : null),
         );
       })
       .catch(() => {});
@@ -4291,7 +4291,7 @@ async function wordpressPage(col, again) {
     api("GET", `integrations/wordpress/${site.id}/posts`)
       .then((list) => fill(posts, list.length ? list.map((p) => h("div", { class: "row wppost" }, h("span", { class: "grow" }, p.title), h("span", { class: `chip ${p.status === "publish" ? "on" : ""}` }, p.status === "publish" ? "Public" : p.status === "future" ? "Scheduled" : "Draft"), h("a", { class: "note small", href: p.link, target: "_blank", rel: "noopener" }, "Open"))) : h("p", { class: "note small" }, "No posts yet.")))
       .catch((err) => fill(posts, h("p", { class: "note small bad" }, err.message)));
-    const rule = h("select", { "aria-label": "What agents may do", onchange: (e) => (e.target.value !== "auto" || confirm(`Let agents publish on ${site.name} without asking?\n\nWhatever an agent writes goes live on your website straight away. Choose this only when you trust the routine and check the site regularly.`) ? act(() => api("PATCH", `integrations/wordpress/${site.id}`, { publish: e.target.value }), "Saved.") : again()) }, d.rules.map((r) => h("option", { value: r.id, selected: site.publish === r.id }, r.words)));
+    const rule = h("select", { "aria-label": "What agents may do", onchange: (e) => (e.target.value !== "auto" || confirm(`Let agents publish on ${site.name} without asking?\n\nWhatever an agent writes goes live on your website straight away. Choose this only when you trust the automation and check the site regularly.`) ? act(() => api("PATCH", `integrations/wordpress/${site.id}`, { publish: e.target.value }), "Saved.") : again()) }, d.rules.map((r) => h("option", { value: r.id, selected: site.publish === r.id }, r.words)));
     const who = h("select", { "aria-label": "Agent" }, org.members.map((m) => h("option", { value: m.bot }, m.title)));
     const about = h("textarea", { rows: 2, placeholder: "What your blog is about and what to write on, e.g. Practical baking tips for home bakers; one recipe idea or technique each day.", "aria-label": "What the blog is about" });
     const hour = h("select", { "aria-label": "Time" }, [6, 7, 8, 9, 10, 12, 15, 18].map((n) => h("option", { value: n, selected: n === 9 }, `${n > 12 ? n - 12 : n}:00 ${n >= 12 ? "pm" : "am"}`)));
@@ -4307,11 +4307,11 @@ async function wordpressPage(col, again) {
       org.members.length
         ? h(
             "form",
-            { class: "form wpdaily", onsubmit: (e) => (e.preventDefault(), act(() => api("POST", `integrations/wordpress/${site.id}/daily`, { owner: who.value, about: about.value, hour: Number(hour.value), days: days.value }), "The routine is set up. You can change or pause it under Routines.")) },
+            { class: "form wpdaily", onsubmit: (e) => (e.preventDefault(), act(() => api("POST", `integrations/wordpress/${site.id}/daily`, { owner: who.value, about: about.value, hour: Number(hour.value), days: days.value }), "The automation is set up. You can change or pause it under Automations.")) },
             h("b", {}, "Have an agent write a blog post on a schedule"),
             about,
-            h("div", { class: "row wrap" }, who, days, hour, h("button", { class: "primary" }, "Set up the routine")),
-            h("p", { class: "note small" }, site.publish === "drafts" ? "Each post is saved as a draft for you to read and publish. Each run costs what the AI model charges; see it under Routines." : site.publish === "ask" ? "Each post waits for your approval before it goes public." : "Each post is published without asking."),
+            h("div", { class: "row wrap" }, who, days, hour, h("button", { class: "primary" }, "Set up the automation")),
+            h("p", { class: "note small" }, site.publish === "drafts" ? "Each post is saved as a draft for you to read and publish. Each run costs what the AI model charges; see it under Automations." : site.publish === "ask" ? "Each post waits for your approval before it goes public." : "Each post is published without asking."),
           )
         : h("p", { class: "note small" }, "Add agents under Organization to have one write posts on a schedule."),
       h("div", { class: "row" }, h("button", { class: "plain danger", onclick: () => confirm(`Disconnect ${site.name}? Agents can no longer read or write it. Nothing on the site is changed.`) && act(() => api("DELETE", `integrations/wordpress/${site.id}`), "Disconnected.") }, "Disconnect")),
@@ -4519,7 +4519,7 @@ function openrouterIntegrationPage(or, act, col, again) {
         ),
         keyForm,
         h("div", { class: "willgrid" },
-          h("div", { class: "willbox will" }, h("div", { class: "label" }, "✓ With OpenRouter"), h("ul", {}, ...["Run your agents on models from Anthropic, OpenAI, Google, Meta, DeepSeek, Mistral, Qwen and more", "Give one agent a different model from the rest, such as a cheaper one for routine work", "See every model's price before you choose, and the real cost of each task on its receipt"].map((x) => h("li", {}, x)))),
+          h("div", { class: "willbox will" }, h("div", { class: "label" }, "✓ With OpenRouter"), h("ul", {}, ...["Run your agents on models from Anthropic, OpenAI, Google, Meta, DeepSeek, Mistral, Qwen and more", "Give one agent a different model from the rest, such as a cheaper one for automation work", "See every model's price before you choose, and the real cost of each task on its receipt"].map((x) => h("li", {}, x)))),
           h("div", { class: "willbox wont" }, h("div", { class: "label" }, "✕ It never"), h("ul", {}, ...["Spends past the budgets you set in this app, or the limit you set on openrouter.ai", "Sends your key anywhere but OpenRouter", "Changes your Claude setup: Claude through your Anthropic key keeps working"].map((x) => h("li", {}, x)))),
         ),
       ),
@@ -4593,7 +4593,7 @@ function openrouterIntegrationPage(or, act, col, again) {
         current
           ? h("div", {}, h("b", {}, `${current.name}`), h("p", { class: "note" }, `Every agent uses it, except agents you gave a model of their own. About ${current.free ? "nothing" : money(taskCost(current.prices))} for a typical task by one agent; the receipt of each task shows the real cost OpenRouter charged.`))
           : h("div", {}, h("b", {}, `Your team uses ${state.config?.model?.startsWith("anthropic/") ? "Claude, through your Anthropic key" : state.config?.model || "the model set under AI models"}`), h("p", { class: "note" }, "Choose a model below to run your team on OpenRouter instead. You can switch back at any time under Connections → AI models.")),
-        h("p", { class: "note small" }, "To give one agent its own model, open that agent, and under Model choose OpenRouter and the model. Cheaper models suit routine work; stronger ones suit managers and complex tasks."),
+        h("p", { class: "note small" }, "To give one agent its own model, open that agent, and under Model choose OpenRouter and the model. Cheaper models suit automation work; stronger ones suit managers and complex tasks."),
       ),
       h("div", { class: "row" }, search, sort),
       rows,
@@ -5193,9 +5193,9 @@ async function kitPreview(k) {
       k.kind === "company" ? h("li", {}, p.positions.length ? `Adds ${p.positions.length} position${p.positions.length === 1 ? "" : "s"} to your chart: ${few(p.positions)}. Nothing you have is removed or moved.` : "Adds no positions: your chart already has them all.") : null,
       p.packs.length ? h("li", {}, `Adds page packs to your Workspace: ${p.packs.map((x) => `${x.name} (${x.already ? "you already have it" : `${x.pages} pages`})`).join(", ")}.`) : null,
       p.page ? h("li", {}, `Adds the page “${p.page}” to your Workspace: the procedure your agents follow.`) : null,
-      p.routines.length ? h("li", {}, `Adds ${p.routines.length} routine${p.routines.length === 1 ? "" : "s"}, paused: ${p.routines.map((r) => `${r.name} (${r.owner ? `the ${r.owner}` : `the lead of ${r.group}`})`).join(", ")}. A routine costs money each time it runs, so you switch each one on under Routines.`) : null,
+      p.routines.length ? h("li", {}, `Adds ${p.routines.length} automation${p.routines.length === 1 ? "" : "s"}, paused: ${p.routines.map((r) => `${r.name} (${r.owner ? `the ${r.owner}` : `the lead of ${r.group}`})`).join(", ")}. An automation costs money each time it runs, so you switch each one on under Automations.`) : null,
       p.run ? h("li", {}, p.run.owner ? `Run it now gives the work to the ${p.run.owner}, who sends you a plan to approve first.` : `Run it now needs a ${p.run.groups[0]} group with a lead on your chart. Add one, or install a company template, before running it.`) : null,
-      h("li", {}, `Nothing is spent by installing. Undo takes it all back: ${k.kind === "company" ? "your chart as it was, " : ""}its pages to Deleted, its routines removed.`),
+      h("li", {}, `Nothing is spent by installing. Undo takes it all back: ${k.kind === "company" ? "your chart as it was, " : ""}its pages to Deleted, its automations removed.`),
     ),
     status,
     h("div", { class: "row" }, add, h("button", { class: "plain", onclick: close }, "Cancel")),
@@ -5316,7 +5316,7 @@ async function marketView() {
           : kitPreview(k),
       );
       const undo = k.installed
-        ? h("button", { class: "plain small", onclick: () => confirm(`Undo “${k.name}”?\n\n${k.kind === "company" ? "Your chart goes back to how it was before it was installed. " : ""}Its pages go to Deleted (kept 30 days) and its routines are removed.`) && attempt(async () => (await api("POST", `marketplace/kits/${k.id}/undo`), (state.market = null), await Promise.all([loadCrew(), loadOrgs()]), marketView()), ui.body) }, "Undo")
+        ? h("button", { class: "plain small", onclick: () => confirm(`Undo “${k.name}”?\n\n${k.kind === "company" ? "Your chart goes back to how it was before it was installed. " : ""}Its pages go to Deleted (kept 30 days) and its automations are removed.`) && attempt(async () => (await api("POST", `marketplace/kits/${k.id}/undo`), (state.market = null), await Promise.all([loadCrew(), loadOrgs()]), marketView()), ui.body) }, "Undo")
         : null;
       return h(
         "article",
@@ -5329,11 +5329,11 @@ async function marketView() {
     const kitSection = (kind, title, note) => ((list) => (list.length ? h("section", {}, h("h2", {}, title), h("p", { class: "note", style: "margin: -6px 0 12px" }, note), h("div", { class: "mgrid wide" }, list.map(kitCard))) : null))(kits.filter((k) => k.kind === kind));
     fill(
       results,
-      kitSection("company", "Company templates", "A running start for your kind of business: the positions on your chart, the pages your agents follow, and routines, set up together."),
+      kitSection("company", "Company templates", "A running start for your kind of business: the positions on your chart, the pages your agents follow, and automations, set up together."),
       market.officeTemplates?.length && !cat && (!needle || market.officeTemplates.some((t) => `${t.name} ${t.summary}`.toLowerCase().includes(needle)))
         ? h("section", {}, h("h2", {}, "Office templates"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Ready-made documents and sheets: a proposal, a quote, a budget, a cash forecast."), h("div", { class: "mgrid wide" }, market.officeTemplates.filter((t) => !needle || `${t.name} ${t.summary}`.toLowerCase().includes(needle)).map(officeTemplateCard)))
         : null,
-      kitSection("playbook", "Playbooks", "One known process, ready to run: its procedure as a page, a routine for the group that owns it, and Run it now."),
+      kitSection("playbook", "Playbooks", "One known process, ready to run: its procedure as a page, an automation for the group that owns it, and Run it now."),
       featured.length
         ? h(
             "section",
@@ -6917,7 +6917,7 @@ function whoPicker(current = "") {
 function scheduleForm(col, job = null, done) {
   const name = h("input", { placeholder: "e.g. Morning news digest", value: job?.name ?? "", maxlength: 80 });
   const when = whenPicker(job?.schedule ?? "0 9 * * 1-5");
-  // Opened from a position's panel, a new routine starts out belonging to that position.
+  // Opened from a position's panel, a new automation starts out belonging to that position.
   const who = whoPicker(job?.owner ?? ui.routineFor ?? "");
   ui.routineFor = null;
   const prompt = h("textarea", { rows: 4, placeholder: "What should be done each time? Write it as you would to a new colleague, e.g. “Read the news about our industry and send me the five things that matter, with links.”" }, job?.prompt ?? "");
@@ -6935,11 +6935,11 @@ function scheduleForm(col, job = null, done) {
     h("label", {}, "When", when.node),
     h("label", {}, "Who does it", who),
     h("label", {}, "Instructions", prompt),
-    h("div", { class: "row" }, job ? h("button", { type: "button", class: "plain", onclick: done }, "Cancel") : null, h("button", { class: "primary" }, job ? "Save changes" : "Add routine")),
+    h("div", { class: "row" }, job ? h("button", { type: "button", class: "plain", onclick: done }, "Cancel") : null, h("button", { class: "primary" }, job ? "Save changes" : "Add automation")),
   );
 }
 
-/** Routines › Start a briefing: ready-made reports for the Inbox, switched on with one press. */
+/** Automations › Start a briefing: ready-made reports for the Inbox, switched on with one press. */
 function briefingGallery(host, data, col) {
   state.briefings = data;
   const again = () => jobsView();
@@ -6978,19 +6978,17 @@ function briefingGallery(host, data, col) {
   const onCount = data.briefings.filter((b) => b.on?.enabled).length;
   fill(
     host,
-    h("h2", {}, "Start a briefing"),
-    h("p", { class: "note" }, `Ready-made reports your team sends to your Inbox. Switch one on with one press; pause it any time.${onCount ? ` ${onCount} ${onCount === 1 ? "is" : "are"} on.` : ""}`),
+    h("p", { class: "note" }, `Ready-made automations. Each sends a report to your Inbox. Switch one on with one press; pause it any time.${onCount ? ` ${onCount} ${onCount === 1 ? "is" : "are"} on.` : ""}`),
     groups.map((g, i) => {
       const mine = data.briefings.filter((b) => b.group === g);
       const live = mine.filter((b) => b.on).length;
       return h("details", { class: "briefgroup", open: i < 2 || live > 0 }, h("summary", {}, h("b", {}, g), h("span", { class: "note small" }, ` · ${mine.length}${live ? ` · ${live} on` : ""}`)), h("div", { class: "briefgrid" }, mine.map(card)));
     }),
     data.planned?.length ? h("p", { class: "note small" }, `Planned, once their service is connected: ${data.planned.join("; ")}.`) : null,
-    h("h2", { class: "briefown" }, "Your own routines"),
   );
 }
 
-/** The times a briefing can arrive, in plain words, as the routine's timing. */
+/** The times a briefing can arrive, in plain words, as the automation's timing. */
 const BRIEF_TIMES = [
   ["every 30m", "Every 30 minutes"], ["every 1h", "Every hour"], ["0 6 * * 1-5", "Weekdays at 6:00"], ["0 9 * * *", "Every day at 9:00"], ["0 17 * * 1-5", "Weekdays at 5:00 pm"], ["0 9 * * 0", "Sundays at 9:00"], ["0 9 * * 5", "Fridays at 9:00"],
   ["0 7 * * *", "Every day at 7:00"], ["30 7 * * *", "Every day at 7:30"], ["0 8 * * *", "Every day at 8:00"], ["0 17 * * *", "Every day at 5:00 pm"], ["0 18 * * *", "Every day at 6:00 pm"],
@@ -7034,7 +7032,7 @@ async function briefingEdit(b) {
   const choice = await briefingChoices(b, "briefing-edit");
   const topic = !b.ask ? null : b.ask.list ? h("textarea", { id: "briefing-edit-topic", rows: 7, placeholder: b.ask.placeholder, maxlength: 4000, "aria-label": b.ask.label }, b.ask.value || "") : h("input", { id: "briefing-edit-topic", value: b.ask.value || "", placeholder: b.ask.placeholder, maxlength: 300, "aria-label": b.ask.label });
   const now = b.on?.schedule || b.schedule;
-  const times = BRIEF_TIMES.some(([v]) => v === now) ? BRIEF_TIMES : [[now, "As set under your routines"], ...BRIEF_TIMES];
+  const times = BRIEF_TIMES.some(([v]) => v === now) ? BRIEF_TIMES : [[now, "As set under your automations"], ...BRIEF_TIMES];
   const time = h("select", { id: "briefing-edit-time", "aria-label": "When it arrives" }, times.map(([v, label]) => h("option", { value: v, selected: v === now }, label)));
   const body = h(
     "div",
@@ -7097,65 +7095,116 @@ async function briefingOn(b) {
   }
 }
 
+/** Automations: every automation and briefing in one table, with a history of runs and the ready-made ones a press away. */
 async function jobsView() {
-  const list = h("div", { class: "joblist" });
+  const TABS = [["all", "All"], ["active", "Active"], ["paused", "Paused"], ["runs", "Run history"], ["ready", "Ready-made"]];
+  const tab = TABS.some(([id]) => id === ui.autoTab) ? ui.autoTab : "all";
+  const tabs = h("div", { class: "autotabs", role: "tablist", "aria-label": "Automations" });
+  const body = h("div", { class: "autobody" });
+  const add = h("button", { class: "primary", onclick: () => ((ui.autoTab = "new"), jobsView()) }, "+ New automation");
   const col = page(
-    "Routines",
-    "Repeating work that runs by itself: a daily summary, a weekly report, a month-end close. Choose when, and which position does it. A routine belongs to the position, so it carries on when you put a different agent in it. You can also just ask in a chat: “every weekday at 8am, …”.",
-    h("p", { class: "banner" }, "Routines run while Talqava is open. In the Mac app, closing the window keeps Talqava running; choosing Quit stops it. A run missed while it was stopped happens once when you open Talqava again."),
-    list,
-    h("h3", {}, "New routine"),
+    "Automations",
+    "Work that runs by itself: a morning news digest, a weekly report, a check that your website is up. Each one belongs to a position on your team, or to the assistant.",
+    h("div", { class: "autobar" }, tabs, add),
+    body,
+    h("p", { class: "note small" }, "Automations run while Talqava is open. In the Mac app, closing the window keeps Talqava running; choosing Quit stops it. A run missed while it was stopped happens once when you open Talqava again."),
   );
-  col.append(scheduleForm(col, null, () => jobsView()));
-  const gallery = h("section", { class: "briefgallery" });
-  col.insertBefore(gallery, col.querySelector(".banner"));
-  api("GET", "jobs/briefings").then((data) => state.view === "jobs" && briefingGallery(gallery, data, col)).catch(() => {});
-  const jobs = await attempt(() => api("GET", "jobs"), col);
-  if (!jobs) return;
-  if (!jobs.length) list.append(h("p", { class: "note" }, "No routines yet. Add one below."));
-  for (const j of jobs) {
-    const act = (fn) => attempt(async () => (await fn(), jobsView()), col);
-    const card = h("div", { class: "card jobcard" });
-    const show = () =>
-      fill(
-        card,
+  const [jobs, data] = await Promise.all([attempt(() => api("GET", "jobs"), col), api("GET", "jobs/briefings").catch(() => null)]);
+  if (!jobs || state.view !== "jobs") return;
+  state.briefings = data ?? state.briefings;
+  const briefOf = (j) => (j.briefing ? data?.briefings.find((b) => b.id === j.briefing) : null);
+  const count = { all: jobs.length, active: jobs.filter((j) => j.enabled).length, paused: jobs.filter((j) => !j.enabled).length, ready: data?.briefings.length ?? 0 };
+  fill(tabs, TABS.map(([id, label]) => h("button", { class: `autotab ${tab === id ? "on" : ""}`, role: "tab", "aria-selected": String(tab === id), onclick: () => ((ui.autoTab = id), jobsView()) }, label, count[id] !== undefined ? h("span", { class: "autocount" }, String(count[id])) : null)));
+  const again = () => jobsView();
+  const act = (fn, done) => attempt(async () => (await fn(), done && toast(done), again()), col);
+
+  // A new one, written by hand: the form takes the page until it is saved or cancelled.
+  if (ui.autoTab === "new") {
+    add.hidden = true;
+    return fill(body, h("div", { class: "card form" }, h("h3", {}, "New automation"), scheduleForm(col, null, () => ((ui.autoTab = "all"), jobsView())), h("button", { class: "plain", onclick: () => ((ui.autoTab = "all"), jobsView()) }, "Cancel")), h("p", { class: "note" }, "Or switch on a ready-made one: ", h("button", { class: "plain link", onclick: () => ((ui.autoTab = "ready"), jobsView()) }, `see all ${count.ready}`), "."));
+  }
+  if (tab === "ready") {
+    const gallery = h("section", { class: "briefgallery" });
+    fill(body, gallery);
+    return data ? briefingGallery(gallery, data, col) : fill(gallery, h("p", { class: "note" }, "The ready-made automations could not be loaded. Try again."));
+  }
+  if (tab === "runs") {
+    const runs = await attempt(() => api("GET", "jobs/runs"), col);
+    if (!runs || state.view !== "jobs") return;
+    if (!runs.length) return fill(body, h("p", { class: "note" }, "Nothing has run yet. Each run is listed here from now on, with what it made."));
+    return fill(
+      body,
+      h(
+        "div",
+        { class: "tablewrap" },
         h(
-          "div",
-          { class: "row" },
+          "table",
+          { class: "autotable" },
+          h("thead", {}, h("tr", {}, ["Automation", "When", "Result", ""].map((x) => h("th", {}, x)))),
           h(
-            "div",
-            { class: "grow" },
-            h("strong", {}, j.name),
-            h("div", { class: "note" }, `${j.plain} · ${j.enabled ? `next ${when(j.nextRunAt)}` : "paused"}${j.lastRunAt ? ` · last ran ${when(j.lastRunAt)}` : ""}`),
-            h("div", { class: "note" }, j.owner ? (j.ownerName ? `Done by the ${j.ownerName}, as a task in their queue` : "Its position is no longer on the chart, so the assistant does it. Edit it to choose another position.") : `Done by ${state.config.agentName}, the assistant, in a chat`),
-            h("div", { class: "jobprompt" }, j.prompt),
-          ),
-          h(
-            "div",
-            { class: "row wrap jobactions" },
-            j.lastTaskId ? h("button", { class: "small", onclick: () => ((ui.taskOpen = j.lastTaskId), go("tasks")) }, "Last run") : j.lastConversationId ? h("button", { class: "small", onclick: () => go("chat", j.lastConversationId) }, "Last run") : null,
-            h(
-              "button",
-              {
-                class: "small",
-                onclick: () =>
-                  attempt(async () => {
-                    const r = await api("POST", `jobs/${j.id}/run`, {});
-                    if (r.taskId) (ui.taskOpen = r.taskId), go("tasks");
-                    else go("chat", r.conversationId);
-                  }, col),
-              },
-              "Run now",
+            "tbody",
+            {},
+            runs.map((r) =>
+              h(
+                "tr",
+                {},
+                h("td", {}, h("b", {}, r.name), r.gone ? h("span", { class: "autoby" }, "Since deleted") : null),
+                h("td", { class: "autonum" }, when(r.at)),
+                h("td", {}, r.problem ? h("span", { class: "autobad" }, `Could not start: ${r.problem}`) : r.taskId ? "Started a task" : r.conversationId ? "Ran in a chat" : "Made its report"),
+                h("td", { class: "autoend" }, r.taskId ? h("button", { class: "small", onclick: () => ((ui.taskOpen = r.taskId), go("tasks")) }, "Open") : r.conversationId ? h("button", { class: "small", onclick: () => go("chat", r.conversationId) }, "Open") : null),
+              ),
             ),
-            h("button", { class: "small", onclick: () => fill(card, h("h4", {}, `Change “${j.name}”`), scheduleForm(col, j, () => jobsView())) }, "Edit"),
-            h("button", { class: "small", onclick: () => act(() => api("PATCH", `jobs/${j.id}`, { enabled: !j.enabled })) }, j.enabled ? "Pause" : "Resume"),
-            h("button", { class: "small danger", onclick: () => confirm(`Delete the routine “${j.name}”?\n\nPast runs are kept.`) && act(() => api("DELETE", `jobs/${j.id}`)) }, "Delete"),
           ),
         ),
-      );
-    show();
-    list.append(card);
+      ),
+    );
   }
+  const shown = jobs.filter((j) => (tab === "active" ? j.enabled : tab === "paused" ? !j.enabled : true));
+  if (!shown.length) {
+    return fill(
+      body,
+      h("div", { class: "card autoempty" }, h("b", {}, tab === "all" ? "Nothing runs by itself yet." : tab === "active" ? "Nothing is switched on." : "Nothing is paused."), tab === "all" ? h("p", { class: "note" }, "Start with a ready-made one, such as the Monday plan (free) or the morning news.") : null, tab === "all" ? h("div", { class: "row" }, h("button", { class: "primary", onclick: () => ((ui.autoTab = "ready"), jobsView()) }, "See the ready-made ones")) : null),
+    );
+  }
+  const row = (j) => {
+    const b = briefOf(j);
+    const who = b ? `${b.kind === "free" ? "No AI model" : j.ownerName ? `${j.ownerName}${b.model ? ` · ${b.model.split("/").pop()}` : ""}` : "A position no longer on the chart"}${b.review ? " · drafts, you decide" : ""}${b.quiet ? " · quiet unless there is news" : ""}` : j.owner ? (j.ownerName ? `${j.ownerName}, as a task in their queue` : "Its position is no longer on the chart, so the assistant does it") : `${state.config.agentName}, in a chat`;
+    const toggle = h("button", { class: `autotoggle ${j.enabled ? "on" : ""}`, role: "switch", "aria-checked": String(j.enabled), "aria-label": `${j.name}: ${j.enabled ? "on" : "paused"}`, title: j.enabled ? "On. Press to pause." : "Paused. Press to switch on.", onclick: () => act(() => api("PATCH", `jobs/${j.id}`, { enabled: !j.enabled }), `${j.name} is ${j.enabled ? "paused" : "on"}.`) });
+    const menu = h("details", { class: "automenu" }, h("summary", { "aria-label": `More for ${j.name}`, title: "More" }, "⋯"));
+    const pick = (label, run, cls = "") => h("button", { class: `plain ${cls}`, onclick: () => (menu.removeAttribute("open"), run()) }, label);
+    const edit = h("tr", { class: "autoedit", hidden: true }, h("td", { colspan: 6 }));
+    menu.append(
+      h(
+        "div",
+        { class: "automenulist" },
+        pick(b ? "Send one now" : "Run now", () =>
+          attempt(async () => {
+            const r = await api("POST", `jobs/${j.id}/run`, {});
+            if (b) return toast("One is on its way to your Inbox.");
+            if (r.taskId) (ui.taskOpen = r.taskId), go("tasks");
+            else if (r.conversationId) go("chat", r.conversationId);
+          }, col),
+        ),
+        pick("Edit", () => (b ? briefingEdit(b).then((ok) => ok && again()) : ((edit.hidden = false), fill(edit.firstChild, h("div", { class: "card form" }, h("h4", {}, `Change “${j.name}”`), scheduleForm(col, j, again)))))),
+        j.lastTaskId ? pick("Open the last run", () => ((ui.taskOpen = j.lastTaskId), go("tasks"))) : j.lastConversationId ? pick("Open the last run", () => go("chat", j.lastConversationId)) : null,
+        pick(b ? "Switch off for good" : "Delete", () => confirm(b ? `Switch ${j.name} off for good? You can switch it on again later.` : `Delete the automation “${j.name}”?\n\nPast runs are kept.`) && act(() => api("DELETE", b ? `jobs/briefings/${b.id}` : `jobs/${j.id}`), b ? `${j.name} is switched off.` : "Deleted."), "danger"),
+      ),
+    );
+    return [
+      h(
+        "tr",
+        { class: j.enabled ? "" : "paused" },
+        h("td", {}, h("div", { class: "autofirst" }, h("span", { class: `autodot ${j.enabled ? "on" : ""}`, "aria-hidden": "true" }), h("div", { class: "autoname" }, h("b", {}, j.name), h("span", { class: "autoby" }, who)))),
+        h("td", {}, b?.when ?? j.plain),
+        h("td", { class: "autonum" }, j.enabled ? when(j.nextRunAt) : "paused"),
+        h("td", { class: "autonum" }, j.lastRunAt ? when(j.lastRunAt) : "not yet"),
+        h("td", { class: "autoend" }, toggle),
+        h("td", { class: "autoend" }, menu),
+      ),
+      edit,
+    ];
+  };
+  fill(body, h("div", { class: "tablewrap" }, h("table", { class: "autotable" }, h("thead", {}, h("tr", {}, ["Name", "When", "Next run", "Last run", "", ""].map((x) => h("th", {}, x)))), h("tbody", {}, shown.flatMap(row)))));
 }
 
 // ---------- settings ----------
@@ -7556,7 +7605,7 @@ function settingsView() {
       h("label", {}, "Privacy: hide personal details from AI services", privacy),
       h("p", { class: "note small" }, "With this on, email addresses, phone numbers, card numbers and US Social Security numbers are replaced with placeholders such as [EMAIL 1] before anything is sent to an AI service, and put back in the answer, so an agent can still email the right person. Your chats keep the real details. It doesn't catch names, street addresses or details inside pictures, and models on this computer send nothing out, so they see everything."),
       h("label", {}, "Approvals", mode),
-      h("p", { class: "note" }, "With “ask”, a routine that needs approval waits until you open its chat and answer. “Run everything” is only sensible when the agent runs in Docker or on a machine with nothing you'd mind losing."),
+      h("p", { class: "note" }, "With “ask”, an automation that needs approval waits until you open its chat and answer. “Run everything” is only sensible when the agent runs in Docker or on a machine with nothing you'd mind losing."),
       h("h4", {}, "Budgets"),
       h("label", {}, "Steps per run (model calls)", steps),
       h("label", {}, "Budget per task, in US dollars", spend),

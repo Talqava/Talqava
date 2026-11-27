@@ -102,6 +102,6 @@ This needs a Claude model as your team's model, because it can look at pictures.
 - [Workspace](workspace.md)
 - [Memory](memory.md)
 - [Skills](skills.md)
-- [Routines](schedules.md)
+- [Automations](schedules.md)
 - [Settings](settings.md)
 - [Getting started](getting-started.md)

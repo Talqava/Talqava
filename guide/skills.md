@@ -61,6 +61,6 @@ A skill is a written-down procedure: the steps for a job that comes up again and
 - [Workspace](workspace.md)
 - [Library](library.md)
 - [Memory](memory.md)
-- [Routines](schedules.md)
+- [Automations](schedules.md)
 - [Settings](settings.md)
 - [Getting started](getting-started.md)

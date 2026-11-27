@@ -1,17 +1,22 @@
-# Routines
+# Automations
 
-Routines let work happen by itself at set times: a morning news digest every weekday, a check of last week's orders every Monday, a month-end reminder, or a one-off job on a certain date. You write the instructions once, choose when they run and who does them, and each run ends with a short report of what was done.
+Automations let work happen by itself at set times: a morning news digest every weekday, a check of last week's orders every Monday, a month-end reminder, or a one-off job on a certain date. You write the instructions once, choose when they run and who does them, and each run ends with a short report of what was done.
 
 ## What you'll see
 
-- **A note at the top** saying routines run while Talqava is open.
-- **Your routines**, one card each. A card shows the name, when it runs in plain words (for example "Every weekday at 8:00 am"), when it runs next (or **paused**), when it last ran, who does it, and the instructions.
-- **Buttons on each card:** **Last run**, **Run now**, **Edit**, **Pause** or **Resume**, and **Delete**.
-- **New routine**, a form with **Name**, **When**, **Who does it** and **Instructions**, and an **Add routine** button.
+Open **Automations** (the clock on the strip at the left).
+
+- **Tabs across the top:** **All**, **Active**, **Paused**, **Run history** and **Ready-made**, each with a count.
+- **One table** of everything that runs by itself, whether you wrote it or switched on a ready-made one. Each row shows its name and who does it, when it runs in plain words (for example "Every weekday at 8:00 am"), when it runs next (or **paused**) and when it last ran.
+- **A switch on each row** turns it on or pauses it.
+- **The ⋯ button on each row** opens **Run now** (or **Send one now**), **Edit**, **Open the last run** and **Delete** (or **Switch off for good**).
+- **+ New automation** opens a form with **Name**, **When**, **Who does it** and **Instructions**.
+- **Run history** lists every run, newest first: which automation, when, and whether it started a task, ran in a chat, made its report, or could not start (with the reason). The last 300 runs are kept.
+- **Ready-made** holds the briefings described below.
 
 ## Briefings
 
-A briefing is a routine that is already written: a report an agent sends to your Inbox. **Start a briefing**, at the top of this page, lists 50 of them in seven groups. Click a group's name to open it.
+A briefing is an automation that is already written: a report an agent sends to your Inbox. **Start a briefing**, at the top of this page, lists 50 of them in seven groups. Click a group's name to open it.
 
 - **Your own work**: Monday plan, Friday wrap-up, End-of-day wrap, Weekly goals check and Agenda for each project are free, built from your tasks and goals. Weekly roundup of your chats and Meeting notes to actions use your AI model.
 - **The outside world**: Morning news, Competitor watch, Rules and deadlines, Supplier price watch, Review replies, Blog post idea, Learning digest, Mentions watch, New video digest, Search ranking check, Idea log and Trending projects digest need only web search. **Website down alert** and **Page change watch** are free: Talqava looks at the address itself, with no AI model.
@@ -52,25 +57,25 @@ Talqava suggests the position whose job the briefing suits, for example your Boo
 
 ## Key ideas
 
-**A routine is a name, a time, someone to do it, and instructions.**
+**An automation is a name, a time, someone to do it, and instructions.**
 
 **Choosing when.** The **When** box gives you plain choices, all in your computer's time:
 
 - **Every day**, **Every weekday (Monday to Friday)**, **Every week** (pick the day) or **Every month** (pick a date from the 1st to the 28th, which every month has), each at a time you choose.
 - **Every few hours** or **Every few minutes**: pick how many.
-- **Once**: pick a date and time. After it runs, the routine shows as paused.
+- **Once**: pick a date and time. After it runs, the automation shows as paused.
 - **Custom (advanced)**: for anything else, type the timing by hand, such as **every 30m**, **at 2027-01-15T09:00**, or a cron line such as **0 9 \* \* 1-5** (9:00 am on weekdays). The card still shows it in plain words when it can.
 
 **Choosing who does it.**
 
-- **The Talqava assistant, in a chat** (the standard choice). Each run starts a fresh chat titled with a clock (⏰) and the routine's name. It finishes with a short report.
-- **An agent from your organization chart, as a task in their queue.** Each run becomes a task on the **Tasks** board for that agent, with the routine's name as its title. It waits its turn in the agent's queue like any other task. The agent can hand parts to the people below them, and the result comes back to you **To review**, where you accept it or send it back. This is the best choice for regular work that belongs to a department, such as a weekly sales pipeline for your Head of Sales.
+- **The Talqava assistant, in a chat** (the standard choice). Each run starts a fresh chat titled with a clock (⏰) and the automation's name. It finishes with a short report.
+- **An agent from your organization chart, as a task in their queue.** Each run becomes a task on the **Tasks** board for that agent, with the automation's name as its title. It waits its turn in the agent's queue like any other task. The agent can hand parts to the people below them, and the result comes back to you **To review**, where you accept it or send it back. This is the best choice for regular work that belongs to a department, such as a weekly sales pipeline for your Head of Sales.
 
-**A routine belongs to the position.** When you put a different agent into a position (Organization → the position → change who fills it), its routines carry on with the new agent. A position's panel on the Organization page lists its routines, with **+ Routine** to add one.
+**An automation belongs to the position.** When you put a different agent into a position (Organization → the position → change who fills it), its automations carry on with the new agent. A position's panel on the Organization page lists its automations, with **+ Automation** to add one.
 
 If the position you chose leaves the chart, the assistant does the job instead, and the **Activity log** says so. The card tells you, and you can **Edit** it to choose someone else.
 
-**Routines run while Talqava is open.** Talqava checks for due routines every few seconds. In the Mac app, closing the window keeps Talqava running in the background; choosing **Quit** stops it. If Talqava was stopped or your computer was off when a routine was due, it runs once as soon as you open Talqava again, then carries on as normal.
+**Automations run while Talqava is open.** Talqava checks for due automations every few seconds. In the Mac app, closing the window keeps Talqava running in the background; choosing **Quit** stops it. If Talqava was stopped or your computer was off when an automation was due, it runs once as soon as you open Talqava again, then carries on as normal.
 
 **Approvals still apply.** A run follows your **Approvals** choice in **Settings**:
 
@@ -79,35 +84,35 @@ If the position you chose leaves the chart, the assistant does the job instead, 
 
 Reading and searching never need approval. Your spending and step limits apply to routined runs too.
 
-**You can also ask in a chat.** Say "every weekday at 8am, send me a summary of new orders", and the Talqava assistant (or any agent with the **Routines** power) sets it up. It then appears on this page, where you can change it.
+**You can also ask in a chat.** Say "every weekday at 8am, send me a summary of new orders", and the Talqava assistant (or any agent with the **Automations** power) sets it up. It then appears on this page, where you can change it.
 
 ## How to…
 
-### Add a routine
+### Add an automation
 
-1. Under **New routine**, type a **Name**, for example "Morning news digest".
+1. Under **New automation**, type a **Name**, for example "Morning news digest".
 2. In **When**, choose how often, then the day and time.
 3. In **Who does it**, keep the assistant, or choose an agent from your organization.
 4. In **Instructions**, write what should be done each time, as you would to a new colleague. The run can't ask you questions first, so include everything it needs: where to look, what to produce, and where to put it.
-5. Press **Add routine**. The card shows when it runs next.
+5. Press **Add automation**. The card shows when it runs next.
 
-### Change a routine
+### Change an automation
 
 1. Press **Edit** on its card.
 2. Change the name, the time, who does it or the instructions.
-3. Press **Save changes**. A new time starts counting from now, and a paused routine starts again.
+3. Press **Save changes**. A new time starts counting from now, and a paused automation starts again.
 
-### Try a routine straight away
+### Try an automation straight away
 
 1. Press **Run now** on its card.
 2. If the assistant does it, the new chat opens so you can watch. If an agent does it, the **Tasks** board opens on the new task.
 
-### See what a routine did
+### See what an automation did
 
 1. Press **Last run** on its card. It opens the latest run's chat, or its task on the **Tasks** board.
 2. Read the report. For a task, accept it or send it back with a comment.
 
-### Pause, resume or delete a routine
+### Pause, resume or delete an automation
 
 1. Press **Pause** to stop it for now. The card shows **paused**.
 2. Press **Resume** to start it again; it runs at the next time due.
@@ -115,21 +120,21 @@ Reading and searching never need approval. Your spending and step limits apply t
 
 ## Tips
 
-- Press **Run now** after adding a routine, to check the instructions do what you expect.
+- Press **Run now** after adding an automation, to check the instructions do what you expect.
 - Give regular department work to that department's lead, so it lands in their queue and comes back to you for review.
-- For a routine that makes changes, leave approvals on **Ask me…** until you trust it.
-- Keep Talqava running, and your computer awake, at the times your routines are due.
+- For an automation that makes changes, leave approvals on **Ask me…** until you trust it.
+- Keep Talqava running, and your computer awake, at the times your automations are due.
 
 ## If something goes wrong
 
-- **"Give the routine a name, e.g. Morning news digest."** Fill in **Name**.
+- **"Give the automation a name, e.g. Morning news digest."** Fill in **Name**.
 - **"Write the instructions: what should be done each time?"** Fill in **Instructions**.
 - **"That time is already in the past."** A **Once** date has already gone. Pick a future date and time.
-- **"That time could not be read…"** A **Custom** routine was not in a form Talqava understands. Choose one of the plain options instead, or use one of the forms shown.
+- **"That time could not be read…"** A **Custom** automation was not in a form Talqava understands. Choose one of the plain options instead, or use one of the forms shown.
 - **"The shortest interval is 1 minute."** Use **Every few minutes** with 1 or more.
 - **"Choose an agent from your organization chart, or the Talqava assistant."** The agent you picked is not on the chart of the organization you have open. Choose again.
-- **"That one-time job has already passed."** You pressed **Resume** on a **Once** routine that already ran. **Edit** it and pick a new date.
-- **A routine seems stuck.** It is probably waiting for your approval (see **Waiting on you** on **Agents**), or, for an agent, waiting its turn in the queue (see **Tasks**).
+- **"That one-time job has already passed."** You pressed **Resume** on a **Once** automation that already ran. **Edit** it and pick a new date.
+- **An automation seems stuck.** It is probably waiting for your approval (see **Waiting on you** on **Agents**), or, for an agent, waiting its turn in the queue (see **Tasks**).
 
 ## Related guides
 

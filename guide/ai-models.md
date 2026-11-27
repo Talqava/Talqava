@@ -12,7 +12,7 @@ AI models is where you connect the AI services your agents think with: Claude, O
 ## Key ideas
 
 - **An AI service** is the company (or program on your computer) whose model does the thinking for your agents. Talqava itself is not an AI; it organizes the work.
-- **Why connect more than one.** Your whole team uses one model, but any agent can use a different one: a strong model for managers, a cheaper one for routine work. A second service also gives you backups.
+- **Why connect more than one.** Your whole team uses one model, but any agent can use a different one: a strong model for managers, a cheaper one for automation work. A second service also gives you backups.
 - **Backups keep work going.** If your main service is down, busy or out of credit, the first backup answers instead, then the next. Each switch is noted in the **Activity log**.
 - **Keys stay on your computer.** A key is checked with its service before it is saved, kept on this computer, and only ever sent to that service. Agents never see it.
 - **Local models are free and private.** Programs such as Ollama or LM Studio run models on your own computer. Nothing leaves it, but they are usually slower and less capable than paid services, and you must download a model in the program before Talqava can use it.
