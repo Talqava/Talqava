@@ -6578,39 +6578,119 @@ function chatView() {
  * Choose the AI model right where you chat. Lists Claude's models and every
  * model the other providers (Ollama, LM Studio and so on) say they have.
  */
+/**
+ * Which AI model answers, chosen in the message box. The button names the model in use; pressing it opens a short
+ * list, not every model there is: the one in use, the ones kept (starred), the ones used lately and the backups.
+ * Everything else is found by typing a few letters, or by opening a service. A long list is never shown at once.
+ */
 function modelPicker() {
   const c = state.config;
-  const pick = h("select", { class: "modelpick", "aria-label": "AI model", title: "The AI model that answers" });
-  const label = (ref) => {
+  const parts = (ref) => {
     const slash = ref.indexOf("/");
     const provider = c.providers.find((p) => p.id === ref.slice(0, slash));
     const name = ref.slice(slash + 1);
-    if (provider?.kind === "anthropic") return `Claude · ${c.models.find((m) => m.id === name)?.label || name}`;
-    return `${provider?.name || ref.slice(0, slash)} · ${name}`;
+    const claude = provider?.kind === "anthropic";
+    return { name: claude ? c.models.find((m) => m.id === name)?.label || name : name.split("/").pop(), service: claude ? "Claude" : provider?.name || ref.slice(0, slash), id: provider?.id ?? ref.slice(0, slash) };
   };
-  const show = (refs) => {
-    const all = [...new Set<any>([c.model, ...refs])];
-    fill(
-      pick,
-      all.map((ref) => h("option", { value: ref, selected: ref === c.model }, label(ref))),
-      h("option", { value: "" }, "Add or set up models…"),
-    );
+  const kept = (key) => {
+    try {
+      return JSON.parse(localStorage.getItem(key) ?? "[]").filter((x) => typeof x === "string");
+    } catch {
+      return [];
+    }
   };
-  show([]);
-  Promise.all(
-    c.providers.map(async (p) => {
-      if (p.kind === "anthropic") return c.hasApiKey ? c.models.map((m) => `${p.id}/${m.id}`) : [];
-      const listed = await api("GET", `providers/${encodeURIComponent(p.id)}/models`).catch(() => ({ models: [] }));
-      return listed.models.map((m) => `${p.id}/${m}`);
-    }),
-  ).then((lists) => pick.isConnected && show(lists.flat()));
-  pick.addEventListener("change", () => {
-    if (!pick.value) return (ui.integration = "ai-models"), go("integrations");
+  const keep = (key, list) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(list.slice(0, 12)));
+    } catch {}
+  };
+  const button = h("button", { type: "button", class: "modelbtn", "aria-haspopup": "dialog", "aria-expanded": "false", title: "The AI model that answers. Press to choose another." });
+  const name = () => fill(button, h("span", { class: "modelbtnname" }, parts(state.config.model).name), h("span", { class: "modelbtnmore", "aria-hidden": "true" }, "⌄"));
+  name();
+  // Every model of every connected service, fetched once when the list is first opened.
+  let all = null;
+  const load = async () =>
+    (all ??= (
+      await Promise.all(
+        c.providers.map(async (p) => {
+          if (p.kind === "anthropic") return c.hasApiKey ? c.models.map((m) => `${p.id}/${m.id}`) : [];
+          const listed = await api("GET", `providers/${encodeURIComponent(p.id)}/models`).catch(() => ({ models: [] }));
+          return listed.models.map((m) => `${p.id}/${m}`);
+        }),
+      )
+    ).flat());
+  const choose = (ref, box) =>
     attempt(async () => {
-      state.config = await api("PUT", "settings", { model: pick.value });
+      state.config = await api("PUT", "settings", { model: ref });
+      keep("talqava.models.recent", [ref, ...kept("talqava.models.recent").filter((x) => x !== ref)]);
+      name();
+      box.close();
     });
+  button.addEventListener("click", () => {
+    const open: any = document.querySelector(".modelmenu");
+    if (open) return open.close();
+    const box: any = h("div", { class: "modelmenu", role: "dialog", "aria-label": "Choose the AI model" });
+    const find = h("input", { type: "search", class: "modelfind", placeholder: "Find a model by name", "aria-label": "Find a model", autocomplete: "off" });
+    const list = h("div", { class: "modellist" });
+    let openService = "";
+    const row = (ref) => {
+      const m = parts(ref);
+      const starred = kept("talqava.models.kept").includes(ref);
+      const star = h("button", { type: "button", class: `modelstar ${starred ? "on" : ""}`, "aria-pressed": String(starred), "aria-label": starred ? `Stop keeping ${m.name} in the short list` : `Keep ${m.name} in the short list`, title: starred ? "Kept in your short list. Press to take it out." : "Keep in your short list" }, starred ? "★" : "☆");
+      star.addEventListener("click", (e) => {
+        e.stopPropagation();
+        keep("talqava.models.kept", starred ? kept("talqava.models.kept").filter((x) => x !== ref) : [ref, ...kept("talqava.models.kept")]);
+        draw();
+      });
+      const on = ref === state.config.model;
+      return h("div", { class: `modelrow ${on ? "on" : ""}` }, h("button", { type: "button", class: "modelrowmain", "aria-current": on ? "true" : null, onclick: () => choose(ref, box) }, h("span", { class: "modelrowname" }, m.name), h("span", { class: "modelrowby" }, m.service), on ? h("span", { class: "modelrowon" }, "In use") : null), star);
+    };
+    const group = (title, refs) => (refs.length ? [h("div", { class: "modelgroup" }, title), ...refs.map(row)] : []);
+    const draw = () => {
+      const q = find.value.trim().toLowerCase();
+      const known = new Set<any>(all ?? []);
+      const have = (ref) => !all || known.has(ref) || ref === state.config.model;
+      if (q) {
+        const hits = (all ?? []).filter((ref) => q.split(/\s+/).every((w) => ref.toLowerCase().includes(w) || parts(ref).service.toLowerCase().includes(w)));
+        return fill(list, hits.length ? [...hits.slice(0, 40).map(row), hits.length > 40 ? h("p", { class: "note small modelnote" }, `${hits.length - 40} more. Type more of the name.`) : null] : h("p", { class: "note small modelnote" }, all ? "No model with that name. Add a service under Add or set up models." : "Looking…"));
+      }
+      const current = state.config.model;
+      const starred = kept("talqava.models.kept").filter((r) => r !== current && have(r));
+      const recent = kept("talqava.models.recent").filter((r) => r !== current && !starred.includes(r) && have(r)).slice(0, 4);
+      const backups = (c.backups ?? []).filter((r) => r !== current && !starred.includes(r) && !recent.includes(r));
+      const services = c.providers.map((p) => ({ p, refs: (all ?? []).filter((r) => r.startsWith(`${p.id}/`)) })).filter((x) => x.refs.length);
+      fill(
+        list,
+        ...group("In use", [current]),
+        ...group("Kept", starred),
+        ...group("Used lately", recent),
+        ...group("Backups", backups),
+        services.length ? h("div", { class: "modelgroup" }, "Every model, by service") : all ? null : h("p", { class: "note small modelnote" }, "Looking for your services' models…"),
+        services.flatMap(({ p, refs }) => {
+          const isOpen = openService === p.id;
+          const head = h("button", { type: "button", class: "modelservice", "aria-expanded": String(isOpen), onclick: () => ((openService = isOpen ? "" : p.id), draw()) }, h("span", { class: "grow" }, p.kind === "anthropic" ? "Claude" : p.name), h("span", { class: "modelrowby" }, `${refs.length} model${refs.length === 1 ? "" : "s"}`), h("span", { "aria-hidden": "true" }, isOpen ? "⌄" : "›"));
+          return isOpen ? [head, ...refs.slice(0, 60).map(row), refs.length > 60 ? h("p", { class: "note small modelnote" }, `${refs.length - 60} more. Find one by typing its name above.`) : null] : [head];
+        }),
+      );
+    };
+    const away = (e) => !box.contains(e.target) && !button.contains(e.target) && box.close();
+    const key = (e) => e.key === "Escape" && (box.close(), button.focus());
+    box.close = () => (box.remove(), button.setAttribute("aria-expanded", "false"), document.removeEventListener("pointerdown", away, true), document.removeEventListener("keydown", key, true));
+    find.addEventListener("input", draw);
+    fill(box, find, list, h("button", { type: "button", class: "plain link small modeladd", onclick: () => (box.close(), (ui.integration = "ai-models"), go("integrations")) }, "Add or set up models…"));
+    document.body.append(box);
+    // Opens above the button, within the window.
+    const at = button.getBoundingClientRect();
+    box.style.left = `${Math.max(12, Math.min(at.left, window.innerWidth - 372))}px`;
+    box.style.bottom = `${Math.max(12, window.innerHeight - at.top + 8)}px`;
+    button.setAttribute("aria-expanded", "true");
+    document.addEventListener("pointerdown", away, true);
+    document.addEventListener("keydown", key, true);
+    draw();
+    find.focus();
+    load().then(() => box.isConnected && draw());
   });
-  return pick;
+  return button;
 }
 
 /** Moves the open chat to another space. Hidden until the chat exists. */
@@ -10109,9 +10189,24 @@ function backupSection(canEdit) {
     const where = h("input", { value: b.folder, placeholder: "The folder backups are kept in", "aria-label": "Backup folder" });
     const ask = (what) => prompt(`${what}\n\nType your backup passphrase:`);
     const size = (n) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} KB`);
+    // Restore one backup in place. It asks for the passphrase, gets the backup ready, and is finished by opening Talqava again.
+    const restoreHere = async (x) => {
+      const pw = h("input", { id: "restore-pass", type: "password", autocomplete: "off", placeholder: "Your backup passphrase", "aria-label": "Backup passphrase" });
+      const said = await libDialog(
+        `Restore the backup of ${when(x.at)}?`,
+        h("div", { class: "composeform" }, h("p", { class: "note" }, "Everything in Talqava goes back to how it was then: settings, chats, tasks, pages, files and memory. What you have now is not deleted. It is moved into a folder of its own, and you can put it back."), h("label", {}, "Backup passphrase", pw), h("p", { class: "note small" }, "Nothing changes until you quit Talqava and open it again.")),
+        [["Get it ready", () => ({ p: pw.value }), true]],
+      );
+      if (said?.p) act(() => api("POST", "security-ops/backup/restore-here", { passphrase: said.p, name: x.name }), (r) => `Ready: ${r.files} files. Quit Talqava and open it again to finish.`);
+    };
     fill(
       box,
       h("h2", {}, "Backups and stored data"),
+      b.waiting
+        ? h("div", { class: "banner restorewait", role: "status" }, h("div", { class: "grow" }, h("b", {}, b.waiting.undo ? "Ready to put back what you had. " : "A restore is ready. "), `Quit Talqava and open it again to finish: ${b.waiting.undo ? b.waiting.from : `the backup ${b.waiting.from}`}. Until then nothing has changed.`), canEdit ? h("button", { class: "small", onclick: () => act(() => api("POST", "security-ops/backup/restore-cancel"), "Called off. Nothing was changed.") }, "Call it off") : null)
+        : b.restored
+          ? h("div", { class: "banner restorewait" }, h("div", { class: "grow" }, h("b", {}, b.restored.undo ? "What you had was put back " : "Restored "), `${when(b.restored.at)}${b.restored.undo ? "." : `, from ${b.restored.from}.`} `, b.restored.keptHere ? `What was there before is kept in the folder ${b.restored.kept}, beside Talqava's data.` : ""), canEdit && b.restored.keptHere ? h("button", { class: "small", onclick: () => confirm("Put back what you had before this restore?\n\nIt is got ready now and put in place when you quit Talqava and open it again. What you have now is kept in a folder of its own.") && act(() => api("POST", "security-ops/backup/restore-undo"), "Ready. Quit Talqava and open it again to finish.") }, "Put it back") : null)
+          : null,
       h("div", { class: "card form" }, h("div", { class: "row" }, h("b", { class: "grow" }, "This computer's disk"), h("span", { class: `chip ${b.disk.state === "on" ? "on" : b.disk.state === "off" ? "bad" : ""}` }, b.disk.state === "on" ? "Encrypted" : b.disk.state === "off" ? "Not encrypted" : "Could not check")), h("p", { class: "note" }, b.disk.words), h("p", { class: "note small" }, "Talqava relies on your computer's disk encryption for what is stored here, and encrypts every backup itself.")),
       h(
         "div",
@@ -10131,7 +10226,14 @@ function backupSection(canEdit) {
                     h("button", { class: "plain", onclick: () => ((p) => p && act(() => api("POST", "security-ops/backup/restore", { passphrase: p }), (r) => `${r.files} files were written to ${r.folder}. Your current data was not touched.`))(ask("Restore the newest backup into a new folder next to Talqava's data folder. Your current data is not touched; the Security guide says how to switch to the restored copy.")) }, "Restore into a new folder"),
                   )
                 : null,
-              b.backups.length ? h("ul", { class: "refused" }, b.backups.map((x) => h("li", {}, x.name, h("span", { class: "note small" }, ` · ${size(x.bytes)}`)))) : null,
+              b.backups.length
+                ? h(
+                    "div",
+                    { class: "backuplist" },
+                    h("div", { class: "label" }, "Your backups"),
+                    b.backups.map((x) => h("div", { class: "row backuprow" }, h("div", { class: "grow" }, h("b", {}, when(x.at)), h("span", { class: "note small" }, ` · ${size(x.bytes)} · ${x.name}`)), canEdit ? h("button", { class: "small", onclick: () => restoreHere(x) }, "Restore this one…") : null)),
+                  )
+                : null,
             ]
           : null,
       ),

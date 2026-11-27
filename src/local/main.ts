@@ -1,5 +1,7 @@
 // Starts the local edition: npm start, or the talqava command the installer adds.
 //   --open   also open the app in the browser once it is ready
+// A restore that is waiting is put in place first, before anything has read the data.
+import "./apply-restore.ts";
 import { execFile } from "node:child_process";
 import { start } from "./server.ts";
 

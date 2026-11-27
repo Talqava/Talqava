@@ -75,3 +75,72 @@ test("only the newest few backups are kept, the nightly one runs once a day, and
   assert.deepEqual([s.ready, s.nightly, s.keep], [true, false, B.KEEP_BACKUPS]);
   assert.ok(["on", "off", "unknown"].includes(s.disk.state) && s.disk.words);
 });
+
+test("a backup is restored in place at the next start, what was there is kept, and it can be put back", async () => {
+  const R = await import("../../src/local/restore-pending.ts");
+  const data = process.env.TALQAVA_DATA_DIR!;
+  const notes = path.join(data, "organizations", "one", "notes.txt");
+  // Since the backup, the notes changed and a file was added.
+  fs.writeFileSync(notes, "Acme owes 900.");
+  fs.writeFileSync(path.join(data, "organizations", "one", "new.txt"), "made after the backup");
+
+  assert.throws(() => B.stageRestore("the wrong passphrase!"), /does not open/);
+  assert.equal(B.backupStatus().waiting, null, "a wrong passphrase leaves nothing waiting");
+  const staged = B.stageRestore("correct horse battery staple", undefined, new Date("2026-11-27T09:00:00Z"));
+  assert.ok(staged.files >= 2);
+  assert.deepEqual([B.backupStatus().waiting?.from, B.backupStatus().waiting?.files], [staged.name, staged.files]);
+  assert.equal(fs.readFileSync(notes, "utf8"), "Acme owes 900.", "nothing in use changes until Talqava starts again");
+
+  // Called off: nothing is waiting, nothing changed.
+  B.cancelRestore();
+  assert.equal(B.backupStatus().waiting, null);
+  assert.equal(R.applyPendingRestore(data), null);
+  assert.equal(fs.readFileSync(notes, "utf8"), "Acme owes 900.");
+
+  // Made ready again, and Talqava starts.
+  B.stageRestore("correct horse battery staple");
+  const done = R.applyPendingRestore(data, new Date("2026-11-27T09:05:00Z"))!;
+  assert.equal(path.basename(done.kept), "data-before-restore-2026-11-27-09-05-00");
+  assert.equal(fs.readFileSync(notes, "utf8"), "Acme owes 400.", "the backup's files are in place");
+  assert.equal(fs.existsSync(path.join(data, "organizations", "one", "new.txt")), false);
+  assert.equal(fs.readFileSync(path.join(done.kept, "organizations", "one", "notes.txt"), "utf8"), "Acme owes 900.", "what was there before is kept, not deleted");
+  assert.equal(fs.readFileSync(path.join(done.kept, "organizations", "one", "new.txt"), "utf8"), "made after the backup");
+  assert.ok(fs.existsSync(path.join(data, "worktrees", "big", "copy.txt")), "what a backup never holds stays where it was");
+  assert.ok(B.listBackups().length > 0, "and so do the backups themselves");
+  assert.equal(fs.existsSync(R.pendingDir(data)), false);
+  assert.equal(R.applyPendingRestore(data), null, "it is done once");
+  const last = B.backupStatus().restored!;
+  assert.deepEqual([last.from, last.keptHere, last.undo], [staged.name, true, false]);
+
+  // Put back what was there before: the same way, at the next start.
+  assert.match(B.undoRestore().from, /what you had before the restore of 27 Nov 2026/);
+  assert.equal(B.backupStatus().waiting?.undo, true);
+  R.applyPendingRestore(data, new Date("2026-11-27T09:10:00Z"));
+  assert.equal(fs.readFileSync(notes, "utf8"), "Acme owes 900.");
+  assert.equal(fs.readFileSync(path.join(data, "organizations", "one", "new.txt"), "utf8"), "made after the backup");
+  assert.equal(B.backupStatus().restored!.undo, true);
+});
+
+test("a restore that cannot be put in place changes nothing", async () => {
+  const R = await import("../../src/local/restore-pending.ts");
+  const data = process.env.TALQAVA_DATA_DIR!;
+  const notes = path.join(data, "organizations", "one", "notes.txt");
+  const before = fs.readFileSync(notes, "utf8");
+  B.stageRestore("correct horse battery staple");
+  // Something in the way: a waiting entry that cannot be moved over what is there.
+  const waiting = R.pendingDir(data);
+  fs.mkdirSync(path.join(data, "backups", "x"), { recursive: true });
+  fs.rmSync(path.join(waiting, "organizations"), { recursive: true });
+  fs.symlinkSync(path.join(waiting, "nowhere", "at", "all"), path.join(waiting, "organizations"));
+  fs.chmodSync(waiting, 0o500);
+  try {
+    assert.equal(R.applyPendingRestore(data), null);
+  } finally {
+    fs.chmodSync(waiting, 0o700);
+  }
+  assert.equal(fs.readFileSync(notes, "utf8"), before, "what was in use is back where it was");
+  assert.equal(fs.existsSync(path.join(data, "organizations", "one", "new.txt")), true);
+  // It can still be called off.
+  B.cancelRestore();
+  assert.equal(fs.existsSync(waiting), false);
+});
