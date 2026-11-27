@@ -1,5 +1,6 @@
 // Tools that only make sense on the user's own machine: a shell and direct
 // file access. The hosted edition never loads this file.
+import { withDiscovery } from "./tool-discovery.ts";
 import { hideSecrets, refusedCommand } from "./safety.ts";
 import fs from "node:fs";
 import path from "node:path";
@@ -677,13 +678,13 @@ async function connectors(enabled: boolean, agent?: string) {
   if (!enabled) return { tools: [] as Tool[], note: [] as string[], names: [] as string[] };
   // A connected WordPress site comes with its own tools, for agents with the same power as other connected services.
   // So do the services built on the connector kit: one tool per action, asking first where the owner's rule says so.
-  const site = [...wordpressTools(), ...serviceTools(agent)];
+  const site = [...wordpressTools(), ...serviceTools(agent)].map((t) => ({ ...t, lazy: true }) as Tool);
   const siteNote = [...(wordpressTools().length ? ["A WordPress site is connected: use the wordpress__content tool to read, draft and update its posts and pages, and wordpress__publish where the owner allows publishing."] : []), ...serviceNotes(agent)];
   if (!cfg.mcpServers.length) return { tools: site, note: siteNote, names: site.map((t) => t.name) };
   const { tools: found, problems } = await connectorTools(cfg.mcpServers);
   // A connector added from outside is another company's service: whatever is put into one of its tools is sent to it.
   // A task that has read information that may not leave does not use them (see sensitivity.ts).
-  const outside = found.map((t) => ({ ...t, run: (input: any, context: any) => (leaving("a connector"), t.run(input, context)) }) as Tool);
+  const outside = found.map((t) => ({ ...t, lazy: true, run: (input: any, context: any) => (leaving("a connector"), t.run(input, context)) }) as Tool);
   const tools = [...outside, ...site];
   const note = [...(problems.length ? [`These connectors could not be reached, so their tools are missing: ${problems.join("; ")}.`] : []), ...siteNote];
   return { tools, note, names: tools.map((t) => t.name) };
@@ -722,7 +723,10 @@ export function localRunSpec(jobs: JobBook) {
     // A session the owner reaches from Telegram cannot run commands on this computer at all: the request comes from
     // outside the app, and an approval cannot be seen there. Saved secrets are taken out of every tool's result.
     const spec = { ...guarded, tools: conversation.via === "telegram" ? guarded.tools.filter((t) => t.name !== "bash") : guarded.tools, clean: hideSecrets };
-    return { ...spec, tools: spec.tools.map((t) => ({ ...t, run: (input: any, context: any) => withLevels(levels, () => ((t.name === "http_request" && !["GET", "HEAD"].includes(String(input?.method ?? "GET").toUpperCase())) || (t.name === "browser" && input?.action === "type") ? leaving(t.name === "browser" ? "a web page" : "a web address", conversation.id) : null, t.run(input, context)), model, read) }) as Tool) };
+    const wrapped = spec.tools.map((t) => ({ ...t, run: (input: any, context: any) => withLevels(levels, () => ((t.name === "http_request" && !["GET", "HEAD"].includes(String(input?.method ?? "GET").toUpperCase())) || (t.name === "browser" && input?.action === "type") ? leaving(t.name === "browser" ? "a web page" : "a web address", conversation.id) : null, t.run(input, context)), model, read) }) as Tool);
+    // When many service tools are connected they are held back and looked up as needed (see tool-discovery.ts).
+    const reach = withDiscovery(conversation.id, wrapped);
+    return { ...spec, tools: reach.tools, system: reach.note ? `${spec.system}\n\n${reach.note}` : spec.system };
   };
 }
 

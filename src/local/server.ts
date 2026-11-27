@@ -1,4 +1,5 @@
 // Web server of the local edition: serves the chat page and the small JSON API behind it.
+import { forgetFound } from "./tool-discovery.ts";
 import { stripTypeScriptTypes } from "node:module";
 import http from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -1282,6 +1283,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
     if (!action && req.method === "DELETE") {
       engine.stop(id);
       conversations.remove(id);
+      forgetFound(id);
       return send(res, 200, { ok: true });
     }
     if (action === "messages" && req.method === "POST") {
