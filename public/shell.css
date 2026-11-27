@@ -278,3 +278,11 @@ details.why > p.note { margin: 6px 0 0; }
 .autoout.wait { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--line2)); }
 .autoout.bad { color: var(--bad-ink); border-color: color-mix(in srgb, var(--bad) 45%, var(--line2)); }
 td.autonum .autoout { margin: 0 0 0 8px; }
+
+/* Security: what holds whatever an agent is told. */
+.guaranteelist { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.guaranteelist li { padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--soft); font-size: 13.5px; }
+.guaranteelist li b { color: var(--text); }
+td.autonum .autoby { display: block; }
+.brokenlist { display: grid; gap: 8px; }
+.brokenlist::before { display: none; }

@@ -263,7 +263,10 @@ async function runJob(job: Job, { byHand = false } = {}): Promise<{ conversation
   // One run at a time: while the last one is still being worked on, or waits for the owner, a run that comes up on
   // its timer is left out and the history says so. Two runs of the same thing would only cost twice and answer over
   // each other. A run the owner starts by hand always goes: they asked for it.
-  const going = byHand ? null : stillGoing(job);
+  // Its own limit for the month, when the owner set one: a hard stop, said in the history and the Inbox.
+  const spent = !byHand && job.limit ? spentThisMonth(job.id) : 0;
+  const over = !byHand && job.limit && spent >= job.limit ? `Left out: it has reached its limit of ${dollars(job.limit)} for this month (${dollars(spent)} spent). Raise the limit under Automations to carry on.` : null;
+  const going = over ?? (byHand ? null : stillGoing(job));
   if (going) {
     keep({ skipped: true, problem: going });
     return { skipped: going };
@@ -277,6 +280,9 @@ async function runJob(job: Job, { byHand = false } = {}): Promise<{ conversation
     throw err;
   }
 }
+/** A run that comes up on its timer: left out while the one before is still going, or once the automation's own monthly limit is reached. */
+export const runTimedJob = (job: Job) => runJob(job);
+
 /** The task behind a run, wherever it is on the chart now. */
 function taskOfRun(id: string) {
   for (const org of orgs.list().orgs) {
@@ -323,6 +329,14 @@ function runResult(r: { taskId?: string; conversationId?: string; problem?: stri
     return { outcome: "done", words: "Finished.", cost };
   }
   return { outcome: "done", words: "Finished. It used no AI model.", cost: 0 };
+}
+
+const dollars = (n: number) => `$${n.toFixed(2)}`;
+
+/** What an automation's runs have cost since the calendar month began. */
+function spentThisMonth(job: string, now = new Date()): number {
+  const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  return (getConfig().jobRuns ?? []).filter((r) => r.job === job && r.at >= from && !r.skipped).reduce((sum, r) => sum + runResult(r).cost, 0);
 }
 
 /** A report of ordinary length, for an estimate before there is any history: what goes in (the request and what it reads) and what comes out. */
@@ -1684,7 +1698,11 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
   if (parts[0] === "gateway") {
     if (req.method === "GET" && !parts[1]) return send(res, 200, await gatewayState());
     // What has stopped working: AI services, and connections to other services whose key is no longer accepted.
-    if (req.method === "GET" && parts[1] === "problems") return send(res, 200, [...serviceProblems(), ...connectionProblems()]);
+    if (req.method === "GET" && parts[1] === "problems") {
+      // A Telegram bot that has stopped answering is a problem like any other broken connection.
+      const tg = telegramStatus();
+      return send(res, 200, [...serviceProblems(), ...connectionProblems(), ...(tg.state !== "off" && tg.problem ? [{ id: "telegram", name: "Telegram", problem: tg.problem, integration: "telegram" }] : [])]);
+    }
     if (req.method === "POST" && parts[1] === "check") return send(res, 200, await attempt(async () => (await refreshHealth(true), serviceProblems())));
     if (req.method === "POST" && parts[1] === "find-local") return send(res, 200, await attempt(() => findLocal()));
     if (req.method === "PUT" && parts[1] === "backups") return send(res, 200, await attempt(() => setBackups(body.backups)));
@@ -2367,7 +2385,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
     const all = await jobs.list();
     const known = new Map(orgs.list().orgs.flatMap((o) => o.members.map((m) => [`${o.id}|${m.bot}`, { title: m.title, org: o.name }] as const)));
     const lastOf = new Map((getConfig().jobRuns ?? []).map((r) => [r.job, r]));
-    return send(res, 200, all.map((j) => ({ ...j, costs: costOfAutomation(j.schedule, { free: briefingOf(j.briefing)?.kind === "free", model: j.model, job: j.id }), last: lastOf.has(j.id) ? { at: lastOf.get(j.id)!.at, ...runResult(lastOf.get(j.id)!) } : null, plain: describeSchedule(j.schedule), ownerName: j.owner ? (known.get(`${j.org}|${j.owner}`)?.title ?? null) : null, ownerOrg: j.owner ? (known.get(`${j.org}|${j.owner}`)?.org ?? null) : null })));
+    return send(res, 200, all.map((j) => ({ ...j, spent: spentThisMonth(j.id), costs: costOfAutomation(j.schedule, { free: briefingOf(j.briefing)?.kind === "free", model: j.model, job: j.id }), last: lastOf.has(j.id) ? { at: lastOf.get(j.id)!.at, ...runResult(lastOf.get(j.id)!) } : null, plain: describeSchedule(j.schedule), ownerName: j.owner ? (known.get(`${j.org}|${j.owner}`)?.title ?? null) : null, ownerOrg: j.owner ? (known.get(`${j.org}|${j.owner}`)?.org ?? null) : null })));
   }
   if (route === "POST jobs" && !parts[1]) return send(res, 200, await attempt(() => jobs.create({ ...body, owner: jobOwner(body.owner), org: body.owner ? orgs.active().id : null })));
   if (route === "POST jobs" && parts[2] === "run") {
@@ -2378,7 +2396,14 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
     return send(res, 200, ran);
   }
   if (route === "PATCH jobs") {
-    const { enabled, ...rest } = body;
+    const { enabled, limit, ...rest } = body;
+    // The most it may spend a month: a number of dollars, or nothing for no limit of its own.
+    if (limit !== undefined) {
+      const n = limit === null || limit === "" ? null : Number(limit);
+      if (n !== null && (!Number.isFinite(n) || n <= 0 || n > 100_000)) throw new HttpError(400, "Give the limit as dollars a month, such as 5, or leave it empty for no limit.");
+      await attempt(() => jobs.update(parts[1], { limit: n }));
+      audit({ ...requestActor(req), kind: "schedule", action: n === null ? "Took the monthly limit off an automation" : `Set an automation's monthly limit to ${dollars(n)}` });
+    }
     if (Object.keys(rest).length) await attempt(() => jobs.edit(parts[1], { ...rest, ...(rest.owner !== undefined ? { owner: jobOwner(rest.owner), org: orgs.active().id } : {}) }));
     return send(res, 200, enabled === undefined ? (await jobs.list()).find((j) => j.id === parts[1]) : await attempt(() => jobs.update(parts[1], { enabled: Boolean(enabled) })));
   }
@@ -2464,7 +2489,7 @@ export function start() {
       fs.writeFileSync(path.join(DATA, "running.json"), JSON.stringify({ port: typeof address === "object" && address ? address.port : PORT, pid: process.pid, startedAt: new Date().toISOString() }), { mode: 0o600 });
     } catch {}
   });
-  jobs.start((job) => runJob(job));
+  jobs.start(runTimedJob);
   startTelegram(askFromTelegram);
   // The public list of model prices, so receipts are priced from the start (kept for a day; offline is fine).
   void loadModelList().catch(() => {});

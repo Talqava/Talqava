@@ -2212,6 +2212,24 @@ test("a schedule with an agent becomes a task in its queue; without one, or if t
     const runs = (await call("GET", "jobs/runs")).data.filter((r: { job: string }) => r.job === job.id);
     assert.deepEqual(runs.map((r: { name: string; taskId?: string; conversationId?: string; gone: boolean }) => [r.name, Boolean(r.taskId), Boolean(r.conversationId), r.gone]), [["Monday pipeline", false, true, false], ["Monday pipeline", false, true, false], ["Monday pipeline", true, false, false]]);
     assert.equal(runs[0].conversationId, chat.conversationId);
+    assert.deepEqual([runs[0].outcome, runs[0].words], ["done", "Finished."], "the history says how a run turned out, not only that it began");
+
+    // Its own limit for the month: once its runs have cost that much, a run that comes up on its timer is left out, and says so.
+    assert.equal((await call("PATCH", `jobs/${job.id}`, { limit: "lots" })).status, 400);
+    assert.equal((await call("PATCH", `jobs/${job.id}`, { limit: 2 })).data.limit, 2);
+    const paid = store.conversations.get(chat.conversationId)!;
+    paid.usage.cost = 3;
+    store.conversations.save(paid, { touch: false });
+    const mine = async () => (await app.jobs.list()).find((j: { id: string }) => j.id === job.id)!;
+    const left = await app.runTimedJob(await mine());
+    assert.match(left.skipped!, /reached its limit of \$2\.00 for this month \(\$3\.00 spent\)/);
+    const shown = (await call("GET", "jobs")).data.find((j: { id: string }) => j.id === job.id);
+    assert.deepEqual([Math.round(shown.spent), shown.last.outcome], [3, "skipped"]);
+    assert.equal((await call("GET", "jobs/runs")).data.filter((r: { job: string }) => r.job === job.id)[0].outcome, "skipped", "and the history shows the run that was left out");
+    // With the limit taken off, the timed run goes again.
+    assert.equal((await call("PATCH", `jobs/${job.id}`, { limit: null })).data.limit, null);
+    script.push(say("Done again."));
+    assert.ok((await app.runTimedJob(await mine())).conversationId);
     await call("DELETE", `jobs/${job.id}`);
     assert.equal((await call("GET", "jobs/runs")).data.find((r: { job: string }) => r.job === job.id).gone, true);
     // The page's code is written in TypeScript and handed to the browser as JavaScript, with no build step.

@@ -17,6 +17,8 @@ Security is where you decide who can open Talqava, how they prove who they are, 
 
 ## Key ideas
 
+**What agents cannot get around.** The Security page lists five things Talqava enforces itself, in its own code, not by asking the AI model to behave. An agent that forgets its instructions in a long conversation, or reads a web page or an email written to mislead it, still cannot do any of them: a step that sends, changes or deletes waits for your yes (unless you let that agent run without asking); a short list of commands is never run; keys, tokens and passwords saved in Talqava are taken out of anything a tool returns before the AI model sees it; spending stops at a task's budget and at a monthly limit; and a session reached from Telegram has no command line.
+
 **Off by default.** With nobody added, Talqava works as it always has: whoever uses this computer can do everything, with no sign-in. That suits one owner on their own computer.
 
 **Once on, everyone signs in, including you.** Each person has their own email and password. Passwords are stored in a scrambled form that cannot be turned back into the password.

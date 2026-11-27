@@ -238,3 +238,31 @@ test("a run that fails says why on the conversation, and trying again asks once 
   assert.deepEqual(saved.messages.map((m) => m.role), ["user", "assistant"], "the same request was asked once more; nothing was added");
   assert.ok(events.some((e) => e.type === "resumed" && e.text === "Trying again."));
 });
+
+test("a saved key in what a tool returns never reaches the AI model or the chat's record", async () => {
+  const leaky = defineTool({ name: "print_settings", description: "Prints settings.", properties: {}, run: () => "apiKey=SAVED-KEY-0123456789 region=eu" });
+  const careful = new Engine({
+    conversations,
+    resolveRun: (): RunSpec => ({
+      model: new AnthropicModel({ apiKey: "test-key", model: "claude-opus-5-5", effort: "high" }),
+      system: "You are a test agent.",
+      tools: [leaky],
+      hostedTools: [],
+      mcpServers: [],
+      approvalMode: "auto",
+      // What Talqava does with every tool's result (src/local/safety.ts), here with one known key.
+      clean: (output) => (typeof output === "string" ? output.split("SAVED-KEY-0123456789").join("[hidden: a key saved in Talqava]") : output),
+    }),
+  });
+  script.push(call("print_settings", {}), say("Your region is eu."));
+  const { id } = await conversations.create();
+  const before = mock.requests.length;
+  await (await careful.startRun(id, "which region are we in?")).done;
+  const saved = (await conversations.get(id))!;
+  assert.equal(lastResult(saved).content, "apiKey=[hidden: a key saved in Talqava] region=eu");
+  assert.equal(JSON.stringify(saved).includes("SAVED-KEY-0123456789"), false, "not in the chat's record");
+  const sent = mock.requests.slice(before);
+  assert.equal(sent.length, 2);
+  assert.equal(JSON.stringify(sent.map((r) => r.body)).includes("SAVED-KEY-0123456789"), false, "not in anything sent to the AI service");
+  assert.match(JSON.stringify(sent[1].body), /region=eu/, "the rest of the result is sent as it is");
+});
