@@ -59,7 +59,7 @@ export function securityOverview(): { protections: Protection[]; attention: { le
       name: "Sensitive information stays where you allow",
       state: !cloud ? "on" : limited.length >= 2 ? "on" : limited.length ? "partly" : "off",
       words: !cloud ? "Your agents run on models on this computer, so nothing is sent to an outside AI service." : limited.length ? `${limited.map((l) => LEVEL_WORDS[l].name).join(" and ")} ${limited.length === 1 ? "is" : "are"} limited in where ${limited.length === 1 ? "it" : "they"} may be sent.` : "Every level, including Restricted, may be sent to any connected AI service.",
-      next: cloud && limited.length < 2 ? "Under “Sensitive information”, press “Use the recommended settings”." : undefined,
+      next: cloud && limited.length < 2 ? ((getConfig().labs ?? []).includes("company") ? "Under “Sensitive information”, press “Use the recommended settings”." : "Switch on Company features under Settings › Labs; then, under “Sensitive information”, press “Use the recommended settings”.") : undefined,
     },
     {
       id: "masking",

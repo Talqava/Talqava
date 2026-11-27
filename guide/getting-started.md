@@ -96,18 +96,30 @@ The box at the top finds anything: files by name or by the words inside, tasks, 
 - **Marketplace**: ready-made agents, teams, company templates, playbooks, page packs, Office templates and connectors, free.
 
 **Files**: What you make and what your agents work from. Its tabs:
-- **Office**, **Documents**, **Sheets**, **Slides** and **Notes**: what you and your agents make together. See [Office](office.md).
+- **Office**, **Documents** and **Notes**: what you and your agents make together. See [Office](office.md). **Sheets** and **Slides** are set aside; see Labs below.
 - **Workspace** (procedures, price lists and decisions as pages), **Library** (your files, in folders), **Memory** (what agents should always remember) and **Skills** (procedures agents wrote down for themselves).
 
 **Search**: Puts you in the box at the top, which finds anything.
 
 **The account button**, the round one at the very bottom. It opens a menu with:
-- **Connections**: connect AI models, Git and GitHub, other services, and keys.
+- **Connections**: connect AI models, other services, and keys.
 - **Security**: who can open Talqava and what each person may do, which AI services may receive sensitive information, rules every agent must follow, alerts, and backups. See [Security](security.md).
 - **Activity log**: a full record of every operation, by you and by each agent, sealed so that changes to it show.
 - **Settings**: approvals, budgets, cost saving, privacy and how Talqava looks.
 
 **Help**: Opens these guides, at the page that explains the screen you are on.
+
+## Labs: parts that are set aside
+
+To keep Talqava simple, some parts are built but hidden until you switch them on. Open the account button at the bottom left, then **Settings**, and scroll to **Labs**:
+
+- **Sheets and Slides**: spreadsheets that calculate and presentation decks, under Files.
+- **Organization designer**: example structures to copy, how you run the organization, and each position's goals and decisions.
+- **Company features**: people with their own sign-in and roles, single sign-on, rules for sensitive information, record-keeping rules and a feed for a monitoring system, under Security.
+- **Company templates and playbooks**, in the Marketplace.
+- **Git repositories**: let agents work on code in repositories on this computer, under Connections.
+
+Nothing is deleted when a part is off. Whatever you made with it is kept, agents can still use it, and it comes back when you switch it on. A part you were already using (people and sign-in, a connected repository, a record-keeping rule) stays visible without the switch. Other guides describe these parts as if they are switched on.
 
 ## Good habits from day one
 

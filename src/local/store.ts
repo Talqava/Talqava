@@ -140,6 +140,8 @@ export interface Config {
   privacy?: "off" | "mask";
   /** Whether the Talqava assistant may read library documents and pages limited to some groups (never Private ones). On unless the owner turns it off. */
   assistantSeesGroups?: boolean;
+  /** Parts of Talqava that are set aside and shown only when the owner switches them on (Settings › Labs). */
+  labs?: string[];
   /** The last model check of each model, by ref. */
   modelChecks: Record<string, CheckResult>;
   /** Repositories bots may work on, by their top folder. */
@@ -185,6 +187,9 @@ export function getConfig(): Config {
   return cfg;
 }
 
+/** The parts of Talqava that can be set aside: spreadsheets and slides, the organization designer, features for a company with several people, company templates and playbooks, and Git repositories. */
+export const LABS = ["office", "org", "company", "templates", "git"];
+
 export function saveConfig(patch: Partial<Config>): Config {
   const cfg = { ...getConfig(), ...patch };
   writeJson(CONFIG_FILE(), cfg);
@@ -216,6 +221,7 @@ export function publicConfig() {
     })),
     backups: cfg.backups ?? [],
     assistantSeesGroups: cfg.assistantSeesGroups !== false,
+    labs: (cfg.labs ?? []).filter((id) => LABS.includes(id)),
     planFirst: cfg.planFirst ?? "leads",
     moveUp: cfg.moveUp !== false,
     guardrails: cfg.guardrails ?? {},
