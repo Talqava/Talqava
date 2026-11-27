@@ -348,6 +348,22 @@ const AREAS = {
   files: { name: "Files", views: [["office", "Office"], ["docs", "Documents"], ["sheets", "Sheets"], ["slides", "Slides"], ["notes", "Notes"], ["workspace", "Workspace"], ["library", "Library"], ["memory", "Memory"], ["skills", "Skills"]] },
   more: { name: "Account", views: [["integrations", "Connections"], ["security", "Security"], ["audit", "Activity log"], ["settings", "Settings"]] },
 };
+/**
+ * Parts of Talqava that are set aside: built, but shown only when the owner switches them on under Settings › Labs.
+ * Nothing is deleted when one is off; what was made with it is kept.
+ */
+const LABS = [
+  ["office", "Sheets and Slides", "Spreadsheets that calculate and presentation decks, under Files."],
+  ["org", "Organization designer", "Example structures to copy, how you run the organization, and each position's goals and decisions."],
+  ["company", "Company features", "People with their own sign-in and roles, single sign-on, and rules for sensitive information, under Security."],
+  ["templates", "Company templates and playbooks", "Whole-company starting points and ready-made processes, in the Marketplace."],
+  ["git", "Git repositories", "Let agents work on code in repositories on this computer, under Connections."],
+];
+const lab = (id) => (state.config?.labs ?? []).includes(id);
+/** Pages that belong to a set-aside part. */
+const LAB_VIEWS = { sheets: "office", slides: "office" };
+const viewShown = (view) => !LAB_VIEWS[view] || lab(LAB_VIEWS[view]);
+
 /** The tab a page belongs under: itself, or the page it was opened from (a task under Agents, a project under Projects). */
 const tabOf = (area, view) => AREAS[area].also?.[view] ?? view;
 const areaOf = (view) => Object.keys(AREAS).find((a) => AREAS[a].views.some(([v]) => v === view) || AREAS[a].also?.[view]) ?? null;
@@ -355,7 +371,7 @@ const areaOf = (view) => Object.keys(AREAS).find((a) => AREAS[a].views.some(([v]
 const lastIn = (area) => {
   try {
     const v = localStorage.getItem(`talqava.area.${area}`);
-    return AREAS[area].views.some(([x]) => x === v) ? v : AREAS[area].views[0][0];
+    return AREAS[area].views.some(([x]) => x === v) && viewShown(v) ? v : AREAS[area].views[0][0];
   } catch {
     return AREAS[area].views[0][0];
   }
@@ -370,7 +386,7 @@ function renderAreaTabs() {
     localStorage.setItem(`talqava.area.${area}`, at);
   } catch {}
   ui.tabs.setAttribute("aria-label", `Parts of ${AREAS[area].name}`);
-  fill(ui.tabs, h("span", { class: "areaname" }, AREAS[area].name), AREAS[area].views.map(([v, label]) => h("button", { class: `areatab ${at === v ? "on" : ""}`, "aria-current": at === v ? "page" : null, onclick: () => go(v) }, label)));
+  fill(ui.tabs, h("span", { class: "areaname" }, AREAS[area].name), AREAS[area].views.filter(([v]) => viewShown(v) || v === at).map(([v, label]) => h("button", { class: `areatab ${at === v ? "on" : ""}`, "aria-current": at === v ? "page" : null, onclick: () => go(v) }, label)));
 }
 
 // Line icons for the rail, drawn on a 20 px grid.
@@ -562,11 +578,12 @@ function renderTop() {
   );
   ui.spent = h("div", { class: "spent" });
   const bots = ["home", "quest"].includes(state.view); // the repository and quest spending belong to the bots' work pages
+  const repos = bots && (lab("git") || c.projects.length > 0); // the repository picker is part of Git, which is set aside unless in use
   renderRail();
   fill(ui.top,
     h("button", { class: "menubtn", "aria-label": "Menu", "aria-expanded": String(document.body.classList.contains("menuopen")), onclick: () => document.body.classList.toggle("menuopen") }, h("span", { "aria-hidden": "true" }, "☰")),
     ...[
-      bots
+      repos
         ? h(
             "div",
             { class: "repo", title: state.project || "Tasks work in the workspace folder. Connect repositories under Connections → Git." },
@@ -692,7 +709,7 @@ function paletteItems() {
   }
   const needle = text.toLowerCase();
   const commands = [
-    ...COMMANDS,
+    ...COMMANDS.filter(([name]) => lab("office") || !["Sheets", "Slides"].includes(name)),
     ...(state.templates ?? []).map((t) => [`Standard task: ${t.name}`, () => (go("home"), openCoreQuest(t.id))]),
     ...bots.map((b) => [`Edit ${b.name}`, () => go("bot", b.id)]),
   ];
@@ -2538,6 +2555,7 @@ async function composeMail() {
 /** What a role answers for: its targets, what it decides itself, and what it must take to its lead. Nothing when its file says none. */
 function governanceBox(bot) {
   const g = bot?.governance;
+  if (!lab("org")) return null;
   if (!g || !(g.kpis?.length || g.decides?.length || g.escalates?.length)) return null;
   const col = (label, items) => (items?.length ? h("div", { class: "gcol" }, h("div", { class: "label" }, label), h("ul", {}, items.map((x) => h("li", {}, x)))) : null);
   return h("div", { class: "govern" }, col("Measured on", g.kpis), col("Decides itself", g.decides), col("Must escalate", g.escalates));
@@ -3228,11 +3246,11 @@ function renderOrg() {
       { class: "composeform" },
       h("label", {}, "Name", name),
       h("label", {}, "Mission", mission),
-      philosophy,
+      lab("org") ? philosophy : null,
       h("label", {}, "Commitments above this many dollars need your approval", limit),
-      h("div", { class: "label", style: "margin-top: 10px" }, "Copy an example"),
-      h("p", { class: "note small" }, "Adds the example's positions you don't have yet, with its lines. Nothing you have is removed or moved. Afterwards, work follows the lines on your chart, whichever example you used: an agent hands work to the positions below it or on a dotted line to it, requests work from other groups' leads, and can ask anyone a question."),
-      h("div", { class: "row wrap" }, exIndustry, exStructure, h("button", { class: "small", onclick: () => (dialogDone("example"), null) }, "Copy")),
+      lab("org") ? h("div", { class: "label", style: "margin-top: 10px" }, "Copy an example") : null,
+      !lab("org") ? null : h("p", { class: "note small" }, "Adds the example's positions you don't have yet, with its lines. Nothing you have is removed or moved. Afterwards, work follows the lines on your chart, whichever example you used: an agent hands work to the positions below it or on a dotted line to it, requests work from other groups' leads, and can ask anyone a question."),
+      !lab("org") ? null : h("div", { class: "row wrap" }, exIndustry, exStructure, h("button", { class: "small", onclick: () => (dialogDone("example"), null) }, "Copy")),
       h("div", { class: "label", style: "margin-top: 10px" }, "Save or share it"),
       h("p", { class: "note small" }, "One readable file with the chart and the agents you made or edited. No keys, tasks, memory or library files."),
       h("div", { class: "row wrap" }, h("button", { class: "small", onclick: () => dialogDone("export") }, "Export this organization"), h("button", { class: "small", onclick: () => dialogDone("import") }, "Import an organization…")),
@@ -4394,7 +4412,8 @@ async function integrationsView() {
   }
 
   // One directory: every service, connected, available or coming, filed under plain categories, with a search box.
-  const all = list.integrations;
+  // Git repositories are set aside unless switched on under Labs, or already in use.
+  const all = list.integrations.filter((i) => i.id !== "git" || lab("git") || i.state === "connected");
   const count = (state) => all.filter((i) => (state === "available" ? i.state === "needs-setup" || i.state === "unavailable" : i.state === state)).length;
   const SHOW = [
     ["all", `Everything (${all.length})`],
@@ -5329,11 +5348,11 @@ async function marketView() {
     const kitSection = (kind, title, note) => ((list) => (list.length ? h("section", {}, h("h2", {}, title), h("p", { class: "note", style: "margin: -6px 0 12px" }, note), h("div", { class: "mgrid wide" }, list.map(kitCard))) : null))(kits.filter((k) => k.kind === kind));
     fill(
       results,
-      kitSection("company", "Company templates", "A running start for your kind of business: the positions on your chart, the pages your agents follow, and automations, set up together."),
+      !lab("templates") ? null : kitSection("company", "Company templates", "A running start for your kind of business: the positions on your chart, the pages your agents follow, and automations, set up together."),
       market.officeTemplates?.length && !cat && (!needle || market.officeTemplates.some((t) => `${t.name} ${t.summary}`.toLowerCase().includes(needle)))
         ? h("section", {}, h("h2", {}, "Office templates"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Ready-made documents and sheets: a proposal, a quote, a budget, a cash forecast."), h("div", { class: "mgrid wide" }, market.officeTemplates.filter((t) => !needle || `${t.name} ${t.summary}`.toLowerCase().includes(needle)).map(officeTemplateCard)))
         : null,
-      kitSection("playbook", "Playbooks", "One known process, ready to run: its procedure as a page, an automation for the group that owns it, and Run it now."),
+      !lab("templates") ? null : kitSection("playbook", "Playbooks", "One known process, ready to run: its procedure as a page, an automation for the group that owns it, and Run it now."),
       featured.length
         ? h(
             "section",
@@ -7631,6 +7650,27 @@ function settingsView() {
     h("p", { class: "note small" }, "Files your agents work on are kept in ", h("code", {}, c.workspace), ". Everything else Talqava knows is in ", h("code", {}, c.dataDir), "."),
     legal,
   );
+  // Last on the page: the parts of Talqava that are set aside.
+  col.append(
+    h("h3", {}, "Labs"),
+    h("p", { class: "note" }, "Parts of Talqava that are set aside to keep it simple. Switch one on to show it. Nothing is deleted when one is off: whatever you made with it is kept, and agents can still use it."),
+    h(
+      "div",
+      { class: "labslist" },
+      LABS.map(([id, name, about]) =>
+        h(
+          "label",
+          { class: "power lab" },
+          h("input", {
+            type: "checkbox",
+            checked: lab(id),
+            onchange: (e) => attempt(async () => ((state.config = await api("PUT", "settings", { labs: LABS.map(([x]) => x).filter((x) => (x === id ? e.target.checked : lab(x))) })), renderTop(), renderAreaTabs(), toast(`${name}: ${e.target.checked ? "shown" : "set aside"}.`)), col),
+          }),
+          h("span", {}, h("b", {}, name), h("span", { class: "note small" }, about)),
+        ),
+      ),
+    ),
+  );
 }
 
 /** Said wherever other companies' services are named: their names are used only to say Talqava works with them. */
@@ -8812,7 +8852,7 @@ async function startView() {
         "p",
         { class: "note small askmake" },
         "Or make a ",
-        [["doc", "document"], ["sheet", "sheet"], ["deck", "presentation"], ["note", "note"]].map(([kind, word], i) => [i ? ", " : "", h("button", { class: "plain link", onclick: () => start(kind) }, word)]),
+        [["doc", "document"], ["sheet", "sheet"], ["deck", "presentation"], ["note", "note"]].filter(([kind]) => lab("office") || (kind !== "sheet" && kind !== "deck")).map(([kind, word], i) => [i ? ", " : "", h("button", { class: "plain link", onclick: () => start(kind) }, word)]),
         bots.length ? [", or ", h("button", { class: "plain link", onclick: () => newTaskDialog() }, "give a task with more options")] : null,
         ".",
       ),
@@ -9083,7 +9123,7 @@ async function officeView() {
     col,
     h("div", {}, h("h1", {}, "Office"), h("p", { class: "lead" }, "Documents, sheets and notes that you and your agents work on together. Everything stays on this computer.")),
     q,
-    h("section", { class: "isec" }, h("h2", {}, "Start something"), h("div", { class: "mgrid wide" }, Object.entries(KIND).map(([kind, [name, about]]) => h("button", { class: "plain card officestart", onclick: () => start(kind) }, h("b", {}, `+ ${name}`), h("div", { class: "note small" }, about)))), org.members.length ? h("form", { class: "card form officeask", onsubmit: (e) => (e.preventDefault(), ask()) }, h("b", {}, "Or ask an agent to make it"), h("div", { class: "row wrap" }, what, who, h("button", {}, "Give the task"))) : null),
+    h("section", { class: "isec" }, h("h2", {}, "Start something"), h("div", { class: "mgrid wide" }, Object.entries(KIND).filter(([kind]) => lab("office") || (kind !== "sheet" && kind !== "deck")).map(([kind, [name, about]]) => h("button", { class: "plain card officestart", onclick: () => start(kind) }, h("b", {}, `+ ${name}`), h("div", { class: "note small" }, about)))), org.members.length ? h("form", { class: "card form officeask", onsubmit: (e) => (e.preventDefault(), ask()) }, h("b", {}, "Or ask an agent to make it"), h("div", { class: "row wrap" }, what, who, h("button", {}, "Give the task"))) : null),
     waiting.length ? h("section", { class: "isec" }, h("h2", {}, `Waiting for you · ${waiting.length}`), waiting.map((f) => h("button", { class: "plain card officewait", onclick: () => openPage(f.id) }, h("b", {}, f.title), h("span", { class: "note small" }, ` · ${KIND[f.kind]?.[0] ?? ""} · ${f.suggestions} change${f.suggestions === 1 ? "" : "s"} from an agent to review`)))) : null,
     h("section", { class: "isec" }, results),
     h("section", { class: "isec" }, h("h2", {}, "Start from a template"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Ready-made files with the parts to fill in marked in [SQUARE BRACKETS]."), h("div", { class: "mgrid wide" }, templates.map(officeTemplateCard))),
@@ -9636,7 +9676,7 @@ async function securityView() {
       head,
       securityCenter(),
       h("div", { class: "card form" }, h("b", {}, "Right now: one person, no sign-in"), h("p", { class: "note" }, "Anyone who can use this computer can open Talqava and do everything. That is fine for one owner on their own computer.")),
-      h(
+      !lab("company") ? h("p", { class: "note" }, "Features for a company with several people (each with their own sign-in and role, single sign-on, and rules for sensitive information) are set aside. Switch them on under Settings › Labs.") : h(
         "form",
         { class: "card form", onsubmit: (e) => (e.preventDefault(), confirm("Turn on people and sign-in?\n\nFrom now on Talqava asks everyone, including you on this computer, to sign in. Keep your password safe: if you forget it, see “If something goes wrong” in the Security guide.") && attempt(async () => (await api("POST", "people/start", { name: name.value, email: email.value, password: pw.value }), boot()), col)) },
         h("b", {}, "Add people, each with their own sign-in and role"),
@@ -9647,7 +9687,7 @@ async function securityView() {
         h("p", { class: "note small" }, passwordHelp),
         h("div", {}, h("button", { class: "primary" }, "Turn on people and sign-in")),
       ),
-      sensitivitySection(true),
+      lab("company") ? sensitivitySection(true) : null,
       sentSection(),
       guardrailsSection(true),
       securityOpsSection(true),
@@ -10043,7 +10083,8 @@ function securityOpsSection(canEdit) {
             ? h("div", {}, h("p", { class: "note small" }, "Marked “Needs a change” in the last review:"), h("ul", {}, last.items.filter((i) => i.decision === "change").map((i) => h("li", {}, h("b", {}, i.name), i.note ? ` · ${i.note}` : ""))))
             : null,
       ),
-      h(
+      // Retention rules and the monitoring feed are company features: shown when switched on under Labs, or already in use.
+      !(lab("company") || d.retention.days || d.retention.legalHold) ? null : h(
         "div",
         { class: "card form" },
         h("b", {}, "Keeping and deleting records"),
@@ -10055,7 +10096,7 @@ function securityOpsSection(canEdit) {
         personForm,
         personOut,
       ),
-      h(
+      !(lab("company") || d.feed.url) ? null : h(
         "form",
         { class: "card form", onsubmit: (e) => (e.preventDefault(), act(() => api("PUT", "security-ops/feed", { url: url.value, secret: secret.value || undefined }), url.value ? "Saved. Events are now sent as they happen." : "Stopped.")) },
         h("b", {}, "Send every event to your monitoring system"),

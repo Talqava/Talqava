@@ -22,8 +22,7 @@ import {
   spaces,
   jobStore,
   readJson,
-  writeJson,
-} from "./store.ts";
+  writeJson, LABS } from "./store.ts";
 import type { Config, ProviderConfig } from "./store.ts";
 import { CAUTION_TOOLS, localRunSpec } from "./tools.ts";
 import { closeConnectors } from "./connectors.ts";
@@ -459,6 +458,8 @@ async function updateSettings(body: any) {
   if (body.savings === "balanced" || body.savings === "cheapest" || body.savings === "off") patch.savings = body.savings;
   if (typeof body.checkFirst === "boolean") patch.checkFirst = body.checkFirst;
   if (typeof body.assistantSeesGroups === "boolean") patch.assistantSeesGroups = body.assistantSeesGroups;
+  // Which set-aside parts of Talqava are shown. Nothing is deleted either way: switching one off only hides it.
+  if (Array.isArray(body.labs)) patch.labs = LABS.filter((id) => body.labs.includes(id));
   if (["leads", "all", "never"].includes(body.planFirst)) patch.planFirst = body.planFirst;
   if (body.privacy === "off" || body.privacy === "mask") patch.privacy = body.privacy;
   if (typeof body.moveUp === "boolean") patch.moveUp = body.moveUp;

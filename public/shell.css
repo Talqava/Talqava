@@ -126,3 +126,8 @@
 .autoedit td { padding: 0 14px 14px; }
 .autoempty { display: grid; gap: 8px; justify-items: start; }
 @media (prefers-reduced-motion: reduce) { .autotoggle::after { transition: none; } }
+
+/* Settings > Labs: the set-aside parts, each with a line saying what it is. */
+.labslist { display: grid; gap: 8px; margin: 6px 0 14px; }
+.labslist .lab { align-items: flex-start; }
+.labslist .lab span { display: grid; gap: 1px; }

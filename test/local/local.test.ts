@@ -2197,6 +2197,10 @@ test("a schedule with an agent becomes a task in its queue; without one, or if t
     assert.equal(runs[0].conversationId, chat.conversationId);
     await call("DELETE", `jobs/${job.id}`);
     assert.equal((await call("GET", "jobs/runs")).data.find((r: { job: string }) => r.job === job.id).gone, true);
+    // The set-aside parts: all off to begin with; only known ones can be switched on, and switching one on shows it.
+    assert.deepEqual((await call("GET", "state")).data.labs, []);
+    assert.deepEqual((await call("PUT", "settings", { labs: ["git", "made-up", "office"] })).data.labs, ["office", "git"]);
+    assert.deepEqual((await call("PUT", "settings", { labs: [] })).data.labs, []);
   } finally {
     server.close();
     orgs.remove(org0.id);
