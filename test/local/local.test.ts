@@ -2212,7 +2212,10 @@ test("a schedule with an agent becomes a task in its queue; without one, or if t
     const runs = (await call("GET", "jobs/runs")).data.filter((r: { job: string }) => r.job === job.id);
     assert.deepEqual(runs.map((r: { name: string; taskId?: string; conversationId?: string; gone: boolean }) => [r.name, Boolean(r.taskId), Boolean(r.conversationId), r.gone]), [["Monday pipeline", false, true, false], ["Monday pipeline", false, true, false], ["Monday pipeline", true, false, false]]);
     assert.equal(runs[0].conversationId, chat.conversationId);
-    assert.deepEqual([runs[0].outcome, runs[0].words], ["done", "Finished."], "the history says how a run turned out, not only that it began");
+    // The history says how a run turned out, not only that it began: working while it runs, done once it has ended.
+    const outcome = async () => (await call("GET", "jobs/runs")).data.filter((r: { job: string }) => r.job === job.id)[0];
+    for (let i = 0; i < 100 && (await outcome()).outcome === "working"; i++) await new Promise((r) => setTimeout(r, 50));
+    assert.deepEqual([(await outcome()).outcome, (await outcome()).words], ["done", "Finished."]);
 
     // Its own limit for the month: once its runs have cost that much, a run that comes up on its timer is left out, and says so.
     assert.equal((await call("PATCH", `jobs/${job.id}`, { limit: "lots" })).status, 400);
