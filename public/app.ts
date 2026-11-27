@@ -405,37 +405,44 @@ function renderAreaTabs() {
 }
 
 // Line icons for the rail, drawn on a 20 px grid.
+// The app's icons, drawn as lines. An entry that starts with "<" is from Lucide (lucide.dev), on its 24-unit grid:
+// Copyright (c) Lucide Icons and Contributors, ISC licence; see THIRD_PARTY_NOTICES.md. The rest are Talqava's own,
+// on a 20-unit grid.
 const ICONS = {
   new: "M10 4.5v11M4.5 10h11",
   search: "M9 14.5a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zM13 13l3.5 3.5",
-  usage: "M4 16V9.5M8 16V4.5M12 16v-5M16 16V7",
-  chat: "M4 5.5A2.5 2.5 0 0 1 6.5 3h7A2.5 2.5 0 0 1 16 5.5v5a2.5 2.5 0 0 1-2.5 2.5H9l-3.5 3v-3A2.5 2.5 0 0 1 4 10.5z",
-  inbox: "M3.5 11.5l2-7h9l2 7M3.5 11.5v3a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-3M3.5 11.5h4l1 2h3l1-2h4",
-  team: "M10 3.5v3M10 6.5H5v3M10 6.5h5v3M3 9.5h4v3H3zM13 9.5h4v3h-4zM8 13.5h4v3H8zM10 6.5v7",
+  usage: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+  chat: '<path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/>',
+  inbox: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  team: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/>',
   home: "M5 7.5h10a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 14V9A1.5 1.5 0 0 1 5 7.5zM10 7.5V4.5M7.5 11.5v.01M12.5 11.5v.01",
-  market: "M4 8l1-4h10l1 4M4 8v7.5h12V8M4 8h12M8 15.5v-4h4v4",
-  memory: "M6 3.5h8A1.5 1.5 0 0 1 15.5 5v11.5L10 13.5l-5.5 3V5A1.5 1.5 0 0 1 6 3.5z",
-  skills: "M4.5 5h11M4.5 10h11M4.5 15h7",
-  jobs: "M10 5.5V10l3 2M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0z",
-  settings: "M4 6h7M15 6h1M4 14h1M9 14h7M13 4v4M7 12v4",
-  integrations: "M7.5 3.5v4M12.5 3.5v4M5.5 7.5h9v2.5a4.5 4.5 0 0 1-9 0zM10 14.5v2.5",
-  security: "M10 3l6 2.2v4.3c0 3.6-2.5 6.3-6 7.5-3.5-1.2-6-3.9-6-7.5V5.2zM7.6 10l1.7 1.7 3.2-3.4",
-  audit: "M6 3.5h6l3 3v10H6A1.5 1.5 0 0 1 4.5 15V5A1.5 1.5 0 0 1 6 3.5zM7.5 9h5M7.5 11.5h5M7.5 14h3",
+  market: '<path d="M15 21v-5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5"/><path d="M17.774 10.31a1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.451 0 1.12 1.12 0 0 0-1.548 0 2.5 2.5 0 0 1-3.452 0 1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.77-3.248l2.889-4.184A2 2 0 0 1 7 2h10a2 2 0 0 1 1.653.873l2.895 4.192a2.5 2.5 0 0 1-3.774 3.244"/><path d="M4 10.95V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8.05"/>',
+  memory: '<path d="M12 18V5"/><path d="M15 13a4.17 4.17 0 01-3-4 4.17 4.17 0 01-3 4"/><path d="M17.707 6.294A3 3 0 1012 5a3 3 0 10-5.707 1.294"/><path d="M17.996 5.125a4 4 0 012.526 5.77"/><path d="M18 18a4 4 0 002-7.465"/><path d="M19.967 17.482a4 4 0 11-7.967.517 4 4 0 11-7.967-.517"/><path d="M6 18a4 4 0 01-2-7.465"/><path d="M6.004 5.125a4 4 0 00-2.526 5.77"/>',
+  skills: '<path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/>',
+  jobs: '<path d="M16 2v3"/><path d="M17 15.5v1.7l1 .625"/><path d="M21 8.936V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h3.935"/><path d="M3 9h9.873"/><path d="M8 2v3"/><circle cx="17" cy="17" r="5"/>',
+  settings: '<path d="M14 17H5"/><path d="M19 7h-9"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
+  integrations: '<path d="M12 22v-5"/><path d="M15 8V2"/><path d="M17 8a1 1 0 0 1 1 1v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1z"/><path d="M9 8V2"/>',
+  security: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  audit: '<path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/>',
   workspace: "M5.5 3.5h6l3 3v10h-9zM11.5 3.5v3h3M7.5 10h5M7.5 12.5h5M7.5 7.5h2",
-  tasks: "M4 4.5h3v11H4zM8.5 4.5h3v7h-3zM13 4.5h3v4h-3z",
+  tasks: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 7v7"/><path d="M12 7v4"/><path d="M16 7v9"/>',
   docs: "M6 3.5h5.5l3 3V15A1.5 1.5 0 0 1 13 16.5H6A1.5 1.5 0 0 1 4.5 15V5A1.5 1.5 0 0 1 6 3.5zM11.5 3.5v3h3M7 9.5h6M7 12h6M7 14.5h3.5",
   notes: "M5 4.5h10v7.5l-3.5 3.5H5zM15 12h-3.5v3.5M7.5 7.5h5M7.5 10h3",
   sheets: "M4.5 4.5h11v11h-11zM4.5 8h11M4.5 11.5h11M8.5 4.5v11M12 8v7.5",
-  office: "M4 4.5h5v5H4zM11 4.5h5v5h-5zM4 11.5h5v4H4zM11 11.5h5v4h-5z",
+  office: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
   start: "M3.5 9.5L10 4l6.5 5.5M5.5 8.5v7h9v-7M8.5 15.5v-4h3v4",
   slides: "M3.5 5h13v8.5h-13zM10 13.5v3M7 16.5h6M7 8.5h6",
   projects: "M3 6.5a1.5 1.5 0 0 1 1.5-1.5h3l1.5 1.5h6.5A1.5 1.5 0 0 1 17 8v6.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5z",
-  guide: "M10 5.5C8.5 4.3 6.5 4 4 4v11c2.5 0 4.5.3 6 1.5 1.5-1.2 3.5-1.5 6-1.5V4c-2.5 0-4.5.3-6 1.5zM10 5.5v11",
+  guide: '<path d="M12 5v16"/><path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z"/>',
   library: "M3.5 6A1.5 1.5 0 0 1 5 4.5h3l1.5 2H15A1.5 1.5 0 0 1 16.5 8v6A1.5 1.5 0 0 1 15 15.5H5A1.5 1.5 0 0 1 3.5 14zM7 10.5h6M7 12.8h4",
 };
 const icon = (name) => {
   const node = h("span", { class: "ico", "aria-hidden": "true" });
-  node.innerHTML = `<svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="${ICONS[name]}"/></svg>`;
+  const art = ICONS[name] ?? "";
+  // Both grids come out with lines of the same weight at this size.
+  node.innerHTML = art.startsWith("<")
+    ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${art}</svg>`
+    : `<svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="${art}"/></svg>`;
   return node;
 };
 
@@ -9231,11 +9238,12 @@ async function officeView() {
   fill(
     col,
     h("div", {}, h("h1", {}, "Files"), h("p", { class: "lead" }, "Everything you and your agents make and work from, in one place: documents, notes, pages and the files in your library. It all stays on this computer.")),
-    q,
-    h("section", { class: "isec" }, h("h2", {}, "Start something"), h("div", { class: "mgrid wide" }, Object.entries(KIND).filter(([kind]) => lab("office") || (kind !== "sheet" && kind !== "deck")).map(([kind, [name, about]]) => h("button", { class: "plain card officestart", onclick: () => start(kind) }, h("b", {}, `+ ${name}`), h("div", { class: "note small" }, about)))), org.members.length ? h("form", { class: "card form officeask", onsubmit: (e) => (e.preventDefault(), ask()) }, h("b", {}, "Or ask an agent to make it"), h("div", { class: "row wrap" }, what, who, h("button", {}, "Give the task"))) : null),
+    // With nothing made yet, the page is only the ways to start: no search over nothing, no empty list.
+    everything.length ? q : null,
+    h("section", { class: "isec" }, h("h2", {}, "Start something"), h("div", { class: "mgrid wide" }, Object.entries(KIND).filter(([kind]) => lab("office") || (kind !== "sheet" && kind !== "deck")).map(([kind, [name, about]]) => h("button", { class: "plain card officestart", onclick: () => start(kind) }, h("b", {}, `+ ${name}`), h("div", { class: "note small" }, about))), h("button", { class: "plain card officestart", onclick: () => go("library") }, h("b", {}, "+ Files from your computer"), h("div", { class: "note small" }, "PDFs, Word and Excel files, pictures"))), org.members.length ? h("form", { class: "card form officeask", onsubmit: (e) => (e.preventDefault(), ask()) }, h("b", {}, "Or ask an agent to make it"), h("div", { class: "row wrap" }, what, who, h("button", {}, "Give the task"))) : null),
     waiting.length ? h("section", { class: "isec" }, h("h2", {}, `Waiting for you · ${waiting.length}`), waiting.map((f) => h("button", { class: "plain card officewait", onclick: () => openPage(f.id) }, h("b", {}, f.title), h("span", { class: "note small" }, ` · ${KIND[f.kind]?.[0] ?? ""} · ${f.suggestions} change${f.suggestions === 1 ? "" : "s"} from an agent to review`)))) : null,
-    h("section", { class: "isec" }, h("h2", {}, "All files"), results),
-    h("section", { class: "isec filesmore" }, h("h2", {}, "Work in one kind"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Each kind has its own page, with folders and its own tools."), h("div", { class: "row wrap" }, [["docs", "Documents"], ["notes", "Notes"], ["workspace", "Workspace pages"], ["library", "Library: add and organize files"], ...(lab("office") ? [["sheets", "Sheets"], ["slides", "Slides"]] : [])].map(([v, label]) => h("button", { onclick: () => go(v) }, label)))),
+    everything.length ? h("section", { class: "isec" }, h("h2", {}, "All files"), results) : null,
+    !everything.length ? null : h("section", { class: "isec filesmore" }, h("h2", {}, "Work in one kind"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Each kind has its own page, with folders and its own tools."), h("div", { class: "row wrap" }, [["docs", "Documents"], ["notes", "Notes"], ["workspace", "Workspace pages"], ["library", "Library: add and organize files"], ...(lab("office") ? [["sheets", "Sheets"], ["slides", "Slides"]] : [])].map(([v, label]) => h("button", { onclick: () => go(v) }, label)))),
     h("section", { class: "isec" }, h("h2", {}, "Start from a template"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Ready-made files with the parts to fill in marked in [SQUARE BRACKETS]."), h("div", { class: "mgrid wide" }, templates.map(officeTemplateCard))),
   );
   q.dispatchEvent(new Event("input"));

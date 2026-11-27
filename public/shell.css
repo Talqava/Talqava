@@ -8,7 +8,14 @@
    selected-hover surface mixed from the theme's own ink, so they sit
    right on any surface in either theme) are adapted from OpenClaw's
    ui/src/styles/base.css. Copyright (c) 2026 OpenClaw Foundation, MIT
-   licence; see THIRD_PARTY_NOTICES.md. Everything else here is Talqava's.
+   licence; see THIRD_PARTY_NOTICES.md.
+
+   The greys and the reds are steps of the "sage" and "red" scales of
+   Radix Colors (radix-ui.com/colors), where each step has one job: a
+   surface, a border, quiet text, text. Copyright (c) 2021-2022 Modulz,
+   (c) 2022-Present WorkOS, MIT licence; see THIRD_PARTY_NOTICES.md.
+   The black ground and the green stay Talqava's own brand colours.
+   Everything else here is Talqava's.
    ===================================================================== */
 :root {
   --surface-hover: color-mix(in srgb, var(--text) 6%, transparent);
@@ -186,3 +193,42 @@
 .body.two.noside { grid-template-columns: minmax(0, 1fr); }
 .body.two.over.noside { grid-template-columns: minmax(0, 1fr) 280px; }
 @media (max-width: 1180px) { .body.two.over.noside { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- one scale of greys, each step with one job ---------- */
+:root {
+  --field: #101211;   /* sage 1: wells you type in */
+  --side: #0d0e0d;
+  --panel: #171918;   /* sage 2: cards and panels */
+  --raised: #202221;  /* sage 3: what sits on a panel, and hover */
+  --line: #272a29;    /* sage 4: quiet dividers */
+  --line2: #373b39;   /* sage 6: borders of things you can press */
+  --muted: #8a9490;   /* between sage 10 and 11, so small print stays readable on a panel */
+  --soft: #adb5b2;    /* sage 11: quiet text */
+  --text: #eceeed;    /* sage 12: text */
+  --bad: #e5484d;     /* red 9 */
+  --bad-ink: #ff9592; /* red 11 */
+  --glass-line: #272a29;
+}
+:root[data-theme="light"] {
+  --bg: #f7f9f8;      /* sage 2 */
+  --field: #ffffff;
+  --panel: #ffffff;
+  --raised: #eef1f0;  /* sage 3 */
+  --line: #dfe2e0;    /* sage 5 */
+  --line2: #cbcfcd;   /* sage 7 */
+  --muted: #6b7370;
+  --soft: #5f6563;    /* sage 11 */
+  --text: #1a211e;    /* sage 12 */
+  --bad: #dc3e42;     /* red 10 */
+  --bad-ink: #ce2c31; /* red 11 */
+  --glass-line: #dfe2e0;
+}
+
+/* Tables and the cost chart: the row under the pointer is marked, figures line up, and the chart has faint lines to read heights against. */
+.autotable td { font-variant-numeric: tabular-nums; }
+.autotable tbody tr:hover td { background: var(--surface-hover); }
+.usagechart { background: repeating-linear-gradient(to top, transparent 0 34px, var(--line) 34px 35px), var(--panel); }
+/* The ways to start a file: three plain cards in a row, each clearly something to press. */
+.mgrid.wide:has(> .officestart) { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+button.card.officestart { border: 1px solid var(--line2); background: var(--panel); padding: 12px 14px; border-radius: 12px; text-align: left; }
+button.card.officestart:hover { background: var(--raised); border-color: var(--accent); }
