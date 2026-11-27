@@ -17,13 +17,16 @@ let fm = FileManager.default
 let home = fm.homeDirectoryForCurrentUser
 let support = home.appendingPathComponent("Library/Application Support")
 /// Where everything is kept. The app was called "Talqava Agents" before; data made then stays in that folder.
+/// True when this run was given its own data folder, to try a build beside the installed app.
+let trial = !(ProcessInfo.processInfo.environment["TALQAVA_DATA_DIR"] ?? "").isEmpty
 let dataDir: URL = {
   // For trying a build beside the installed app: another data folder, named when starting it.
   if let given = ProcessInfo.processInfo.environment["TALQAVA_DATA_DIR"], !given.isEmpty { return URL(fileURLWithPath: given) }
   let old = support.appendingPathComponent("Talqava Agents/data")
   return fm.fileExists(atPath: old.path) ? old : support.appendingPathComponent("Talqava/data")
 }()
-let logFile = home.appendingPathComponent("Library/Logs/Talqava/server.log")
+/// A trial run keeps its log with its own data, so it never writes into the installed app's log.
+let logFile = trial ? dataDir.appendingPathComponent("server.log") : home.appendingPathComponent("Library/Logs/Talqava/server.log")
 let resources = Bundle.main.resourceURL ?? URL(fileURLWithPath: ".")
 let serverDir = resources.appendingPathComponent("server")
 let nodeProgram = resources.appendingPathComponent("node")
@@ -74,6 +77,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     env["PATH"] = (extra + [env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"]).joined(separator: ":")
     env["TALQAVA_DATA_DIR"] = dataDir.path
     env["TALQAVA_DESKTOP"] = "mac"
+    // A build tried on another data folder is not the installed app: it leaves Claude's settings alone.
+    if trial { env["TALQAVA_SECOND_COPY"] = "1" }
     env["HOST"] = host
     env["PORT"] = String(port)
     run.environment = env
@@ -419,10 +424,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
   }
 
   func applicationDidFinishLaunching(_ note: Notification) {
-    // Only one copy runs: a second one brings the first to the front and leaves.
-    let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "com.talqava.agents").filter { $0 != NSRunningApplication.current }
-    if let first = others.first, ProcessInfo.processInfo.environment["TALQAVA_SECOND_COPY"] == nil {
-      first.activate(options: [.activateAllWindows])
+    // Only one copy works on a data folder at a time. The first holds a lock on a small file there for as long as
+    // it runs (the lock goes away by itself if it stops, however it stops); a second copy finds it held, brings
+    // the first to the front if it can, and leaves.
+    try? fm.createDirectory(at: dataDir, withIntermediateDirectories: true)
+    let lock = open(dataDir.appendingPathComponent(".app-running").path, O_CREAT | O_RDWR, 0o600)
+    if lock < 0 || flock(lock, LOCK_EX | LOCK_NB) != 0 {
+      NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "com.talqava.agents").first { $0 != NSRunningApplication.current && $0.activationPolicy == .regular }?.activate(options: [.activateAllWindows])
       return NSApp.terminate(nil)
     }
     stopOnSignals()

@@ -26,9 +26,9 @@ The speech program is included when `vendor/whisper` is there (see `scripts/buil
 
 ## Trying a build beside the installed app
 
-Only one copy of Talqava runs at a time. To try a build without touching your own data:
+Only one copy of Talqava works on a data folder at a time. To try a build without touching your own data, give it another folder. A copy started this way also leaves Claude's settings alone:
 
-    TALQAVA_DATA_DIR=/some/empty/folder TALQAVA_SECOND_COPY=1 ./dist/Talqava.app/Contents/MacOS/Talqava
+    TALQAVA_DATA_DIR=/some/empty/folder ./dist/Talqava.app/Contents/MacOS/Talqava
 
 ## What is and is not done
 
