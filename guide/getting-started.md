@@ -71,7 +71,7 @@ That's it: you have run your first task. From here, add more agents, set budgets
 
 ## A tour of the menu
 
-The menu is a narrow strip of icons down the left side. Point at an icon to see its name. It follows one idea: **you ask, agents do the work, you stay in control.** The first time you open Talqava, a short welcome says the same; **Show the welcome again** at the bottom of the home screen brings it back.
+The menu is a narrow strip of icons down the left side. Point at an icon to see its name. It follows one idea: **you ask, agents do the work, you stay in control.** The first time you open Talqava, a short welcome says the same; **Show the welcome again**, under the ideas on a new session, brings it back.
 
 Some places hold a few pages, shown as tabs across the top. Talqava remembers the tab you last used in each place. When a guide says "open **Connections**" or any other page, find its place in the list below, or type the page's name in the box at the top.
 
@@ -79,7 +79,7 @@ In a narrow window or on a phone the strip stays where it is, and pages with two
 
 The box at the top finds anything: files by name or by the words inside, tasks, chats, agents, and any page of the app.
 
-**New** (the green button): Where Talqava opens. One box: ask for anything in your own words and press Enter. Plain words go to your assistant as a chat. Start with **@** and an agent's name to give that agent a task. Under the box are three things to try, and links to make a document, sheet, presentation or note. Below that: what is waiting on you, what is being worked on, and what got done today. **Your earlier chats** at the bottom opens the chat page. See [Chat](chat.md).
+**New session** (the green button): Where Talqava opens, and the one place to ask. Type what you need in your own words and press Enter: plain words go to your assistant, and the answer starts a session. Start with **@** and an agent's name to give that agent a task. Above the box are a few things to try; before your AI model and team are set up, the steps to do that are shown there too. What is waiting on you and what is being worked on are listed at the right, and in the Inbox.
 
 **Sessions**: One list of everything you have asked for: your chats with the assistant and the tasks you gave your agents, newest first. Point at a row and press **⋯** to pin it to the top, rename it or archive it; **Show archived** at the bottom of the list brings archived ones back into view. Opening a chat shows the conversation; opening a task shows the agent's work. The box you type in lets you choose the AI model and how hard it thinks, and has a microphone if your copy of Talqava can write out speech.
 
