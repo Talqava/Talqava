@@ -877,7 +877,7 @@ function lastReply(id: string): string {
  * is handed back later.
  */
 async function askFromTelegram(conversation: string | null, text: string): Promise<Answer> {
-  const chat = (conversation ? conversations.get(conversation) : null) ?? conversations.create({ title: "Telegram" });
+  const chat = (conversation ? conversations.get(conversation) : null) ?? conversations.create({ title: "Telegram", via: "telegram" });
   if (engine.isRunning(chat.id)) return { conversation: chat.id, reply: "", busy: true };
   if (getConfig().model.startsWith("anthropic/") && !publicConfig().hasApiKey) throw new Error("no AI model is connected in Talqava yet. Open Talqava, then Connections › AI models.");
   const { done } = await engine.startRun(chat.id, text, { keepTitle: true });

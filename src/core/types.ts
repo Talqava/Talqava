@@ -26,6 +26,8 @@ export interface Conversation {
   pinned?: boolean;
   /** Put away: kept, and left out of the list of sessions unless the owner asks to see them. */
   archived?: boolean;
+  /** Set when the owner talks to it from outside the app (a Telegram chat): some tools are then left out. */
+  via?: "telegram";
   /** For a chat with one bot in its role: that bot's id. None means the general agent. */
   bot?: string;
   messages: Message[];
@@ -204,6 +206,8 @@ export interface RunSpec {
   alwaysAsk?: string[];
   /** The exits every run has besides its budget (see RunLimits). */
   limits?: RunLimits;
+  /** Applied to everything a tool returns before the model or the record sees it (the edition takes saved secrets out). */
+  clean?: (output: ToolOutput) => ToolOutput;
   /**
    * A stronger model to carry on with, once, when the run would stop because it is stuck (the same step again and
    * again, or every step failing), instead of stopping straight away.

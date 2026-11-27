@@ -195,6 +195,7 @@ You can write to your Talqava assistant from your phone, in a private Telegram c
 From then on, write to the bot as you would in Talqava. `/new` starts a fresh conversation.
 
 - **It answers only you.** The first chat to type the code is the only one it answers. Anyone else who finds the bot is told it is private, and nothing they write reaches your assistant.
+- **No commands from Telegram.** A session you reach from Telegram cannot run commands on your computer. Give that kind of work in the app.
 - **Approvals stay in Talqava.** Anything that would send, change or delete waits for your yes in the Inbox. The bot tells you so, and writes again once you have answered there.
 - **It answers while Talqava is running** on your computer.
 - **Text only for now.** Voice notes, photos and files are not read.
