@@ -31,6 +31,7 @@ export const FILED_UNDER: Record<string, DirectoryCategory> = {
   "ai-models": "AI models",
   openrouter: "AI models",
   wordpress: "Websites and content",
+  telegram: "Team chat",
   git: "Code and technical",
   mcp: "Advanced",
   "api-keys": "Advanced",

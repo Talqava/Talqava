@@ -183,6 +183,24 @@ Good to know:
 
 A connector that runs as a program on your computer is added further down the same page, under **All connectors, and ones that run on this computer**: give it a name and the program to run, then press **Add connector**.
 
+### Talk to your assistant from Telegram
+
+You can write to your Talqava assistant from your phone, in a private Telegram chat, and it answers as it does in the app.
+
+1. In Telegram, open a chat with **@BotFather** (the one with the blue tick) and send `/newbot`. Give the bot a name, then a username ending in "bot".
+2. BotFather answers with a token: digits, a colon, then letters. Copy it.
+3. In Talqava, open **Connections**, choose **Telegram**, paste the token and press **Check and connect**.
+4. Talqava shows a 6-digit code. In Telegram, open a chat with your new bot, press **Start**, and type the code. The page says **Connected**.
+
+From then on, write to the bot as you would in Talqava. `/new` starts a fresh conversation.
+
+- **It answers only you.** The first chat to type the code is the only one it answers. Anyone else who finds the bot is told it is private, and nothing they write reaches your assistant.
+- **Approvals stay in Talqava.** Anything that would send, change or delete waits for your yes in the Inbox. The bot tells you so, and writes again once you have answered there.
+- **It answers while Talqava is running** on your computer.
+- **Text only for now.** Voice notes, photos and files are not read.
+- **What you write passes through Telegram's servers**, as in any Telegram chat. Do not use it for things you would not put in Telegram.
+- Telegram offers no sign-in page for bots, so this is the one connection that uses a pasted token. To stop, press **Disconnect**: the token is forgotten and the bot stops answering.
+
 ### Store a key for another service
 
 So agents can call a service that has no integration of its own, without seeing your key:

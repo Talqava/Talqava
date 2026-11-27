@@ -4120,6 +4120,69 @@ function apiKeysPage(col, again) {
 
 }
 
+/** Connections › Telegram: talk to the assistant from a private Telegram chat. A bot's token, then a code to pair the owner's own chat. */
+async function telegramPage(col, again) {
+  const info = await api("GET", "integrations/telegram").catch(() => ({ state: "off" }));
+  if (state.view !== "integrations" || ui.integration !== "telegram") return;
+  const act = (fn, done) => attempt(async () => (await fn(), done && toast(done), again()), col);
+  const token = h("input", { id: "telegram-token", type: "password", autocomplete: "off", placeholder: "123456789:AA…", "aria-label": "Bot token" });
+  const head = [
+    h("button", { class: "plain back", onclick: () => ((ui.integration = null), again()) }, "← All integrations"),
+    h("div", { class: "ihero" }, h("span", { class: "packicon conn", "aria-hidden": "true" }, "T"), h("div", { class: "grow" }, h("h1", {}, "Telegram"), h("p", { class: "lead" }, "Talk to your assistant from your phone, in a private Telegram chat."))),
+    h(
+      "section",
+      { class: "card" },
+      h("b", {}, "What to expect"),
+      h(
+        "ul",
+        {},
+        h("li", {}, "It answers one chat only: yours. Anyone else who finds the bot is told it is private, and nothing they write reaches your assistant."),
+        h("li", {}, "Anything that would send, change or delete something still waits for your yes in Talqava's Inbox. You cannot approve from Telegram."),
+        h("li", {}, "It answers while Talqava is running on this computer."),
+        h("li", {}, "What you write passes through Telegram's servers, as in any Telegram chat. Text only for now."),
+      ),
+    ),
+  ];
+  if (info.state === "on") {
+    return fill(
+      col,
+      ...head,
+      h("div", { class: "card" }, h("div", { class: "row" }, h("div", { class: "grow" }, h("strong", {}, "Connected"), h("div", { class: "note small" }, `Answering ${info.who ?? "you"} as @${info.bot}. In Telegram, type /new to start a fresh conversation.`), info.problem ? h("div", { class: "note small bad" }, info.problem) : null), h("button", { class: "plain danger", onclick: () => confirm("Disconnect Telegram?\n\nThe bot stops answering and its token is forgotten. Nothing in Telegram is deleted.") && act(() => api("POST", "integrations/telegram/remove"), "Telegram is disconnected.") }, "Disconnect"))),
+    );
+  }
+  if (info.state === "pairing") {
+    // Looks every three seconds for the code being typed in Telegram.
+    setTimeout(() => state.view === "integrations" && ui.integration === "telegram" && document.querySelector(".tgcode") && again(), 3000);
+    return fill(
+      col,
+      ...head,
+      h(
+        "div",
+        { class: "card form" },
+        h("b", {}, "One more step: show it is you"),
+        info.code
+          ? [h("ol", {}, h("li", {}, "In Telegram, open a chat with ", h("b", {}, `@${info.bot}`), " and press Start."), h("li", {}, "Type this code there:")), h("div", { class: "tgcode", "aria-label": `Code: ${info.code.split("").join(" ")}` }, info.code), h("p", { class: "note small" }, "The code works for 15 minutes. The first chat that types it becomes the only one your assistant answers. This page updates when it is done.")]
+          : [h("p", { class: "note tgcode-old" }, "The code ran out."), h("div", {}, h("button", { class: "primary", onclick: () => act(() => api("POST", "integrations/telegram/code")) }, "Show a new code"))],
+        info.problem ? h("p", { class: "note small bad" }, info.problem) : null,
+        h("div", {}, h("button", { class: "plain danger", onclick: () => act(() => api("POST", "integrations/telegram/remove"), "Cancelled.") }, "Cancel and forget the bot")),
+      ),
+    );
+  }
+  fill(
+    col,
+    ...head,
+    h(
+      "form",
+      { class: "card form", onsubmit: (e) => (e.preventDefault(), act(() => api("POST", "integrations/telegram/connect", { token: token.value }))) },
+      h("b", {}, "Connect a bot"),
+      h("ol", {}, h("li", {}, "In Telegram, open a chat with ", h("b", {}, "@BotFather"), " (the one with the blue tick) and send ", h("code", {}, "/newbot"), "."), h("li", {}, "Give it a name, then a username ending in “bot”, such as mybakery_assistant_bot."), h("li", {}, "BotFather answers with a token: a line of digits, a colon, then letters. Copy it and paste it below.")),
+      h("label", {}, "Bot token", token),
+      h("p", { class: "note small" }, "The token stays on this computer and is sent only to Telegram. Telegram offers no sign-in page for bots, which is why this one connection uses a pasted token."),
+      h("div", {}, h("button", { class: "primary" }, "Check and connect")),
+    ),
+  );
+}
+
 /** Connections › any service built on the connector kit: what agents can do, connect an account, set the rule. One page for all. */
 async function servicePage(col, again, id) {
   const back = h("button", { class: "plain back", onclick: () => ((ui.integration = null), again()) }, "← All integrations");
@@ -4407,6 +4470,7 @@ async function integrationsView() {
   if (ui.integration === "ai-models") return aiModelsPage(col, again);
   if (ui.integration === "api-keys") return apiKeysPage(col, again);
   if (ui.integration === "wordpress") return wordpressPage(col, again);
+  if (ui.integration === "telegram") return telegramPage(col, again);
   if (ui.integration?.startsWith("service:")) return servicePage(col, again, ui.integration.slice(8));
   if (ui.integration === "mcp" && git) return (fill(col, ...mcpIntegrationPage(git, act, col, again)), connectorsByHand(col, again));
   if (ui.integration === "openrouter" && git) {
