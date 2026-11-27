@@ -9,7 +9,7 @@ const state = {
   convs: [],
   quests: [],
   crew: null,
-  view: "start", // Home is where the app opens; "home" is the older name of the Agents page
+  view: "chat", // The app opens on a new session; "home" is the older name of the Agents page
   convId: null,
   botId: null,
   quest: null,
@@ -457,8 +457,8 @@ function renderRail() {
     h(
       "div",
       { class: "railgroup" },
-      item("start", "New", v === "start" || v === "setup", "new", "railnew"),
-      item("chat", "Sessions", v === "chat" || (v === "quest" && ui.questFrom === "sessions"), "chat"),
+      item("chat", "New session", (v === "chat" && !state.convId) || v === "setup", "new", "railnew", () => go("chat")),
+      item("chat", "Sessions", (v === "chat" && Boolean(state.convId)) || (v === "quest" && ui.questFrom === "sessions"), "chat", "", () => go("chat", state.convId ?? (state.sessions ?? []).find((x) => x.kind === "chat" && !x.archived)?.id ?? null)),
       item(lastIn("tasks") === "jobs" ? "tasks" : lastIn("tasks"), "Tasks and projects", area === "tasks" && v !== "jobs", "tasks"),
       item("jobs", "Automations", v === "jobs", "jobs"),
       item(lastIn("team"), "Team", area === "team", "team"),
@@ -536,6 +536,8 @@ function renderRecent() {
 
 function go(view, id = null) {
   ui.wsFlush?.();
+  // There is one place to ask: a new session. What used to be a separate home page leads there.
+  if (view === "start") (view = "chat"), (id = null);
   // A task opened from the list of sessions stays part of Sessions; opened from anywhere else, it belongs to Team.
   if (view !== "quest") ui.questFrom = null;
   if (!["workspace", "docs", "notes", "sheets", "slides"].includes(view)) (ui.wsEditor?.destroy(), (ui.wsEditor = null), (ui.wsFlush = null));
@@ -6426,23 +6428,40 @@ function chatView() {
   setRunning(false);
   if (state.convId) connect(state.convId);
   else {
-    const ideas = ["Summarize the news on a topic I care about", "Help me write an email", "Explain something step by step", "Find and compare options for me"];
+    // A new session is where everything starts: what is missing to get going, a few things to try, and the box.
+    if (!state.crew || !state.orgs) Promise.all([state.crew ? null : loadCrew(), state.orgs ? null : loadOrgs()]).then(() => state.view === "chat" && !state.convId && !ui.input.value && chatView()).catch(() => {});
+    const bots = state.crew?.bots ?? [];
+    const noModel = needsKey(state.config);
+    const noTeam = Boolean(state.orgs) && !activeOrg().members?.length;
+    const first = state.me?.person ? state.me.person.name.split(" ")[0] : "";
+    const fromTeam = [];
+    for (const b of bots) {
+      const idea = (TASK_IDEAS[departmentOf(b.id)] ?? TASK_IDEAS[b.group] ?? [])[0];
+      if (idea && !fromTeam.some((x) => x.idea === idea || x.dept === (departmentOf(b.id) ?? b.group))) fromTeam.push({ dept: departmentOf(b.id) ?? b.group ?? "Team", idea, bot: b });
+      if (fromTeam.length === 3) break;
+    }
+    const ideas = fromTeam.length === 3 ? fromTeam : ["Summarize the news on a topic I care about", "Help me write an email", "Explain something step by step", "Find and compare options for me"].map((idea) => ({ dept: "", idea: `${idea}: `, bot: null }));
+    const steps = [
+      ["1", "Connect an AI model", "Your agents think with it. Pick a service and paste its key, or use a free model on this computer.", !noModel, () => ((ui.integration = "ai-models"), go("integrations"))],
+      ["2", "Set up your team", "Say what your business does; Talqava suggests who you need.", !noTeam, () => ((ui.setup = { step: "mission" }), go("setup"))],
+    ];
     ui.log.append(
       h(
         "div",
         { class: "empty hero" },
         heroVideo(),
-        h("h2", {}, `Hello. I'm ${state.config.agentName}.`),
-        h("p", {}, "Ask me anything. I can search the web, work with files and remember what matters to you. Pick any AI model under the box below."),
+        h("h2", {}, first ? `What do you need done, ${first}?` : "What do you need done?"),
+        h("p", {}, noModel ? "One thing first: connect an AI model, so your team can think." : bots.length ? "Ask in your own words. Type @ and a name to give someone on your team a task; plain words go to your assistant." : "Ask in your own words. I can search the web, work with files and remember what matters to you."),
+        noModel || noTeam ? h("div", { class: "card form askset" }, steps.filter((x) => !x[3]).map(([n, title, about, , run]) => h("div", { class: "istep" }, h("span", { class: "istepmark", "aria-hidden": "true" }, n), h("div", { class: "grow" }, h("b", {}, title), h("div", { class: "note small" }, about)), h("button", { class: n === "1" || !noModel ? "primary" : "", onclick: run }, n === "1" ? "Connect" : "Set up")))) : null,
         state.space
-          ? h("p", { class: "note" }, `This chat is in ${spaceName(state.space)}. I use ${spaceName(state.space)}'s memory along with your general memory, and what I learn here stays in ${spaceName(state.space)}.`)
+          ? h("p", { class: "note" }, `This session is in ${spaceName(state.space)}. I use ${spaceName(state.space)}'s memory along with your general memory, and what I learn here stays in ${spaceName(state.space)}.`)
           : null,
         h(
           "div",
           { class: "ideas" },
-          ideas.map((idea) => h("button", { onclick: () => ((ui.input.value = `${idea}: `), ui.input.focus()) }, idea)),
+          ideas.map((x) => h("button", { title: "Puts this in the box, for you to change or send", onclick: () => ((ui.input.value = x.bot ? `@${x.bot.id} ${x.idea}` : x.idea), ui.input.focus()) }, x.idea.replace(/: $/, ""))),
         ),
-        h("p", { class: "note small" }, "Want a task done in the background? ", h("button", { class: "plain link", onclick: () => go("home") }, "Assign an agent"), " instead."),
+        h("p", { class: "note small" }, bots.length ? [h("button", { class: "plain link", onclick: () => newTaskDialog() }, "Give a task with more options"), " · "] : null, h("button", { class: "plain link", onclick: () => showWelcome() }, "Show the welcome again")),
       ),
     );
   }
@@ -6660,6 +6679,14 @@ function renderChatList(force = false) {
 async function submit() {
   const text = ui.input.value.trim();
   if (!text || state.running) return;
+  // In a new session, "@name …" gives that agent a task; plain words go to the assistant.
+  if (!state.convId) {
+    const bots = state.crew?.bots ?? [];
+    const mention = /^@([\w-]+)\s+([\s\S]+)$/.exec(text);
+    const bot = mention ? bots.find((b) => b.id === mention[1].toLowerCase() || b.name.toLowerCase().replace(/\s+/g, "-").startsWith(mention[1].toLowerCase()) || b.name.toLowerCase().startsWith(mention[1].toLowerCase())) : null;
+    if (mention && !bot) return toast(`Nobody on your team is called “${mention[1]}”. Open Team to see their names, or ask without the @.`);
+    if (bot) return (ui.input.value = ""), sendQuest(bot, mention[2].trim());
+  }
   await attempt(async () => {
     if (!state.convId) {
       const conv = await api("POST", "conversations", state.space ? { space: state.space } : {});

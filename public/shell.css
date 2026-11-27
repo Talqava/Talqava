@@ -178,3 +178,6 @@
 /* ---------- Files: one list, filtered by kind ---------- */
 .fileskinds { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .fileskinds .mpill .autocount { margin-left: 6px; }
+
+/* The set-up steps on a new session sit in the middle column, left-aligned. */
+.empty.hero .askset { text-align: left; width: min(560px, 100%); margin: 6px auto; }
