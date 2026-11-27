@@ -237,3 +237,16 @@ button.card.officestart:hover { background: var(--raised); border-color: var(--a
 .wspage.nodetails { grid-template-columns: minmax(0, 1fr); max-width: 860px; }
 /* The two parts of Knowledge. */
 .knowparts { align-self: flex-start; }
+
+/* ---------- the steps of a piece of work, under one line ---------- */
+.worklog { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); margin: 8px 0; }
+.worklog > summary { display: flex; align-items: center; gap: 10px; padding: 9px 14px; cursor: pointer; list-style: none; color: var(--soft); font-size: 13.5px; }
+.worklog > summary::-webkit-details-marker { display: none; }
+.worklog > summary:hover { color: var(--text); }
+.worklog .worksum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.worklog .workshow::after { content: "Show the steps"; color: var(--accent-ink, var(--accent)); font-size: 12.5px; white-space: nowrap; }
+.worklog[open] .workshow::after { content: "Hide"; }
+.worklog[open] > summary { border-bottom: 1px solid var(--line); }
+.worklog > details { margin: 6px 10px; }
+.worklog > details:last-child { margin-bottom: 10px; }
+.worklog details.tool > summary .what.plain { font-family: var(--sans); color: var(--text); font-size: 13.5px; }
