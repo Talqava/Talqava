@@ -443,3 +443,16 @@ details.filesfold > summary::-webkit-details-marker { display: none; }
 details.filesfold > summary::after { content: " ›"; }
 details.filesfold[open] > summary::after { content: " ⌄"; }
 details.filesfold[open] > summary { margin-bottom: 8px; }
+
+/* An open session: the way back to Home at its head. */
+.backhome { color: var(--soft); font-size: 13px; padding: 4px 8px; border-radius: 8px; min-height: 0; white-space: nowrap; }
+.backhome:hover { color: var(--text); background: var(--surface-hover); }
+/* An agent's page: the look and the advanced settings fold away. */
+details.lookfold { margin-top: 16px; width: 100%; }
+details.lookfold > summary, details.agentmore > summary { cursor: pointer; list-style: none; color: var(--soft); font-size: 13.5px; }
+details.lookfold > summary::-webkit-details-marker, details.agentmore > summary::-webkit-details-marker { display: none; }
+details.lookfold > summary::after, details.agentmore > summary::after { content: " ›"; }
+details.lookfold[open] > summary::after, details.agentmore[open] > summary::after { content: " ⌄"; }
+details.agentmore { display: block; }
+details.agentmore[open] > summary { margin-bottom: 12px; }
+details.agentmore > * + * { margin-top: 10px; }

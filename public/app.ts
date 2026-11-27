@@ -985,8 +985,8 @@ function showUsage(usage) {
   const cost = usage?.cost ? ` · about ${dollars(usage.cost)}` : "";
   const cached = usage?.cached && usage.input ? ` · ${Math.round((usage.cached / usage.input) * 100)}% from cache` : "";
   const saved = usage?.saved >= 0.001 ? ` · about ${dollars(usage.saved)} saved` : "";
-  ui.meta.textContent = total ? `${total.toLocaleString()} tokens${cost}${cached}${saved}` : "";
-  ui.meta.title = "Read from cache: parts of the chat the AI service had already read, charged at about a tenth of the price. Shortening old steps: large outputs the agent has already used are sent shortened in later steps.";
+  ui.meta.textContent = total ? (usage?.cost ? `About ${dollars(usage.cost)}` : "Free") : "";
+  ui.meta.title = `${total.toLocaleString()} tokens${cached}${saved}. ` + "Read from cache: parts of the chat the AI service had already read, charged at about a tenth of the price. Shortening old steps: large outputs the agent has already used are sent shortened in later steps.";
 }
 
 function setRunning(running) {
@@ -1528,16 +1528,16 @@ function modelChip(info) {
 }
 
 const POWER_NAMES = {
-  web: "Web search and read pages",
-  memory: "Memory",
-  skills: "Skills",
-  search: "Search past chats",
-  files: "Files",
-  shell: "Shell commands",
-  api: "API calls with stored keys",
-  schedule: "Schedules",
-  browser: "Browser",
-  connectors: "Connectors",
+  web: "Search the web and read pages",
+  memory: "Remember things between tasks",
+  skills: "Follow saved procedures",
+  search: "Look through past chats",
+  files: "Read and write files",
+  shell: "Run commands on this computer",
+  api: "Use web services with a saved key",
+  schedule: "Set up repeating work",
+  browser: "Use a browser (no longer available)",
+  connectors: "Use your connected services",
 };
 
 // ---------- home base ----------
@@ -6279,14 +6279,16 @@ function botView() {
   );
   const fileNote =
     isNew || existing.source === "personal"
-      ? `${state.config.dataDir}/crew/${isNew ? "<name>" : existing.id}.yaml`
-      : `Saving makes your own copy in ${state.config.dataDir}/crew/${existing.id}.yaml; the ${existing.source === "project" ? "repository's" : "starter"} file stays as it is.`;
+      ? isNew
+        ? "Say what its job is and what it may do. You can change everything later."
+        : "Its job, what it may do, and its limits."
+      : "Saving makes your own copy of this agent; the one it started from stays as it is.";
   const save = h("button", { class: "primary" }, "Save");
   const head = h(
     "div",
     { class: "subhead" },
     h("button", { onclick: () => go("people") }, "Back to your team"),
-    h("div", { class: "titles" }, h("h1", {}, isNew ? "Create an agent" : `Edit ${existing.name}`), h("div", { class: "sub mono" }, fileNote)),
+    h("div", { class: "titles" }, h("h1", {}, isNew ? "Create an agent" : `Edit ${existing.name}`), h("div", { class: "sub" }, fileNote)),
     !isNew && existing.source === "personal"
       ? h(
           "button",
@@ -6374,7 +6376,13 @@ function botView() {
       legendInput,
       h("p", { class: "note small" }, "One to three characters, such as HS for Head of Sales. They show on the tile when it uses the Initials symbol, and in short lists."),
     );
+    // The symbol, colour and initials are a choice for later: folded under the tile, and kept open once opened.
+    const fold = h("details", { class: "lookfold", open: lookOpen }, h("summary", {}, "Change how it looks"));
+    fold.append(...[...portrait.children].slice(3));
+    fold.addEventListener("toggle", () => (lookOpen = fold.open));
+    portrait.append(fold);
   };
+  let lookOpen = false;
   drawPortrait();
 
   // ----- job -----
@@ -6434,7 +6442,7 @@ function botView() {
   showCheck();
 
   // ----- powers -----
-  const powerBoxes = Object.keys(POWER_NAMES).map((p) => [p, h("input", { type: "checkbox", checked: draft.powers.includes(p) })]);
+  const powerBoxes = Object.keys(POWER_NAMES).filter((p) => p !== "browser").map((p) => [p, h("input", { type: "checkbox", checked: draft.powers.includes(p) })]);
 
   // ----- limits -----
   const approvals = h(
@@ -6481,30 +6489,35 @@ function botView() {
       h(
         "div",
         { class: "editcards" },
-        h("section", { class: "card" }, h("h3", {}, "Role"), h("label", { class: "field" }, "Name", name), h("label", { class: "field" }, "Job title", title), h("label", { class: "field" }, "Department", group, groupList), h("label", { class: "field" }, "Kind of work", type), h("label", { class: "field" }, "Instructions", instructions)),
+        h("section", { class: "card" }, h("h3", {}, "Its job"), isNew ? h("label", { class: "field" }, "Name", name) : h("label", { class: "field" }, "Job title", title), h("label", { class: "field" }, "Instructions: what it is responsible for, in plain sentences", instructions)),
         h(
           "section",
           { class: "card" },
-          h("h3", {}, "Model"),
-          h("label", { class: "choice" }, useDefault, h("span", {}, h("b", {}, "Default model"), h("div", { class: "note" }, `The one chosen in Settings: ${state.config.model}`))),
-          h("label", { class: "choice" }, useOwn, h("span", { class: "grow" }, h("b", {}, "A model of its own"), h("div", { class: "form" }, provider, modelName, botModels))),
-          checks,
-        ),
-        h(
-          "section",
-          { class: "card" },
-          h("h3", {}, "Powers"),
+          h("h3", {}, "What it may do"),
           powerBoxes.map(([p, box]) => h("label", { class: "power" }, box, POWER_NAMES[p])),
-          h("p", { class: "note" }, "An agent only gets the tools its powers grant. Changes ask first by default, and always after reading the web."),
+          h("p", { class: "note" }, "An agent can only do what is ticked here. It still asks you before it sends, changes or deletes anything, unless you choose otherwise below."),
         ),
         h(
           "section",
           { class: "card" },
           h("h3", {}, "Limits"),
-          h("label", { class: "field" }, "Approvals", approvals),
-          h("div", { class: "row" }, h("label", { class: "field grow" }, "Budget per run ($)", spend), h("label", { class: "field grow" }, "Steps per run", steps)),
-          h("div", { class: "row" }, h("label", { class: "field grow" }, "Monthly budget ($)", monthly)),
-          h("p", { class: "note small" }, existing?.month ? `Spent this month: ${money(existing.month.spent)}. At its monthly budget an agent starts no new work until you raise it or the month turns.` : "At its monthly budget an agent starts no new work until you raise it or the month turns."),
+          h("label", { class: "field" }, "Before it changes anything", approvals),
+          h("label", { class: "field" }, "The most it may spend a month, in US dollars", monthly),
+          h("p", { class: "note small" }, existing?.month ? `Spent this month: ${money(existing.month.spent)}. At its limit it starts no new work until you raise it or the month turns.` : "At its limit it starts no new work until you raise it or the month turns."),
+        ),
+        h(
+          "details",
+          { class: "card agentmore" },
+          h("summary", {}, "Advanced: its name, department, AI model and per-task limits"),
+          isNew ? h("label", { class: "field" }, "Job title, if different from its name", title) : h("label", { class: "field" }, "Name", name),
+          h("label", { class: "field" }, "Department", group, groupList),
+          h("label", { class: "field" }, "Kind of work", type),
+          h("h3", {}, "AI model"),
+          h("label", { class: "choice" }, useDefault, h("span", {}, h("b", {}, "The team's model"), h("div", { class: "note" }, `The one chosen in Settings: ${state.config.model}`))),
+          h("label", { class: "choice" }, useOwn, h("span", { class: "grow" }, h("b", {}, "A model of its own"), h("div", { class: "form" }, provider, modelName, botModels))),
+          checks,
+          h("h3", {}, "For each task"),
+          h("div", { class: "row" }, h("label", { class: "field grow" }, "The most one task may spend ($)", spend), h("label", { class: "field grow" }, "The most steps in one task", steps)),
         ),
       ),
     ),
@@ -6721,7 +6734,7 @@ function chatView() {
   ui.pin = h("button", { class: "plain", hidden: true, onclick: () => pinChat({ id: state.convId }, !state.convs.find((c) => c.id === state.convId)?.pinned) }, "Pin");
   syncPin();
   const pane = conversationPane({ tools: true });
-  fill(ui.body, ui.chatSide, h("main", { class: "center flush" }, h("div", { class: "chathead", style: withBot ? botStyle(withBot) : "" }, withBot ? keycap(withBot, 28, "", withBot.type) : null, ui.title, withBot ? h("span", { class: "small muted", title: "This chat is with one agent, in its role. It uses that agent's instructions, powers, model and limits." }, roleLine(withBot, roleOf(withBot.id)?.title)) : null, ui.meta, ui.move, ui.pin, ui.remove), pane));
+  fill(ui.body, ui.chatSide, h("main", { class: "center flush" }, h("div", { class: "chathead", style: withBot ? botStyle(withBot) : "" }, h("button", { class: "plain backhome", onclick: () => go("sessions"), title: "Back to Home, where all your sessions are" }, "‹ Home"), withBot ? keycap(withBot, 28, "", withBot.type) : null, ui.title, withBot ? h("span", { class: "small muted", title: "This chat is with one agent, in its role. It uses that agent's instructions, powers, model and limits." }, roleLine(withBot, roleOf(withBot.id)?.title)) : null, ui.meta, ui.move, ui.pin, ui.remove), pane));
   ui.over = h("aside", { class: "overpane", "aria-label": "Overview" });
   ui.body.append(ui.over);
   renderOverview();
@@ -7048,7 +7061,8 @@ function renderChatList(force = false) {
   const earlier = shown.filter((x) => !x.pinned && new Date(x.updatedAt).toDateString() !== today).slice(0, 60);
   const part = (label, list) => (list.length ? [h("div", { class: "listlabel" }, label), ...list.map(row)] : null);
   // Before the first session there is nothing to list: the page is the question and the box, and nothing else.
-  const bare = !(state.sessions ?? state.convs).length && !state.spaces.length && !ui.addingSpace;
+  // The list of sessions is Home's; an open session is only the conversation, with the way back at its head.
+  const bare = true;
   ui.chatSide.hidden = bare;
   ui.body.classList.toggle("noside", bare);
   fill(ui.chatSide,
