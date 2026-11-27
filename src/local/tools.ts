@@ -44,7 +44,6 @@ import { WORKSPACE, conversations, getConfig, memory, skills, spaces } from "./s
 import { resolveModel, strongerThan } from "./models.ts";
 import { isLocalRef } from "./gateway.ts";
 import { connectorTools } from "./connectors.ts";
-import { browserAvailable, browserTool } from "./browser.ts";
 
 const BASH_TIMEOUT_MS = Number(setting("BASH_TIMEOUT_MS") || 120_000);
 
@@ -225,7 +224,6 @@ export async function localTools(jobs: JobBook): Promise<Tool[]> {
     httpTool(() => getConfig().secrets),
     scheduleTool(jobs),
   ];
-  if (await browserAvailable()) tools.push(browserTool);
   return tools;
 }
 
@@ -286,7 +284,6 @@ async function botTools(bot: Bot, root: string, jobs: JobBook, claude: boolean):
   if (has("search")) tools.push(conversationSearchTool(conversations));
   if (has("api")) tools.push(httpTool(() => getConfig().secrets));
   if (has("schedule")) tools.push(scheduleTool(jobs));
-  if (has("browser") && (await browserAvailable())) tools.push(browserTool);
   if (has("web") && !claude) tools.push(pageTool());
   return tools;
 }

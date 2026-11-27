@@ -9645,7 +9645,7 @@ async function officeView() {
       else if (quest?.queued) openTask(quest.queued.id);
     }, col);
   const waiting = data.files.filter((f) => f.suggestions);
-  const q = h("input", { type: "search", placeholder: "Search documents, notes and pages, including the words inside", "aria-label": "Search Office" });
+  const q = h("input", { type: "search", placeholder: "Search what is written here, including the words inside", "aria-label": "Search Office" });
   const results = h("div");
   // Everything in one list: documents and notes, workspace pages, and the files in the library, newest change first.
   const KIND_WORDS = { doc: "Document", note: "Note", page: "Page", file: "Library file", sheet: "Sheet", deck: "Slides" };
@@ -9656,14 +9656,18 @@ async function officeView() {
     ...(data.tree ?? []).filter((p) => p.kind === "page").map((p) => ({ kind: "page", title: p.title, sub: "", when: p.updatedAt, by: p.updatedBy, who: p.access ? officeWho(p) : "", level: p.level, pinned: false, open: () => openPage(p.id) })),
     ...(library.documents ?? []).map((d) => ({ kind: "file", title: d.name, sub: d.path.includes("/") ? d.path.slice(0, d.path.lastIndexOf("/")) : "", when: new Date(d.modified).toISOString(), by: "", who: d.access ? officeWho(d) : "", level: d.level, pinned: false, open: () => ((ui.libFind = d.name), go("library")) })),
   ].sort((a, b) => Number(b.pinned) - Number(a.pinned) || String(b.when).localeCompare(String(a.when)));
-  const kinds = ["doc", "note", "page", "file", "sheet", "deck"].filter((k) => everything.some((x) => x.kind === k));
+  // Two kinds, as the owner sees them: written in Talqava (documents, notes and pages alike), or brought from the
+  // computer. Nothing is converted: each file stays what it is and opens in its own editor.
+  const groupOf = (kind) => (kind === "file" ? "file" : kind === "sheet" || kind === "deck" ? kind : "written");
+  const GROUP_WORDS = { written: "Written in Talqava", file: "From your computer", sheet: "Sheets", deck: "Slides" };
+  const kinds = ["written", "file", "sheet", "deck"].filter((k) => everything.some((x) => groupOf(x.kind) === k));
   const recent = () => {
     const pick = kinds.includes(ui.filesKind) ? ui.filesKind : "all";
-    const rows = everything.filter((x) => pick === "all" || x.kind === pick);
+    const rows = everything.filter((x) => pick === "all" || groupOf(x.kind) === pick);
     const most = ui.filesAll ? rows.length : 50;
     const again = () => fill(results, recent());
     return [
-      h("div", { class: "fileskinds", role: "tablist", "aria-label": "Kind of file" }, [["all", "Everything"], ...kinds.map((k) => [k, k === "deck" ? "Slides" : `${KIND_WORDS[k]}s`])].map(([k, label]) => h("button", { class: `mpill ${pick === k ? "on" : ""}`, role: "tab", "aria-selected": String(pick === k), onclick: () => ((ui.filesKind = k), (ui.filesAll = false), again()) }, label, h("span", { class: "autocount" }, String(k === "all" ? everything.length : everything.filter((x) => x.kind === k).length))))),
+      h("div", { class: "fileskinds", role: "tablist", "aria-label": "Kind of file" }, [["all", "Everything"], ...kinds.map((k) => [k, GROUP_WORDS[k]])].map(([k, label]) => h("button", { class: `mpill ${pick === k ? "on" : ""}`, role: "tab", "aria-selected": String(pick === k), onclick: () => ((ui.filesKind = k), (ui.filesAll = false), again()) }, label, h("span", { class: "autocount" }, String(k === "all" ? everything.length : everything.filter((x) => groupOf(x.kind) === k).length))))),
       rows.length
         ? h(
             "div",
@@ -9672,7 +9676,7 @@ async function officeView() {
               "table",
               {},
               h("thead", {}, h("tr", {}, ["Name", "Kind", "Last change", "Who can read it", "Sensitivity"].map((t) => h("th", { scope: "col" }, t)))),
-              h("tbody", {}, rows.slice(0, most).map((f) => h("tr", {}, h("td", {}, h("button", { class: "plain link", onclick: f.open }, f.title), f.pinned ? h("span", { class: "tag" }, "pinned") : null), h("td", {}, `${KIND_WORDS[f.kind] ?? "Page"}${f.sub ? ` · ${f.sub}` : ""}`), h("td", {}, `${f.by ? `${f.by} · ` : ""}${officeDay(f.when)}`), h("td", {}, f.who), h("td", {}, LEVEL_NAMES[f.level] ?? "Internal")))),
+              h("tbody", {}, rows.slice(0, most).map((f) => h("tr", {}, h("td", {}, h("button", { class: "plain link", onclick: f.open }, f.title), f.pinned ? h("span", { class: "tag" }, "pinned") : null), h("td", {}, `${f.kind === "sheet" || f.kind === "deck" ? KIND_WORDS[f.kind] : f.kind === "file" ? "From your computer" : "Written here"}${f.sub ? ` · ${f.sub}` : ""}`), h("td", {}, `${f.by ? `${f.by} · ` : ""}${officeDay(f.when)}`), h("td", {}, f.who), h("td", {}, LEVEL_NAMES[f.level] ?? "Internal")))),
             ),
           )
         : h("p", { class: "note" }, "Nothing of this kind yet."),
@@ -9693,13 +9697,13 @@ async function officeView() {
   });
   fill(
     col,
-    h("div", {}, h("h1", {}, "Files"), h("p", { class: "lead" }, "Everything you and your agents make and work from, in one place: documents, notes, pages and the files in your library. It all stays on this computer.")),
+    h("div", {}, h("h1", {}, "Files"), h("p", { class: "lead" }, "Everything you and your agents make and work from: what is written in Talqava, and the files you brought from your computer. It all stays on this computer.")),
     // With nothing made yet, the page is only the ways to start: no search over nothing, no empty list.
     everything.length ? q : null,
-    h("section", { class: "isec" }, h("h2", {}, "Start something"), h("div", { class: "mgrid wide" }, Object.entries(KIND).filter(([kind]) => lab("office") || (kind !== "sheet" && kind !== "deck")).map(([kind, [name, about]]) => h("button", { class: "plain card officestart", onclick: () => start(kind) }, h("b", {}, `+ ${name}`), h("div", { class: "note small" }, about))), h("button", { class: "plain card officestart", onclick: () => go("library") }, h("b", {}, "+ Files from your computer"), h("div", { class: "note small" }, "PDFs, Word and Excel files, pictures"))), org.members.length ? h("form", { class: "card form officeask", onsubmit: (e) => (e.preventDefault(), ask()) }, h("b", {}, "Or ask an agent to make it"), h("div", { class: "row wrap" }, what, who, h("button", {}, "Give the task"))) : null),
+    h("section", { class: "isec" }, h("h2", {}, "Start something"), h("div", { class: "mgrid wide" }, Object.entries(KIND).filter(([kind]) => kind === "doc" || (lab("office") && (kind === "sheet" || kind === "deck"))).map(([kind, [name, about]]) => h("button", { class: "plain card officestart", onclick: () => start(kind) }, h("b", {}, kind === "doc" ? "+ Write something" : `+ ${name}`), h("div", { class: "note small" }, kind === "doc" ? "A letter, a note, a plan, a policy" : about))), h("button", { class: "plain card officestart", onclick: () => go("library") }, h("b", {}, "+ Files from your computer"), h("div", { class: "note small" }, "PDFs, Word and Excel files, pictures"))), org.members.length ? h("form", { class: "card form officeask", onsubmit: (e) => (e.preventDefault(), ask()) }, h("b", {}, "Or ask an agent to make it"), h("div", { class: "row wrap" }, what, who, h("button", {}, "Give the task"))) : null),
     waiting.length ? h("section", { class: "isec" }, h("h2", {}, `Waiting for you · ${waiting.length}`), waiting.map((f) => h("button", { class: "plain card officewait", onclick: () => openPage(f.id) }, h("b", {}, f.title), h("span", { class: "note small" }, ` · ${KIND[f.kind]?.[0] ?? ""} · ${f.suggestions} change${f.suggestions === 1 ? "" : "s"} from an agent to review`)))) : null,
     everything.length ? h("section", { class: "isec" }, h("h2", {}, "All files"), results) : null,
-    !everything.length ? null : h("section", { class: "isec filesmore" }, h("h2", {}, "Work in one kind"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Each kind has its own page, with folders and its own tools."), h("div", { class: "row wrap" }, [["docs", "Documents"], ["notes", "Notes"], ["workspace", "Workspace pages"], ["library", "Library: add and organize files"], ...(lab("office") ? [["sheets", "Sheets"], ["slides", "Slides"]] : [])].map(([v, label]) => h("button", { onclick: () => go(v) }, label)))),
+    !everything.length ? null : h("details", { class: "isec filesmore filesfold" }, h("summary", {}, "Folders, notebooks and the older pages for one kind of file"), h("p", { class: "note small" }, "Documents, notes and workspace pages each still have a page of their own, with folders and their own tools; the library is where files from your computer are added and organized."), h("div", { class: "row wrap" }, [["docs", "Documents"], ["notes", "Notes"], ["workspace", "Workspace pages"], ["library", "Library: add and organize files"], ...(lab("office") ? [["sheets", "Sheets"], ["slides", "Slides"]] : [])].map(([v, label]) => h("button", { onclick: () => go(v) }, label)))),
     h("section", { class: "isec" }, h("h2", {}, "Start from a template"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Ready-made files with the parts to fill in marked in [SQUARE BRACKETS]."), h("div", { class: "mgrid wide" }, templates.filter((t) => lab("office") || (t.kind !== "sheet" && t.kind !== "deck")).map(officeTemplateCard))),
   );
   q.dispatchEvent(new Event("input"));
