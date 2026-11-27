@@ -6384,7 +6384,8 @@ function renderOverview() {
   if (!ui.over?.isConnected) return;
   let mail: any[] = [];
   try {
-    mail = mailMessages();
+    // What the owner archived or deleted in the Inbox is out of the way here too, so this panel and the Inbox agree.
+    mail = mailMessages().filter((m) => !markOf(m).archived && !markOf(m).deletedAt);
   } catch {}
   const today = new Date().toDateString();
   const needs = mail.filter((m) => m.label === "needs" || m.label === "failed");
