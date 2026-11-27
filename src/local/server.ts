@@ -2330,7 +2330,8 @@ export function start() {
   server.listen(PORT, HOST, () => {
     // If Talqava was added to the Claude app from an older copy of this app (it was renamed), point Claude at this one.
     // Only the desktop app does this, so running from the code folder never repoints Claude.
-    if (process.env.ELECTRON_RUN_AS_NODE === "1") import("./mcpintegration.ts").then((m) => m.refreshClaudeDesktop()).catch(() => {});
+    // Inside a desktop app (Electron, or the native Mac app), Claude's own settings are pointed at this copy.
+    if (process.env.ELECTRON_RUN_AS_NODE === "1" || process.env.TALQAVA_DESKTOP) import("./mcpintegration.ts").then((m) => m.refreshClaudeDesktop()).catch(() => {});
     audit({ actor: "system", actorName: "Talqava", kind: "other", action: "Started the app" });
     console.log(`${BRAND.name} is running at http://${LOCAL_HOSTS.has(HOST) ? "localhost" : HOST}:${PORT}`);
     console.log(`Data: ${DATA}\nWorkspace: ${WORKSPACE}`);

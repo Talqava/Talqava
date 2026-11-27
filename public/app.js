@@ -10814,6 +10814,8 @@ async function showGuide(id) {
   body.scrollTop = 0;
 }
 window.talqavaShowGuide = showGuide;
+// For the desktop app's menu bar item: start a new session from anywhere.
+window.talqavaNewSession = () => go("chat");
 // A link to one of Talqava's own documents never leaves the page; the reader showing it opens it.
 document.addEventListener("click", (e) => e.target.closest?.("a.doclink") && e.preventDefault(), true);
 
