@@ -145,12 +145,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     launch()
   }
 
-  func stopServer(then done: @escaping () -> Void) {
-    guard let running = server, running.isRunning else { return done() }
-    running.terminationHandler = { _ in DispatchQueue.main.async { done() } }
+  /// Stops the server and waits for it, for up to four seconds; after that it is stopped the hard way.
+  func stopServer() {
+    guard let running = server, running.isRunning else { return }
+    running.terminationHandler = nil
     running.terminate()
-    // If it has not stopped in four seconds, it is stopped the hard way.
-    DispatchQueue.main.asyncAfter(deadline: .now() + 4) { if running.isRunning { kill(running.processIdentifier, SIGKILL) } }
+    let until = Date().addingTimeInterval(4)
+    while running.isRunning && Date() < until { usleep(50_000) }
+    if running.isRunning { kill(running.processIdentifier, SIGKILL) }
+    server = nil
   }
 
   // ---------- the window ----------
@@ -403,6 +406,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
   @objc func reportProblem() { NSWorkspace.shared.open(URL(string: "https://github.com/Talqava/Talqava/issues/new/choose")!) }
 
   // ---------- start and stop ----------
+  var signals: [DispatchSourceSignal] = []
+  /// Being told to stop from outside (a shutdown, or `kill`) stops the server too, like Quit.
+  func stopOnSignals() {
+    for sig in [SIGTERM, SIGINT, SIGHUP] {
+      signal(sig, SIG_IGN)
+      let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+      source.setEventHandler { NSApp.terminate(nil) }
+      source.resume()
+      signals.append(source)
+    }
+  }
+
   func applicationDidFinishLaunching(_ note: Notification) {
     // Only one copy runs: a second one brings the first to the front and leaves.
     let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "com.talqava.agents").filter { $0 != NSRunningApplication.current }
@@ -410,6 +425,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
       first.activate(options: [.activateAllWindows])
       return NSApp.terminate(nil)
     }
+    stopOnSignals()
     buildMenu()
     buildStatusItem()
     launch()
@@ -423,9 +439,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     quitting = true
-    guard let running = server, running.isRunning else { return .terminateNow }
-    stopServer { NSApp.reply(toApplicationShouldTerminate: true) }
-    return .terminateLater
+    stopServer()
+    return .terminateNow
   }
 }
 

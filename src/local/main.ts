@@ -16,3 +16,16 @@ if (process.argv.includes("--open")) {
     execFile(command, args, () => {});
   });
 }
+
+// Inside a desktop app, the app starts this server and stops it on Quit. If the app is force-quit or crashes, nobody
+// is left to stop it, and it would hold its port and its data. So it watches for the app going away (its parent
+// changes) and then stops by itself.
+if (process.env.TALQAVA_DESKTOP) {
+  // The app asks it to stop with a signal. The app itself sets that signal aside for its own use, and a program
+  // started by it would otherwise inherit that and never hear the request.
+  for (const sig of ["SIGTERM", "SIGINT", "SIGHUP"] as const) process.on(sig, () => process.exit(0));
+  const parent = process.ppid;
+  setInterval(() => {
+    if (process.ppid !== parent) process.exit(0);
+  }, 3000).unref();
+}
