@@ -21,8 +21,8 @@ before(async () => {
 });
 
 test("the catalogue: every briefing says what, when and who suits it; none may invent, and a drafting one never sends", () => {
-  assert.equal(B.BRIEFINGS.length, 50);
-  assert.equal(new Set(B.BRIEFINGS.map((b) => b.id)).size, 50, "every id is used once");
+  assert.equal(B.BRIEFINGS.length, 51);
+  assert.equal(new Set(B.BRIEFINGS.map((b) => b.id)).size, 51, "every id is used once");
   const known = new Set(["xero", "square", "gmail", "outlook", "zendesk", "hubspot", "pipedrive", "typeform", "mailchimp", "googlecalendar", "gitlab", "jira", "clickup", "asana", "trello", "todoist", "telegram"]);
   for (const b of B.BRIEFINGS) {
     assert.ok(b.name && b.about && b.when && b.suits.length, b.id);
@@ -208,4 +208,18 @@ test("the right person sends a briefing even when their department has another n
   assert.ok(item.id);
   const shown = B.listBriefings(org, [{ id: "j9", name: "Morning news", prompt: "", schedule: "0 8 * * 1-5", enabled: true, createdAt: "", nextRunAt: null, lastRunAt: null, lastConversationId: null, owner: ids[1], org: org.id, briefing: "morning-news", topic: "", model: "openrouter/meta/llama-4" }]).find((b) => b.id === "morning-news")!;
   assert.equal(shown.model, "openrouter/meta/llama-4");
+});
+
+test("the owner's own watch list keeps its lines, stays quiet when nothing needs them, and changes nothing", () => {
+  const watch = B.briefingOf("watch-list")!;
+  assert.deepEqual([watch.kind, watch.quiet, watch.ask?.list, watch.ask?.required, watch.review], ["ai", true, true, true, undefined]);
+  const list = B.cleanTopic(watch, "  Has the flour delivery been confirmed for Friday?  \r\n\nIs our website up\nDid Corner Café pay invoice 1042   yet");
+  assert.equal(list, "Has the flour delivery been confirmed for Friday?\nIs our website up\nDid Corner Café pay invoice 1042 yet");
+  const prompt = B.briefingPrompt(watch, list);
+  assert.match(prompt, /one on each line:\n\nHas the flour delivery been confirmed for Friday\?\nIs our website up\nDid Corner Café pay invoice 1042 yet\n\nCheck each one now/, "each line reaches the agent on its own line");
+  assert.match(prompt, /answer with exactly these two words and nothing else: NOTHING NEW/);
+  assert.match(prompt, /You change nothing and send nothing to anyone else/);
+  // A long list is kept to a hundred lines; a one-line answer for another briefing is still cut to a line.
+  assert.equal(B.cleanTopic(watch, Array.from({ length: 150 }, (_, i) => `thing ${i}`).join("\n")).split("\n").length, 100);
+  assert.doesNotMatch(B.briefingPrompt(B.briefingOf("mentions-watch")!, "Corner\nBakery"), /Corner\nBakery/);
 });

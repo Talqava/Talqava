@@ -26,6 +26,8 @@ A briefing is an automation that is already written: a report an agent sends to 
 - **Running the business**: Meeting prep, Tomorrow's day and Travel check (Google Calendar), Stock running low (Square), Open issues digest (GitLab, Jira, ClickUp, Asana, Trello or Todoist), Merge requests waiting (GitLab), Weekly review and plan (Google Calendar), Files tidy-up (free).
 - **People and renewals** (free): Renewals coming up and Birthdays and anniversaries work from a list you type; Policy review reminder looks at your Workspace pages.
 
+**Keep an eye on.** The first one under **Your own work** is your own list. Type the things you want watched, one on each line, in your own words: "Has the flour delivery been confirmed for Friday?", "Is our website up?", "Did Corner Café pay invoice 1042 yet?". An agent checks the list three times each weekday with what it can reach (the web, your connected services, your files and tasks) and writes to your Inbox only about the lines that need you now. When nothing does, it stays silent. It reads and reports; it changes nothing. Change the list any time with **Edit**. Each check uses your AI model, so a long list costs more than a short one.
+
 **Three kinds.**
 - **Free** briefings are put together by Talqava from what it already holds (your tasks, goals, files, or a list you typed). They use no AI model and cost nothing. Renewals, birthdays, the files tidy-up and the policy reminder write to you only when there is something to say.
 - **Researched** briefings are done by an agent with your AI model, usually for a few cents each time. They report; they change nothing.
