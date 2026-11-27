@@ -347,9 +347,11 @@ function render() {
 
 /** Areas of the app that have several parts: the menu shows the area once, and its parts are tabs across the top. */
 const AREAS = {
-  tasks: { name: "Tasks", views: [["tasks", "Tasks"], ["projects", "Projects"], ["jobs", "Automations"]], also: { project: "projects" } },
-  team: { name: "Team", views: [["home", "Agents"], ["team", "Organization"], ["market", "Marketplace"]], also: { quest: "home", bot: "home", marketbot: "market" } },
-  files: { name: "Files", views: [["office", "All files"], ["docs", "Documents"], ["sheets", "Sheets"], ["slides", "Slides"], ["notes", "Notes"], ["workspace", "Workspace"], ["library", "Library"], ["memory", "Memory"], ["skills", "Skills"]] },
+  // Automations has its own place on the rail, so it is not a tab of Tasks.
+  tasks: { name: "Tasks", views: [["tasks", "Tasks"], ["projects", "Projects"]], also: { project: "projects" } },
+  // Team is who does the work and what they know: memory and skills sit here, with the agents they belong to.
+  team: { name: "Team", views: [["home", "Agents"], ["team", "Organization"], ["memory", "Memory"], ["skills", "Skills"], ["market", "Marketplace"]], also: { quest: "home", bot: "home", marketbot: "market" } },
+  files: { name: "Files", views: [["office", "All files"], ["docs", "Documents"], ["sheets", "Sheets"], ["slides", "Slides"], ["notes", "Notes"], ["workspace", "Workspace"], ["library", "Library"]] },
   more: { name: "Account", views: [["integrations", "Connections"], ["security", "Security"], ["audit", "Activity log"], ["usage", "Usage"], ["settings", "Settings"]] },
 };
 /**
@@ -394,6 +396,8 @@ function renderAreaTabs() {
   try {
     localStorage.setItem(`talqava.area.${area}`, at);
   } catch {}
+  // A place with one page has no tabs to choose between, so the bar is left out.
+  if (AREAS[area].views.filter(([v]) => !FOLDED[v]).length < 2) return (ui.tabs.hidden = true), fill(ui.tabs);
   ui.tabs.setAttribute("aria-label", `Parts of ${AREAS[area].name}`);
   fill(ui.tabs, h("span", { class: "areaname" }, AREAS[area].name), AREAS[area].views.filter(([v]) => !FOLDED[v]).map(([v, label]) => h("button", { class: `areatab ${(FOLDED[at] ?? at) === v ? "on" : ""}`, "aria-current": (FOLDED[at] ?? at) === v ? "page" : null, onclick: () => go(v) }, label)));
 }
@@ -4494,10 +4498,10 @@ async function integrationsView() {
   const all = list.integrations.filter((i) => i.id !== "git" || lab("git") || i.state === "connected");
   const count = (state) => all.filter((i) => (state === "available" ? i.state === "needs-setup" || i.state === "unavailable" : i.state === state)).length;
   const SHOW = [
-    ["all", `Everything (${all.length})`],
+    ["all", `Everything you can connect (${all.length - count("coming")})`],
     ["connected", `Connected (${count("connected")})`],
     ["available", `Available (${count("available")})`],
-    ["coming", `Coming (${count("coming")})`],
+    ["coming", `Planned, not built yet (${count("coming")})`],
   ];
   const open = async (i) => {
     if (i.state === "coming") return;
@@ -4523,7 +4527,7 @@ async function integrationsView() {
     const q = (ui.integrationSearch ?? "").trim().toLowerCase();
     const show = ui.integrationShow ?? "all";
     const cat = ui.integrationCategory ?? "All";
-    const fits = (x) => (!q || q.split(/\s+/).every((w) => x.words.includes(w))) && (show === "all" || (show === "available" ? x.i.state === "needs-setup" || x.i.state === "unavailable" : x.i.state === show));
+    const fits = (x) => (!q || q.split(/\s+/).every((w) => x.words.includes(w))) && (show === "all" ? Boolean(q) || x.i.state !== "coming" : (show === "available" ? x.i.state === "needs-setup" || x.i.state === "unavailable" : x.i.state === show));
     let any = false;
     for (const sec of sections) {
       let seen = false;
@@ -4549,7 +4553,7 @@ async function integrationsView() {
     catPills,
     none,
     ...sections.map((x) => x.node),
-    h("p", { class: "note" }, "Services marked Coming are planned and cannot be connected yet. Any service that offers a connector (an MCP server) can already be added under ", h("button", { class: "plain link", onclick: () => ((ui.integration = "mcp"), again()) }, "Connectors and AI apps"), "."),
+    h("p", { class: "note" }, "Planned services that are not built yet are listed under “Planned, not built yet”, and show up when you search for them. Any service that offers a connector (an MCP server) can already be added under ", h("button", { class: "plain link", onclick: () => ((ui.integration = "mcp"), again()) }, "Connectors and AI apps"), "."),
   );
   apply();
 }
