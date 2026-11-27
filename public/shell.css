@@ -181,3 +181,8 @@
 
 /* The set-up steps on a new session sit in the middle column, left-aligned. */
 .empty.hero .askset { text-align: left; width: min(560px, 100%); margin: 6px auto; }
+
+/* A session page with nothing to list is one column; the overview column appears only when it has something in it. */
+.body.two.noside { grid-template-columns: minmax(0, 1fr); }
+.body.two.over.noside { grid-template-columns: minmax(0, 1fr) 280px; }
+@media (max-width: 1180px) { .body.two.over.noside { grid-template-columns: minmax(0, 1fr); } }

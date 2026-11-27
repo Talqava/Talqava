@@ -465,7 +465,6 @@ function renderRail() {
       item("jobs", "Automations", v === "jobs", "jobs"),
       item(lastIn("team"), "Team", area === "team", "team"),
       item(lastIn("files"), "Files", area === "files", "office"),
-      item("search", "Search", false, "search", "", () => ui.palette?.focus()),
     ),
     h(
       "div",
@@ -512,7 +511,9 @@ function accountMenu(anchor) {
     h("div", { class: "acctlabel" }, "Look"),
     look,
     h("div", { class: "acctsep" }),
-    row("guide", "Help", () => showGuide(guideFor(state.view) ?? "getting-started")),
+    // Help opens the guide for the page you are on; the welcome can be seen again from here.
+    row("guide", guideFor(state.view) ? "Help with this page" : "Help", () => showGuide(guideFor(state.view) ?? "getting-started")),
+    row("new", "Show the welcome again", () => showWelcome()),
     me ? row("security", "Sign out", () => attempt(async () => (await api("POST", "logout"), (state.me = null), showLogin()))) : null,
   );
   document.body.append(menu);
@@ -615,7 +616,6 @@ function renderTop() {
         : null,
       paletteBox(),
       bots ? ui.spent : null,
-      guideFor(state.view) ? h("button", { class: "small guidebtn", onclick: () => showGuide(guideFor(state.view)), title: "How to use this page, step by step" }, icon("guide"), "Guide") : null,
     ].filter(Boolean),
   );
   renderSpent();
@@ -6367,12 +6367,9 @@ function conversationPane({ tools = false } = {}) {
   });
   ui.send.addEventListener("click", () => (state.running ? attempt(() => api("POST", `conversations/${state.convId}/stop`)) : submit()));
   state.running = false;
-  // In a chat, the box carries the choices: which AI model answers and how hard it thinks, beside the microphone and send.
+  // In a chat, the box carries one choice, which AI model answers, beside the microphone and send. How hard it thinks is under Settings.
   if (tools) {
-    const c = state.config;
-    const effort = h("select", { class: "effortpick", "aria-label": "Effort", title: "How long the model thinks before it answers. Higher is slower and costs more. For Claude models." }, c.efforts.map((e) => h("option", { value: e, selected: e === c.effort }, `${e[0].toUpperCase()}${e.slice(1)} effort`)));
-    effort.addEventListener("change", () => attempt(async () => (state.config = await api("PUT", "settings", { effort: effort.value }))));
-    return h("div", { class: "convo" }, ui.scroll, h("div", { class: "compose" }, h("div", { class: "col composebox" }, ui.input, h("div", { class: "composetools" }, h("span", { class: "askchip", title: "It asks you before it sends, changes or deletes anything, unless you told it otherwise." }, "Asks before it changes anything"), h("span", { class: "grow" }), chatBotOf() ? null : modelPicker(), chatBotOf() ? null : effort, state.canSpeak ? micButton(ui.input, "chatmic") : null, ui.send))));
+    return h("div", { class: "convo" }, ui.scroll, h("div", { class: "compose" }, h("div", { class: "col composebox" }, ui.input, h("div", { class: "composetools" }, h("span", { class: "askchip", title: "It asks you before it sends, changes or deletes anything, unless you told it otherwise." }, "Asks before it changes anything"), h("span", { class: "grow" }), chatBotOf() ? null : modelPicker(), state.canSpeak ? micButton(ui.input, "chatmic") : null, ui.send))));
   }
   return h("div", { class: "convo" }, ui.scroll, h("div", { class: "compose" }, h("div", { class: "col" }, ui.input, state.canSpeak ? micButton(ui.input, "chatmic") : null, ui.send)));
 }
@@ -6392,6 +6389,11 @@ function renderOverview() {
   const needs = mail.filter((m) => m.label === "needs" || m.label === "failed");
   const working = mail.filter((m) => m.label === "working");
   const done = mail.filter((m) => m.label === "done" && new Date(m.activityAt ?? m.at).toDateString() === today);
+  // With nothing waiting, running or done, the panel is not shown at all: an empty column says nothing.
+  const quiet = !needs.length && !working.length && !done.length;
+  ui.over.hidden = quiet;
+  ui.body.classList.toggle("over", !quiet);
+  if (quiet) return fill(ui.over);
   const open = (m) => ((ui.mailOpen = m.id), go("inbox"));
   const who = (m) => (m.bot ? roleOf(m.bot.id)?.title || m.bot.name : "");
   const card = (m, note, cls = "") => h("button", { class: `plain overcard ${cls}`, onclick: () => open(m), title: m.subject }, h("span", { class: "overrow" }, m.bot ? keycap(m.bot, 20, "", m.bot.type) : null, h("span", { class: "overname" }, m.subject)), h("span", { class: "note small" }, [who(m), note].filter(Boolean).join(" · ")));
@@ -6399,9 +6401,7 @@ function renderOverview() {
   fill(
     ui.over,
     h("div", { class: "overhead" }, h("b", { class: "grow" }, "Overview"), h("button", { class: "plain link small", onclick: () => go("inbox") }, "Inbox")),
-    !mail.length || (!needs.length && !working.length && !done.length)
-      ? h("p", { class: "note overempty" }, "Your work will show here: what is waiting on you, what is being worked on, and what is done.")
-      : [
+    [
           group("Waiting on you", needs, needs.length ? needs.slice(0, 5).map((m) => card(m, m.label === "failed" ? "stopped; needs a look" : "needs your yes", "wait")) : h("p", { class: "note small" }, "Nothing. You're up to date.")),
           group("Working", working, working.length ? working.slice(0, 5).map((m) => card(m, m.snippet ? String(m.snippet).slice(0, 60) : "")) : h("p", { class: "note small" }, "Nothing is running.")),
           done.length ? group("Done today", done, done.slice(0, 6).map((m) => h("button", { class: "plain overdone", onclick: () => open(m), title: m.subject }, m.subject))) : null,
@@ -6465,7 +6465,7 @@ function chatView() {
           { class: "ideas" },
           ideas.map((x) => h("button", { title: "Puts this in the box, for you to change or send", onclick: () => ((ui.input.value = x.bot ? `@${x.bot.id} ${x.idea}` : x.idea), ui.input.focus()) }, x.idea.replace(/: $/, ""))),
         ),
-        h("p", { class: "note small" }, bots.length ? [h("button", { class: "plain link", onclick: () => newTaskDialog() }, "Give a task with more options"), " · "] : null, h("button", { class: "plain link", onclick: () => showWelcome() }, "Show the welcome again")),
+        h("p", { class: "note small" }, bots.length ? h("button", { class: "plain link", onclick: () => newTaskDialog() }, "Give a task with more options") : null),
       ),
     );
   }
@@ -6663,9 +6663,12 @@ function renderChatList(force = false) {
   const now = shown.filter((x) => !x.pinned && new Date(x.updatedAt).toDateString() === today);
   const earlier = shown.filter((x) => !x.pinned && new Date(x.updatedAt).toDateString() !== today).slice(0, 60);
   const part = (label, list) => (list.length ? [h("div", { class: "listlabel" }, label), ...list.map(row)] : null);
+  // Before the first session there is nothing to list: the page is the question and the box, and nothing else.
+  const bare = !(state.sessions ?? state.convs).length && !state.spaces.length && !ui.addingSpace;
+  ui.chatSide.hidden = bare;
+  ui.body.classList.toggle("noside", bare);
   fill(ui.chatSide,
     spacePicker(),
-    h("button", { class: "primary", onclick: () => go("chat") }, "New session"),
     h(
       "div",
       { class: "chatlist" },

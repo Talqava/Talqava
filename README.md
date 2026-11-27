@@ -69,7 +69,7 @@ Everything Talqava knows is in the `data/` folder: organizations, chats, tasks, 
 
 ## User guide
 
-Every page in the app has a **Guide** button (top right) that opens its full guide, and **User guide** at the bottom of the menu opens them all. You can also read them here: start with [Getting started](guide/getting-started.md), then [Organization](guide/organization.md), [Tasks and goals](guide/tasks.md), [Work in progress](guide/work-in-progress.md), [Inbox](guide/inbox.md), [Chat](guide/chat.md), [Schedules](guide/schedules.md), [Marketplace](guide/marketplace.md), [Workspace](guide/workspace.md), [Library](guide/library.md), [Memory](guide/memory.md), [Skills](guide/skills.md), [Activity log](guide/audit-log.md), [Connections](guide/integrations.md) and [Settings and AI models](guide/settings.md).
+Every page in the app has its guide under **Help with this page**, in the account menu at the bottom left. You can also read them here: start with [Getting started](guide/getting-started.md), then [Organization](guide/organization.md), [Tasks and goals](guide/tasks.md), [Work in progress](guide/work-in-progress.md), [Inbox](guide/inbox.md), [Chat](guide/chat.md), [Schedules](guide/schedules.md), [Marketplace](guide/marketplace.md), [Workspace](guide/workspace.md), [Library](guide/library.md), [Memory](guide/memory.md), [Skills](guide/skills.md), [Activity log](guide/audit-log.md), [Connections](guide/integrations.md) and [Settings and AI models](guide/settings.md).
 
 ## How it works
 
