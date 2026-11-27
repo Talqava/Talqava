@@ -8,7 +8,7 @@ The Workspace is where you write down how your business runs: procedures, checkl
 - **Small marks on a page's row.** A number means agents have suggested that many changes to it. A lock (🔒) means the page is private.
 - **Deleted (number)** at the bottom of the list, when you have deleted pages. Open it to **Restore** any of them.
 - **The home screen.** A search box (**Search every page**), then **Waiting for you** (changes agents have suggested), **Recently changed** pages, and **Start from a template**.
-- **An open page.** The path to the page at the top, its icon and title, who last edited it and when, then a small toolbar and the page itself. On the right is a settings panel: **Who can see it**, **When agents want to change it**, **Protected**, **Give this page to an agent**, **Used by**, and the **History** and **Delete** buttons.
+- **An open page.** The path to the page at the top, its icon and title, who last edited it and when, then a small toolbar and the page itself. Press **Details**, beside who last edited it, to open a settings panel on the right (the choice is remembered): **Who can see it**, **When agents want to change it**, **Protected**, **Give this page to an agent**, **Used by**, and the **History** and **Delete** buttons.
 
 ## Key ideas
 

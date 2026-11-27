@@ -4,6 +4,8 @@ A skill is a written-down procedure: the steps for a job that comes up again and
 
 ## What you'll see
 
+Skills is one of the two parts of **Knowledge**, under **Team**. The switch at the top goes between **Memory** and **Skills**.
+
 - **A list of skills.** Each line shows the skill's short name and a one-line description of what it is for.
 - **The full steps.** Click a skill to open it and read exactly what was saved.
 - **A Delete button** inside each open skill.

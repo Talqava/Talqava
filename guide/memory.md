@@ -4,6 +4,8 @@ Memory is where Talqava keeps short facts worth remembering between chats and ta
 
 ## What you'll see
 
+Memory is one of the two parts of **Knowledge**, under **Team**. The switch at the top goes between **Memory** and **Skills**.
+
 - **Tabs along the top.** **General**, then one tab per project, each with a count of its entries. **＋ New project** adds one.
 - **A short note** saying where this memory is used. Inside a project you also get **Rename** and **Delete project**.
 - **A box to add something**, with a **Remember this** button (or **Remember this in** the project's name).
