@@ -77,3 +77,15 @@ test("schedules in plain words, and changing one", async () => {
   await assert.rejects(jobs.edit(job.id, { prompt: "" }), /Write the instructions/);
   await assert.rejects(jobs.edit("nope", { name: "x" }), /no longer exists/);
 });
+
+test("how often a schedule runs in a month, for saying what it costs", async () => {
+  const { runsIn } = await import("../../src/core/index.ts");
+  const from = at("2026-03-02T00:00:00"); // a Monday
+  assert.equal(runsIn("every 1h", 30, from), 720);
+  assert.equal(runsIn("0 8 * * *", 30, from), 30);
+  assert.equal(runsIn("0 8 * * 1-5", 28, from), 20);
+  assert.equal(runsIn("0 8 * * 1", 28, from), 4);
+  assert.equal(runsIn("0 8 1 * *", 31, from), 1);
+  assert.equal(runsIn("at 2020-01-01T10:00:00", 30, from), 0, "a time that has passed never runs");
+  assert.equal(runsIn("nonsense", 30, from), 0);
+});

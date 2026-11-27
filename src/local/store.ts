@@ -155,7 +155,7 @@ export interface Config {
   /** The Client ID of the GitHub app that "Connect GitHub" signs in through. Not a secret. */
   githubClientId?: string;
   /** The last few hundred runs of automations, newest last: which one, when, what it made, and what went wrong if it did. */
-  jobRuns?: { job: string; name: string; at: string; taskId?: string; conversationId?: string; problem?: string }[];
+  jobRuns?: { job: string; name: string; at: string; taskId?: string; conversationId?: string; problem?: string; skipped?: boolean }[];
   sessionSecret: string;
 }
 
@@ -290,7 +290,7 @@ class FileConversations implements ConversationStore {
       .filter((f) => f.endsWith(".json"))
       .map((f) => readJson<Conversation | null>(path.join(CONV_DIR, f), null))
       .filter((c): c is Conversation => Boolean(c))
-      .map(({ id, title, createdAt, updatedAt, source, space, pinned, bot, archived }) => ({ id, title, createdAt, updatedAt, source, space, pinned: Boolean(pinned), bot, archived: Boolean(archived) }))
+      .map(({ id, title, createdAt, updatedAt, source, space, pinned, bot, archived, lastError }) => ({ id, title, createdAt, updatedAt, source, space, pinned: Boolean(pinned), bot, archived: Boolean(archived), failed: Boolean(lastError) }))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 

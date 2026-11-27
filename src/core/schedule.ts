@@ -87,6 +87,24 @@ export function describeSchedule(text: string): string {
   return s;
 }
 
+/** How many times a schedule fires in the next `days` days, for saying what something costs a month. */
+export function runsIn(text: string, days = 30, from = new Date()): number {
+  const end = from.getTime() + days * 86_400_000;
+  let at = from;
+  let n = 0;
+  try {
+    while (n < 50_000) {
+      const next = nextRun(text, at);
+      if (!next || next.getTime() > end) break;
+      n += 1;
+      at = next;
+    }
+  } catch {
+    return 0;
+  }
+  return n;
+}
+
 /** The next time a schedule fires strictly after `after`, or null if it never will. */
 export function nextRun(text: string, after = new Date()): Date | null {
   const sched = parseSchedule(text);

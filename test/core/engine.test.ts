@@ -209,3 +209,32 @@ test("a service that refuses clearing old outputs is asked again without it", as
     assert.doesNotMatch(String(r.headers["anthropic-beta"]), /context-management/);
   }
 });
+
+test("a run that fails says why on the conversation, and trying again asks once more without adding to it", async () => {
+  let broken = true;
+  const flaky = new Engine({
+    conversations,
+    resolveRun: (): RunSpec => {
+      if (broken) throw new Error("The AI service could not be reached.");
+      return { model: new AnthropicModel({ apiKey: "test-key", model: "claude-opus-5-5", effort: "high" }), system: "You are a test agent.", tools: [], hostedTools: [], mcpServers: [], approvalMode: "auto" };
+    },
+  });
+  const { id } = await conversations.create();
+  const events: RunEvent[] = [];
+  flaky.subscribe(id, (e) => events.push(e));
+  await (await flaky.startRun(id, "hello")).done;
+  let saved = (await conversations.get(id))!;
+  assert.equal(saved.lastError?.text, "The AI service could not be reached.", "kept, so it can still be read when the chat is opened later");
+  assert.ok(events.some((e) => e.type === "error"));
+  assert.equal(saved.messages.length, 1);
+
+  broken = false;
+  script.push(say("Hello again."));
+  const again = await flaky.resumeRun(id, new Set(), "Trying again.");
+  assert.ok(again);
+  await again!.done;
+  saved = (await conversations.get(id))!;
+  assert.equal(saved.lastError ?? null, null, "a run that works clears it");
+  assert.deepEqual(saved.messages.map((m) => m.role), ["user", "assistant"], "the same request was asked once more; nothing was added");
+  assert.ok(events.some((e) => e.type === "resumed" && e.text === "Trying again."));
+});

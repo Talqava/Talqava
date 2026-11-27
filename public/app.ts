@@ -905,10 +905,21 @@ function onEvent(event) {
       break;
     }
     case "error":
-      ui.log.append(h("div", { class: "banner error" }, event.text));
+      ui.log.append(errorBanner(event.text));
       break;
   }
   if (stick || event.type === "sync" || event.type === "user") ui.scroll.scrollTop = ui.scroll.scrollHeight;
+}
+
+/** An answer that failed, kept on the chat in plain words, with a button that asks again. Nothing is added to the chat. */
+function errorBanner(text) {
+  const again = state.view === "chat" && state.convId;
+  return h(
+    "div",
+    { class: "banner error failbanner", role: "alert" },
+    h("div", { class: "grow" }, h("b", {}, "That did not work. "), String(text), h("div", { class: "note small" }, again ? "Nothing is lost. Try again asks the same thing once more." : "Nothing is lost. Try the task again from its page.")),
+    again ? h("button", { class: "primary small", onclick: (e) => attempt(async () => (e.currentTarget.closest(".failbanner")?.remove(), await api("POST", `conversations/${state.convId}/retry`)), ui.log) }, "Try again") : null,
+  );
 }
 
 /** Why a run stopped before finishing, kept on the chat, with a button that carries on. */
@@ -951,6 +962,7 @@ function renderConversation(conv, live) {
     );
   }
   if (conv.lastStop && !live.running) ui.log.append(stopBanner(conv.lastStop.text));
+  if (conv.lastError && !live.running) ui.log.append(errorBanner(conv.lastError.text));
   setRunning(live.running);
   for (const delta of live.partial) streamDelta(delta);
   for (const approval of live.approvals) addApproval(approval);
@@ -1798,7 +1810,7 @@ function renderBoard() {
 /** One thing that needs the person, other than an approval: a review, a failed check, a failure, a budget reached. */
 function needRow(n) {
   if (!n.q) {
-    const words = n.kind === "chat" ? [n.c.title || "A chat", "A chat is waiting for your approval", () => go("chat", n.c.id)] : n.kind === "monthly" ? [`${n.bot.title || n.bot.name}: its own monthly budget is used up`, "It starts no new work until you raise it on its page", () => go("bot", n.bot.id)] : ["All agents: the monthly budget for all agents is used up", "No agent starts new work until you raise it in Settings", () => go("settings")];
+    const words = n.kind === "auto" ? [`${n.j.name}: its last run ${n.j.last.outcome === "skipped" ? "was left out" : "did not work"}`, n.j.last.words, () => ((ui.autoTab = "runs"), go("jobs"))] : n.kind === "chat" ? [n.c.title || "A chat", "A chat is waiting for your approval", () => go("chat", n.c.id)] : n.kind === "monthly" ? [`${n.bot.title || n.bot.name}: its own monthly budget is used up`, "It starts no new work until you raise it on its page", () => go("bot", n.bot.id)] : ["All agents: the monthly budget for all agents is used up", "No agent starts new work until you raise it in Settings", () => go("settings")];
     return h("button", { class: "needrow", onclick: words[2] }, h("span", { class: "flowmain" }, h("b", {}, words[0]), h("span", { class: "flowsub" }, words[1])), h("span", { class: "pill loud" }, "Open"));
   }
   const why = { review: "Changes ready for your review", check: "Finished, but its check failed", failed: n.q.note ? `Failed: ${n.q.note}` : "Failed", budget: "Stopped at its budget: say “continue” to keep going" }[n.kind] ?? "";
@@ -1972,6 +1984,8 @@ function inboxItems() {
   for (const bot of state.crew?.bots ?? []) if (bot.month?.state === "stopped") needs.push({ kind: "monthly", bot });
   if (state.crew?.budgets?.total.state === "stopped") needs.push({ kind: "total" });
   for (const p of state.serviceProblems ?? []) needs.push({ kind: "service", p });
+  // An automation whose last run did not work, or was left out: said once for that run, so nothing fails in silence.
+  for (const j of state.autoJobs ?? []) if (j.enabled && j.last && (j.last.outcome === "failed" || j.last.outcome === "skipped")) needs.push({ kind: "auto", j });
   const working = [...quests.filter((q) => isLive(q) && !q.approvals?.length).map((q) => ({ q })), ...(state.convs ?? []).filter((c) => c.running && !c.needsApproval).map((c) => ({ c }))];
   const today = new Date().toDateString();
   const done = quests.filter((q) => !isLive(q) && new Date(q.updatedAt).toDateString() === today && !needs.some((n) => n.q === q));
@@ -2047,6 +2061,7 @@ async function loadMail() {
   loadPageSuggestions();
   try {
     [state.mail, state.workItems, state.serviceProblems, state.checkIn, state.briefings] = await Promise.all([api("GET", "inbox"), api("GET", "work").then((w) => w.items).catch(() => state.workItems ?? []), api("GET", "gateway/problems").catch(() => state.serviceProblems ?? []), api("GET", "work/checkin").catch(() => state.checkIn ?? null), api("GET", "jobs/briefings").catch(() => state.briefings ?? null)]);
+    state.autoJobs = await api("GET", "jobs").catch(() => state.autoJobs ?? []);
   } catch {
     state.mail ??= { messages: {}, names: {} };
   }
@@ -2087,6 +2102,7 @@ function mailMessages() {
     else if (n.kind === "budget") out.push({ id: `need:budget:${q.id}`, kind: "need", need: n, q, bot: q.bot, subject: `Stopped at its budget: ${q.title}`, snippet: "Reply “continue” to keep going.", at: q.updatedAt, activityAt: q.updatedAt, label: "failed" });
     else if (n.kind === "chat") out.push({ id: `need:chat:${n.c.id}`, kind: "need", need: n, bot: null, subject: "A chat is waiting for your approval", snippet: n.c.title, at: n.c.updatedAt ?? MONTH_START(), activityAt: n.c.updatedAt ?? MONTH_START(), label: "needs" });
     else if (n.kind === "monthly") out.push({ id: `need:monthly:${n.bot.id}:${MONTH_START().slice(0, 7)}`, kind: "need", need: n, bot: n.bot, subject: "I have reached my monthly budget", snippet: `${money(n.bot.month.spent)} of ${money(n.bot.month.limit)}. I start no new work until you raise it.`, at: MONTH_START(), activityAt: MONTH_START(), label: "needs" });
+    else if (n.kind === "auto") out.push({ id: `need:auto:${n.j.id}:${n.j.last.at}`, kind: "need", need: n, bot: null, subject: n.j.last.outcome === "skipped" ? `${n.j.name} was left out this time` : `${n.j.name} did not work`, snippet: n.j.last.words, at: n.j.last.at, activityAt: n.j.last.at, label: "failed" });
     else if (n.kind === "service") out.push({ id: `need:service:${n.p.id}:${n.p.problem.slice(0, 40)}`, kind: "need", need: n, bot: null, subject: `${n.p.name} is not working`, snippet: n.p.problem, at: new Date().toISOString(), activityAt: new Date().toISOString(), label: "needs" });
     else if (n.kind === "total") out.push({ id: `need:total:${MONTH_START().slice(0, 7)}`, kind: "need", need: n, bot: null, subject: "Your agents have reached this month's budget", snippet: "No agent starts new work until you raise it or the month turns.", at: MONTH_START(), activityAt: MONTH_START(), label: "needs" });
   }
@@ -2566,6 +2582,7 @@ function readMail(m) {
       );
     } else if (n.kind === "chat") fill(body, h("p", {}, `The chat “${n.c.title}” is waiting for you to approve a step.`), h("button", { class: "primary", onclick: () => go("chat", n.c.id) }, "Open the chat"));
     else if (n.kind === "monthly") fill(body, h("p", {}, `I have spent ${money(n.bot.month.spent)} of my ${money(n.bot.month.limit)} monthly budget, so I won't start new work until you raise it or the month turns.`), h("button", { class: "primary", onclick: () => go("bot", n.bot.id) }, "Raise my budget"));
+    else if (n.kind === "auto") fill(body, h("p", {}, n.j.last.outcome === "skipped" ? `The automation “${n.j.name}” did not run at its time. ${n.j.last.words}` : `The automation “${n.j.name}” ran but did not work: ${n.j.last.words}`), h("p", { class: "note small" }, "The next one runs at its usual time. You can also run it now from Automations."), h("button", { class: "primary", onclick: () => ((ui.autoTab = "runs"), go("jobs")) }, "Open the run history"));
     else if (n.kind === "service") fill(body, h("p", {}, `${n.p.name} stopped working: ${n.p.problem}`), h("p", { class: "note small" }, n.p.integration ? "Agents cannot use it until it is fixed. Make a new key in the service and connect again; the account keeps its settings." : "Tasks on its models will fail, or go to a backup model if you set one, until it is fixed. A new key usually fixes it."), h("button", { class: "primary", onclick: () => ((ui.integration = n.p.integration ?? "ai-models"), go("integrations")) }, n.p.integration ? "Open the connection" : "Open AI models"));
     else if (n.kind === "total") fill(body, h("p", {}, "All your agents together have reached this month's budget. No agent starts new work until you raise it or the month turns."), h("button", { class: "primary", onclick: () => go("team") }, "Change the budget"));
     else fill(body, h("p", {}, m.snippet), h("button", { class: "primary", onclick: () => go("quest", q.id) }, n.kind === "review" ? "Review the changes" : "Open the task"));
@@ -7185,6 +7202,17 @@ function scheduleForm(col, job = null, done) {
   );
 }
 
+/** What an automation costs, said before it is switched on: for each run, and for a month on its schedule. */
+function costWords(c, { short = false } = {}) {
+  if (!c || c.from === "free") return short ? "Free" : "Free: uses no AI model";
+  if (c.perRun === null || c.from === "unknown") return short ? "Not known" : "Uses your AI model; its price is not listed, so the cost is not known";
+  const month = c.perRun * c.perMonth;
+  if (short) return `about ${money(month)} a month`;
+  return `About ${money(c.perRun)} each time, about ${money(month)} a month ${c.from === "history" ? "(from its past runs)" : "(estimate)"}`;
+}
+/** How a run turned out, as a word and a colour. */
+const OUTCOME_WORDS = { done: ["Done", "ok"], working: ["Working", ""], waiting: ["Needs you", "wait"], failed: ["Did not work", "bad"], skipped: ["Left out", "bad"] };
+
 /** Automations › Start a briefing: ready-made reports for the Inbox, switched on with one press. */
 function briefingGallery(host, data, col) {
   state.briefings = data;
@@ -7197,7 +7225,7 @@ function briefingGallery(host, data, col) {
       { class: `briefcard ${on?.enabled ? "on" : ""}` },
       h("div", { class: "brieftop" }, h("b", { class: "grow" }, b.name), on ? h("span", { class: `briefstate ${on.enabled ? "on" : ""}` }, on.enabled ? "On" : "Paused") : null),
       h("p", { class: "briefabout" }, b.about),
-      h("p", { class: "note small" }, `${b.when} · ${b.kind === "free" ? "Free: uses no AI model" : "Uses your AI model, usually a few cents each time"}${on && b.sender ? ` · sent by the ${b.sender.title}` : ""}`),
+      h("p", { class: "note small" }, `${b.when} · ${costWords(b.costs)}${on && b.sender ? ` · sent by the ${b.sender.title}` : ""}`),
       b.needs?.length ? h("p", { class: `note small ${b.ready ? "" : "briefneeds"}` }, b.ready ? `Reads ${b.needs.filter((n) => n.connected).map((n) => n.name).join(" and ")}` : `Needs ${b.needs.map((n) => n.name).join(" or ")}`) : null,
       b.review ? h("p", { class: "note small" }, "Drafts for you; nothing is sent. It waits for your yes.") : null,
       b.quiet ? h("p", { class: "note small" }, "Quiet unless there is something to say.") : null,
@@ -7209,7 +7237,7 @@ function briefingGallery(host, data, col) {
           ? [
               on.enabled ? h("button", { class: "small", onclick: () => act(() => api("PATCH", `jobs/${on.job}`, { enabled: false }), `${b.name} is paused.`) }, "Pause") : h("button", { class: "small primary", onclick: () => act(() => api("PATCH", `jobs/${on.job}`, { enabled: true }), `${b.name} is on again.`) }, "Switch back on"),
               h("button", { class: "small", title: b.ask ? "Change its answer and when it arrives" : "Change when it arrives", onclick: () => briefingEdit(b).then((ok) => ok && again()) }, "Edit"),
-              h("button", { class: "small", title: "Send one now", onclick: () => act(() => api("POST", `jobs/${on.job}/run`, {}), "One is on its way to your Inbox.") }, "Send one now"),
+              h("button", { class: "small", title: "Send one now", onclick: () => attempt(async () => ((r) => (toast(r.skipped ?? "One is on its way to your Inbox."), again()))(await api("POST", `jobs/${on.job}/run`, {})), col) }, "Send one now"),
               h("button", { class: "plain link small", onclick: () => confirm(`Switch ${b.name} off for good? You can switch it on again later.`) && act(() => api("DELETE", `jobs/briefings/${b.id}`), `${b.name} is switched off.`) }, "Switch off"),
             ]
           : b.ready
@@ -7320,7 +7348,7 @@ async function briefingOn(b) {
       fact("Arrives", b.when),
       fact("Where", b.review ? "Your Inbox, under Waiting on you" : "Your Inbox, under Updates"),
       b.needs?.length ? fact("Reads", b.needs.filter((n) => n.connected).map((n) => n.name).join(" and ")) : null,
-      fact("Costs", b.kind === "free" ? "Nothing: it uses no AI model" : "A few cents each time, from the AI model you choose below"),
+      fact("Costs", b.kind === "free" ? "Nothing: it uses no AI model" : costWords(b.costs)),
       fact("Can it change anything?", b.kind === "free" ? "No. It only reads what Talqava holds." : b.review ? "No. It drafts; you decide what is sent." : "No. It reads and writes to you."),
       b.grants?.length ? fact("Also", `Lets whoever sends it ${b.grants.map((g) => (g === "web" ? "search the web" : g === "connectors" ? "use your connected services" : g)).join(" and ")}, if they cannot already`) : null,
     ),
@@ -7428,7 +7456,7 @@ async function jobsView() {
         h(
           "table",
           { class: "autotable" },
-          h("thead", {}, h("tr", {}, ["Automation", "When", "Result", ""].map((x) => h("th", {}, x)))),
+          h("thead", {}, h("tr", {}, ["Automation", "When", "Result", "Cost", ""].map((x) => h("th", {}, x)))),
           h(
             "tbody",
             {},
@@ -7438,7 +7466,8 @@ async function jobsView() {
                 {},
                 h("td", {}, h("b", {}, r.name), r.gone ? h("span", { class: "autoby" }, "Since deleted") : null),
                 h("td", { class: "autonum" }, when(r.at)),
-                h("td", {}, r.problem ? h("span", { class: "autobad" }, `Could not start: ${r.problem}`) : r.taskId ? "Started a task" : r.conversationId ? "Ran in a chat" : "Made its report"),
+                h("td", {}, h("span", { class: `autoout ${OUTCOME_WORDS[r.outcome]?.[1] ?? ""}` }, OUTCOME_WORDS[r.outcome]?.[0] ?? "Done"), h("span", { class: r.outcome === "failed" || r.outcome === "skipped" ? "autobad" : "autoby" }, r.words ?? "")),
+                h("td", { class: "autonum" }, r.cost >= 0.0005 ? money(r.cost) : r.outcome === "done" ? "free" : "—"),
                 h("td", { class: "autoend" }, r.taskId ? h("button", { class: "small", onclick: () => ((ui.taskOpen = r.taskId), go("tasks")) }, "Open") : r.conversationId ? h("button", { class: "small", onclick: () => go("chat", r.conversationId) }, "Open") : null),
               ),
             ),
@@ -7460,7 +7489,7 @@ async function jobsView() {
     const toggle = h("button", { class: `autotoggle ${j.enabled ? "on" : ""}`, role: "switch", "aria-checked": String(j.enabled), "aria-label": `${j.name}: ${j.enabled ? "on" : "paused"}`, title: j.enabled ? "On. Press to pause." : "Paused. Press to switch on.", onclick: () => act(() => api("PATCH", `jobs/${j.id}`, { enabled: !j.enabled }), `${j.name} is ${j.enabled ? "paused" : "on"}.`) });
     const menu = h("details", { class: "automenu" }, h("summary", { "aria-label": `More for ${j.name}`, title: "More" }, "⋯"));
     const pick = (label, run, cls = "") => h("button", { class: `plain ${cls}`, onclick: () => (menu.removeAttribute("open"), run()) }, label);
-    const edit = h("tr", { class: "autoedit", hidden: true }, h("td", { colspan: 6 }));
+    const edit = h("tr", { class: "autoedit", hidden: true }, h("td", { colspan: 7 }));
     menu.append(
       h(
         "div",
@@ -7468,6 +7497,7 @@ async function jobsView() {
         pick(b ? "Send one now" : "Run now", () =>
           attempt(async () => {
             const r = await api("POST", `jobs/${j.id}/run`, {});
+            if (r.skipped) return toast(r.skipped), again();
             if (b) return toast("One is on its way to your Inbox.");
             if (r.taskId) (ui.taskOpen = r.taskId), go("tasks");
             else if (r.conversationId) go("chat", r.conversationId);
@@ -7485,14 +7515,15 @@ async function jobsView() {
         h("td", {}, h("div", { class: "autofirst" }, h("span", { class: `autodot ${j.enabled ? "on" : ""}`, "aria-hidden": "true" }), h("div", { class: "autoname" }, h("b", {}, j.name), h("span", { class: "autoby" }, who)))),
         h("td", {}, b?.when ?? j.plain),
         h("td", { class: "autonum" }, j.enabled ? when(j.nextRunAt) : "paused"),
-        h("td", { class: "autonum" }, j.lastRunAt ? when(j.lastRunAt) : "not yet"),
+        h("td", { class: "autonum" }, j.lastRunAt ? when(j.lastRunAt) : "not yet", j.last && j.last.outcome !== "done" ? h("span", { class: `autoout ${OUTCOME_WORDS[j.last.outcome]?.[1] ?? ""}`, title: j.last.words }, OUTCOME_WORDS[j.last.outcome]?.[0]) : null),
+        h("td", { class: "autonum", title: costWords(j.costs) }, costWords(j.costs, { short: true })),
         h("td", { class: "autoend" }, toggle),
         h("td", { class: "autoend" }, menu),
       ),
       edit,
     ];
   };
-  fill(body, h("div", { class: "tablewrap" }, h("table", { class: "autotable" }, h("thead", {}, h("tr", {}, ["Name", "When", "Next run", "Last run", "", ""].map((x) => h("th", {}, x)))), h("tbody", {}, shown.flatMap(row)))));
+  fill(body, h("div", { class: "tablewrap" }, h("table", { class: "autotable" }, h("thead", {}, h("tr", {}, ["Name", "When", "Next run", "Last run", "Cost", "", ""].map((x) => h("th", {}, x)))), h("tbody", {}, shown.flatMap(row)))));
 }
 
 // ---------- settings ----------

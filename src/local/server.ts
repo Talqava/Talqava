@@ -6,7 +6,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { Engine, JobBook, BRAND, checkModel, describeError, describeSchedule, outsideContentRead, setting } from "../core/index.ts";
+import { Engine, JobBook, BRAND, checkModel, describeError, describeSchedule, outsideContentRead, runsIn, setting } from "../core/index.ts";
 import type { Bot, Conversation, Decision, Job, RunEvent } from "../core/index.ts";
 import {
   ROOT,
@@ -28,7 +28,7 @@ import {
 import type { Config, ProviderConfig } from "./store.ts";
 import { CAUTION_TOOLS, localRunSpec } from "./tools.ts";
 import { closeConnectors } from "./connectors.ts";
-import { resolveModel, splitRef } from "./models.ts";
+import { resolveModel, resolveOne, splitRef } from "./models.ts";
 import { botId, grantPowers, loadCrew, removeBot, saveBot } from "./crew.ts";
 import { addMarketBot, addPack, addTeam, buildStructure, installStatus, loadMarketplace, loadTeams, onTeam, previewMarketBot, previewTeam, undoMarketUpdate, updateMarketBot } from "./marketplace.ts";
 import { assignRule, requestRule, orgs, groupModelOf } from "./orgs.ts";
@@ -258,8 +258,16 @@ function describeRequest(method: string, parts: string[], body: any, url: URL): 
  * reviewed like any other. Without one, or if the agent has left the chart, the assistant does it in a chat.
  */
 /** Runs an automation and keeps a line about the run for its history, whether it worked or not. */
-async function runJob(job: Job): Promise<{ conversationId?: string; taskId?: string }> {
-  const keep = (line: { taskId?: string; conversationId?: string; problem?: string }) => saveConfig({ jobRuns: [...(getConfig().jobRuns ?? []), { job: job.id, name: job.name, at: new Date().toISOString(), ...line }].slice(-300) });
+async function runJob(job: Job, { byHand = false } = {}): Promise<{ conversationId?: string; taskId?: string; skipped?: string }> {
+  const keep = (line: { taskId?: string; conversationId?: string; problem?: string; skipped?: boolean }) => saveConfig({ jobRuns: [...(getConfig().jobRuns ?? []), { job: job.id, name: job.name, at: new Date().toISOString(), ...line }].slice(-300) });
+  // One run at a time: while the last one is still being worked on, or waits for the owner, a run that comes up on
+  // its timer is left out and the history says so. Two runs of the same thing would only cost twice and answer over
+  // each other. A run the owner starts by hand always goes: they asked for it.
+  const going = byHand ? null : stillGoing(job);
+  if (going) {
+    keep({ skipped: true, problem: going });
+    return { skipped: going };
+  }
   try {
     const made = await startJob(job);
     keep(made);
@@ -269,6 +277,79 @@ async function runJob(job: Job): Promise<{ conversationId?: string; taskId?: str
     throw err;
   }
 }
+/** The task behind a run, wherever it is on the chart now. */
+function taskOfRun(id: string) {
+  for (const org of orgs.list().orgs) {
+    try {
+      return work.get(org, id);
+    } catch {}
+  }
+  return null;
+}
+
+/** Why an automation's last run is not over yet, in plain words; nothing when it is. */
+function stillGoing(job: Job): string | null {
+  if (job.lastTaskId) {
+    const task = taskOfRun(job.lastTaskId);
+    if (task && (task.status === "working" || task.status === "todo")) return "Left out: the run before it was still being worked on.";
+    if (task && (task.status === "waiting" || task.status === "blocked")) return "Left out: the run before it is still waiting for your answer. Look in the Inbox.";
+  }
+  if (job.lastConversationId && (engine.isRunning(job.lastConversationId) || engine.awaitingApproval(job.lastConversationId))) return "Left out: the run before it was still going.";
+  return null;
+}
+
+/** How one run turned out, and what it cost: looked up now, so the history says what happened and not only that it began. */
+function runResult(r: { taskId?: string; conversationId?: string; problem?: string; skipped?: boolean }): { outcome: "done" | "working" | "waiting" | "failed" | "skipped"; words: string; cost: number } {
+  if (r.skipped) return { outcome: "skipped", words: r.problem ?? "Left out.", cost: 0 };
+  if (r.problem) return { outcome: "failed", words: r.problem, cost: 0 };
+  if (r.taskId) {
+    const task = taskOfRun(r.taskId);
+    if (!task) return { outcome: "done", words: "Its task has since been deleted.", cost: 0 };
+    const cost = task.cost || 0;
+    if (task.status === "working" || task.status === "todo") return { outcome: "working", words: "Being worked on.", cost };
+    if (task.status === "waiting" || task.status === "blocked") return { outcome: "waiting", words: task.status === "blocked" ? "Stuck: it needs a look." : "Waiting for your answer.", cost };
+    if (task.status === "cancelled") return { outcome: "failed", words: "Cancelled before it finished.", cost };
+    if (task.status === "paused") return { outcome: "waiting", words: "Paused.", cost };
+    return { outcome: "done", words: task.status === "review" ? "Finished: waiting for you to accept it." : "Finished.", cost };
+  }
+  if (r.conversationId) {
+    const chat = conversations.get(r.conversationId);
+    if (!chat) return { outcome: "done", words: "Its chat has since been deleted.", cost: 0 };
+    const cost = chat.usage?.cost ?? 0;
+    if (engine.awaitingApproval(chat.id)) return { outcome: "waiting", words: "Waiting for your yes.", cost };
+    if (engine.isRunning(chat.id)) return { outcome: "working", words: "Being worked on.", cost };
+    if (chat.lastError) return { outcome: "failed", words: chat.lastError.text.slice(0, 300), cost };
+    if (chat.lastStop) return { outcome: "failed", words: `Stopped before it finished: ${chat.lastStop.text}`.slice(0, 300), cost };
+    return { outcome: "done", words: "Finished.", cost };
+  }
+  return { outcome: "done", words: "Finished. It used no AI model.", cost: 0 };
+}
+
+/** A report of ordinary length, for an estimate before there is any history: what goes in (the request and what it reads) and what comes out. */
+const TYPICAL_REPORT = { input: 30_000, output: 1_500 };
+
+/**
+ * About what an automation costs: for each run, and so for a month on its schedule. From its own finished runs when
+ * there are some; before that, from the list price of the model it would use, for a report of ordinary length.
+ * Nothing is known for a model whose price is not listed.
+ */
+function costOfAutomation(schedule: string, { free = false, model = "", job = "" } = {}): { perMonth: number; perRun: number | null; from: "free" | "history" | "estimate" | "unknown" } {
+  const perMonth = runsIn(schedule);
+  if (free) return { perMonth, perRun: 0, from: "free" };
+  if (job) {
+    const past = (getConfig().jobRuns ?? []).filter((r) => r.job === job && !r.problem).slice(-8).map(runResult).filter((x) => x.outcome === "done" && x.cost > 0);
+    if (past.length) return { perMonth, perRun: past.reduce((sum, x) => sum + x.cost, 0) / past.length, from: "history" };
+  }
+  try {
+    const prices = resolveOne(getConfig(), model || getConfig().model).prices;
+    if (!prices) return { perMonth, perRun: null, from: "unknown" };
+    const perRun = (prices.input * TYPICAL_REPORT.input + prices.output * TYPICAL_REPORT.output) / 1e6;
+    return perRun ? { perMonth, perRun, from: "estimate" } : { perMonth, perRun: 0, from: "free" };
+  } catch {
+    return { perMonth, perRun: null, from: "unknown" };
+  }
+}
+
 async function startJob(job: Job): Promise<{ conversationId?: string; taskId?: string }> {
   const org = job.owner ? orgs.list().orgs.find((o) => o.id === job.org) : undefined;
   const briefing = briefingOf(job.briefing);
@@ -887,11 +968,17 @@ async function askFromTelegram(conversation: string | null, text: string): Promi
   const needsYes = new Promise<"yes">((resolve) => (watch = setInterval(() => engine.awaitingApproval(chat.id) && resolve("yes"), 1000)));
   const first = await Promise.race([finished, needsYes, new Promise<"long">((resolve) => setTimeout(() => resolve("long"), 600_000).unref())]);
   clearInterval(watch);
-  if (first === "done") return { conversation: chat.id, reply: lastReply(chat.id) };
+  // A failure is said, never left as silence.
+  const failure = () => conversations.get(chat.id)?.lastError?.text;
+  if (first === "done") {
+    if (failure()) throw new Error(`${failure()} Send your message again to retry.`);
+    return { conversation: chat.id, reply: lastReply(chat.id) };
+  }
   const before = lastReply(chat.id);
   // What it says once the owner has answered in the app, or once a long piece of work ends.
   const later = finished.then(() => {
     const after = lastReply(chat.id);
+    if (failure()) return `That did not work: ${failure()} Send your message again to retry.`;
     return after && after !== before ? (after.startsWith(before) ? after.slice(before.length).trim() : after) : "";
   });
   return first === "yes" ? { conversation: chat.id, reply: before, waiting: true, later } : { conversation: chat.id, reply: before || "This is taking a while. I will write again when it is done.", waiting: false, later };
@@ -1228,7 +1315,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
         if (c.source === "quest" && (!quest || quest.kind || (quest.parent && questStore.get(quest.parent.id)))) return [];
         const live = engine.isRunning(c.id);
         const waits = engine.awaitingApproval(c.id) || quest?.status === "asking" || quest?.plan?.status === "proposed";
-        return [{ id: c.id, kind: quest ? "task" : "chat", title: quest?.title ?? c.title, updatedAt: quest && quest.updatedAt > c.updatedAt ? quest.updatedAt : c.updatedAt, pinned: c.pinned, archived: c.archived, space: c.space ?? null, scheduled: c.source === "schedule", bot: quest ? { id: quest.bot.id, name: quest.bot.name, type: quest.bot.type, title: quest.bot.title, character: quest.bot.character } : null, chatBot: c.bot ?? null, state: waits ? "waiting" : live || quest?.status === "running" ? "working" : quest ? (quest.status === "failed" || quest.status === "budget" ? "stopped" : "done") : "idle" }];
+        return [{ id: c.id, kind: quest ? "task" : "chat", title: quest?.title ?? c.title, updatedAt: quest && quest.updatedAt > c.updatedAt ? quest.updatedAt : c.updatedAt, pinned: c.pinned, archived: c.archived, space: c.space ?? null, scheduled: c.source === "schedule", bot: quest ? { id: quest.bot.id, name: quest.bot.name, type: quest.bot.type, title: quest.bot.title, character: quest.bot.character } : null, chatBot: c.bot ?? null, state: waits ? "waiting" : live || quest?.status === "running" ? "working" : quest ? (quest.status === "failed" || quest.status === "budget" ? "stopped" : "done") : (c as { failed?: boolean }).failed ? "stopped" : "idle" }];
       }),
     );
   }
@@ -1320,6 +1407,17 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
     if (action === "stop" && req.method === "POST") {
       if (questStore.get(id)) quests.stop(id);
       else engine.stop(id);
+      return send(res, 200, { ok: true });
+    }
+    // Try again after an answer failed: the same request is put to the model once more, with nothing added to the
+    // chat. A step that had begun when it failed is not repeated blindly; the model is told it was interrupted.
+    if (action === "retry" && req.method === "POST") {
+      if (questStore.get(id)) throw new HttpError(400, "Try a task again from the Tasks page.");
+      if (engine.isRunning(id)) throw new HttpError(409, "It is already working on this.");
+      const last = conversations.get(id)?.messages.at(-1);
+      const begun = last?.role === "assistant" && Array.isArray(last.content) ? (last.content as { type: string; id?: string }[]).filter((b) => b.type === "tool_use" && b.id).map((b) => b.id!) : [];
+      const run = await engine.resumeRun(id, new Set(begun), "Trying again.");
+      if (!run) throw new HttpError(409, "There is nothing to try again: the last answer finished.");
       return send(res, 200, { ok: true });
     }
     if (action === "approvals" && req.method === "POST") {
@@ -2189,7 +2287,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
   if (route === "POST speech" && parts[1] === "model") return send(res, 200, await attempt(() => (audit({ ...requestActor(req), kind: "settings", action: "Downloaded or chose a speech model", detail: String(body.model ?? "") }), fetchModel(body.model), speechStatus())));
   if (route === "DELETE speech" && parts[1] === "model" && parts[2]) return send(res, 200, await attempt(async () => (await removeModel(parts[2]), speechStatus())));
   if (route === "POST speech" && parts[1] === "write-out") return send(res, 200, await attempt(async () => transcribe(await soundOf(req))));
-  if (route === "GET jobs" && parts[1] === "briefings") return send(res, 200, { briefings: listBriefings(orgs.active(), await jobs.list()), digests: digests(), planned: PLANNED_BRIEFINGS, team: possibleSenders(orgs.active()) });
+  if (route === "GET jobs" && parts[1] === "briefings") return send(res, 200, { briefings: listBriefings(orgs.active(), await jobs.list()).map((b) => ({ ...b, costs: costOfAutomation(briefingOf(b.id)?.schedule ?? "", { free: b.kind === "free", model: b.model, job: b.on?.job }) })), digests: digests(), planned: PLANNED_BRIEFINGS, team: possibleSenders(orgs.active()) });
   if (route === "POST jobs" && parts[1] === "briefings" && parts[3] === "on") {
     return send(res, 200, await attempt(async () => {
       const def = briefingOf(parts[2]);
@@ -2214,7 +2312,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
       const job = await jobs.update(made.id, { briefing: def.id, topic, ...(model ? { model } : {}) });
       audit({ ...requestActor(req), kind: "schedule", action: `Switched on the briefing “${def.name}”`, detail: `Sent by the ${sender.title}, ${def.when.toLowerCase()}${model ? `, with the model ${model}` : ""}${lacks.length ? `; switched on for them: ${lacks.join(", ")}` : ""}` });
       // The first one arrives now, so the owner sees what was switched on.
-      const ran = await runJob(job).catch((err) => ({ problem: (err as Error).message }));
+      const ran = await runJob(job, { byHand: true }).catch((err) => ({ problem: (err as Error).message }));
       await jobs.update(job.id, { lastRunAt: new Date().toISOString() });
       return { job: job.id, sender: sender.title, ...ran };
     }));
@@ -2263,18 +2361,19 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
   // The history of runs, newest first, with the name each automation has now.
   if (route === "GET jobs" && parts[1] === "runs") {
     const names = new Map((await jobs.list()).map((j) => [j.id, j.name]));
-    return send(res, 200, (getConfig().jobRuns ?? []).slice().reverse().map((r) => ({ ...r, name: names.get(r.job) ?? r.name, gone: !names.has(r.job) })));
+    return send(res, 200, (getConfig().jobRuns ?? []).slice().reverse().map((r) => ({ ...r, name: names.get(r.job) ?? r.name, gone: !names.has(r.job), ...runResult(r) })));
   }
   if (route === "GET jobs") {
     const all = await jobs.list();
     const known = new Map(orgs.list().orgs.flatMap((o) => o.members.map((m) => [`${o.id}|${m.bot}`, { title: m.title, org: o.name }] as const)));
-    return send(res, 200, all.map((j) => ({ ...j, plain: describeSchedule(j.schedule), ownerName: j.owner ? (known.get(`${j.org}|${j.owner}`)?.title ?? null) : null, ownerOrg: j.owner ? (known.get(`${j.org}|${j.owner}`)?.org ?? null) : null })));
+    const lastOf = new Map((getConfig().jobRuns ?? []).map((r) => [r.job, r]));
+    return send(res, 200, all.map((j) => ({ ...j, costs: costOfAutomation(j.schedule, { free: briefingOf(j.briefing)?.kind === "free", model: j.model, job: j.id }), last: lastOf.has(j.id) ? { at: lastOf.get(j.id)!.at, ...runResult(lastOf.get(j.id)!) } : null, plain: describeSchedule(j.schedule), ownerName: j.owner ? (known.get(`${j.org}|${j.owner}`)?.title ?? null) : null, ownerOrg: j.owner ? (known.get(`${j.org}|${j.owner}`)?.org ?? null) : null })));
   }
   if (route === "POST jobs" && !parts[1]) return send(res, 200, await attempt(() => jobs.create({ ...body, owner: jobOwner(body.owner), org: body.owner ? orgs.active().id : null })));
   if (route === "POST jobs" && parts[2] === "run") {
     const job = (await jobs.list()).find((j) => j.id === parts[1]);
     if (!job) throw new HttpError(404, "That schedule no longer exists.");
-    const ran = await attempt(() => runJob(job));
+    const ran = await attempt(() => runJob(job, { byHand: true }));
     await jobs.update(job.id, { lastRunAt: new Date().toISOString() });
     return send(res, 200, ran);
   }
@@ -2365,7 +2464,7 @@ export function start() {
       fs.writeFileSync(path.join(DATA, "running.json"), JSON.stringify({ port: typeof address === "object" && address ? address.port : PORT, pid: process.pid, startedAt: new Date().toISOString() }), { mode: 0o600 });
     } catch {}
   });
-  jobs.start(runJob);
+  jobs.start((job) => runJob(job));
   startTelegram(askFromTelegram);
   // The public list of model prices, so receipts are priced from the start (kept for a day; offline is fine).
   void loadModelList().catch(() => {});

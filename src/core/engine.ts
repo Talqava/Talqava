@@ -272,6 +272,7 @@ export class Engine {
     };
     // A new run starts clean.
     if (conversation.lastStop) conversation.lastStop = null;
+    if (conversation.lastError) conversation.lastError = null;
     const limits = spec.limits ?? {};
     const startedAt = Date.now();
     const repeats = limits.repeats ?? 2;
@@ -474,7 +475,7 @@ export class Engine {
    * started are reported to the model as interrupted, because they may have
    * partly happened and must not be repeated blindly.
    */
-  async resumeRun(id: string, started: Set<string>): Promise<{ conversation: Conversation; done: Promise<void> } | null> {
+  async resumeRun(id: string, started: Set<string>, note = "Picked up where it stopped when the app closed."): Promise<{ conversation: Conversation; done: Promise<void> } | null> {
     const run = this.#run(id);
     if (run.running) throw new Error("The agent is already working in this conversation.");
     const conversation = await this.#conversations.get(id);
@@ -487,7 +488,7 @@ export class Engine {
 
     run.running = true;
     run.abort = new AbortController();
-    this.#emit(id, { type: "resumed", text: "Picked up where it stopped when the app closed." });
+    this.#emit(id, { type: "resumed", text: note });
     this.#emit(id, { type: "status", running: true });
 
     const work = async () => {
@@ -519,6 +520,8 @@ export class Engine {
     return work
       .catch((err) => {
         console.error(`Run failed in conversation ${id}:`, err);
+        // Kept on the conversation (it is saved just below), so a failure nobody was watching is still there to read.
+        conversation.lastError = { text: describeError(err), at: new Date().toISOString() };
         this.#emit(id, { type: "error", text: describeError(err) });
       })
       .then(async () => {

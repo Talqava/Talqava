@@ -2,7 +2,7 @@
 export * from "./types.ts";
 export { Engine, describeError, outsideContentRead } from "./engine.ts";
 export type { EngineOptions } from "./engine.ts";
-export { JobBook, describeSchedule, nextRun, parseSchedule } from "./schedule.ts";
+export { JobBook, describeSchedule, nextRun, parseSchedule, runsIn } from "./schedule.ts";
 export { systemPrompt } from "./prompt.ts";
 export { rank, excerpt, terms } from "./rank.ts";
 export { selectMemory, visibleMemory, MEMORY_PROMPT_BUDGET, MEMORY_ENTRY_LIMIT } from "./memory.ts";
