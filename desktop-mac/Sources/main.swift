@@ -5,6 +5,7 @@
 //
 // This does what desktop/main.cjs does for the Electron build, without carrying a browser inside the app.
 import AppKit
+import ServiceManagement
 import UniformTypeIdentifiers
 import WebKit
 
@@ -332,6 +333,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     add(appName, [
       item("About \(appName)", #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
       .separator(),
+      loginItem,
       item("Show Data Folder", #selector(showData)),
       item("Show Log", #selector(showLog)),
       .separator(),
@@ -374,6 +376,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
       item("Report a Problem", #selector(reportProblem)),
     ])
     NSApp.mainMenu = bar
+  }
+
+  /// Open at Login: macOS keeps the list; this asks it to add or remove Talqava and shows what it says.
+  lazy var loginItem: NSMenuItem = {
+    let it = item("Open at Login", #selector(toggleLogin))
+    it.state = SMAppService.mainApp.status == .enabled ? .on : .off
+    return it
+  }()
+  @objc func toggleLogin() {
+    do {
+      if SMAppService.mainApp.status == .enabled { try SMAppService.mainApp.unregister() } else { try SMAppService.mainApp.register() }
+    } catch {
+      let alert = NSAlert()
+      alert.messageText = "macOS did not change Open at Login."
+      alert.informativeText = "\(error.localizedDescription)\n\nYou can also add Talqava yourself: System Settings › General › Login Items."
+      alert.runModal()
+    }
+    loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
   }
 
   func docItem(_ title: String, _ id: String) -> NSMenuItem {

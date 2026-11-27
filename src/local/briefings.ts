@@ -25,7 +25,8 @@ export interface BriefingDef {
   schedule: string;
   when: string;
   /** The one thing the owner may be asked. `list`: several lines (names with dates), kept as typed. */
-  ask?: { label: string; placeholder: string; list?: boolean; required?: boolean };
+  /** `hint`: a line under the box, when the usual one (a name, a comma, a date) does not fit. */
+  ask?: { label: string; placeholder: string; list?: boolean; required?: boolean; hint?: string };
   /** Connected services it reads; any one of them is enough. */
   needs?: string[];
   /** True when it drafts something for the owner to decide on: it then waits under "Waiting on you". */
@@ -125,6 +126,9 @@ export const BRIEFINGS: BriefingDef[] = [
   { id: "policy-review", quiet: true, name: "Policy review reminder", group: "People and renewals", about: "Once a quarter: which of your written procedures are over a year old.", kind: "free", schedule: "0 9 1 1,4,7,10 *", when: "The 1st of January, April, July and October", powers: [], suits: ["Operations", "Legal", "People"] },
 
   // ---------- your own work ----------
+  // The owner's own list of things to keep an eye on, checked a few times a day and silent unless one needs them.
+  { id: "watch-list", name: "Keep an eye on", group: "Your own work", about: "Your own list of things to watch. It checks them a few times a day and writes only when one needs you.", kind: "ai", quiet: true, schedule: "0 9,13,17 * * 1-5", when: "Weekdays at 9:00, 1:00 and 5:00", ask: { label: "What should it keep an eye on? One on each line.", placeholder: "e.g. Has the flour delivery been confirmed for Friday?", list: true, required: true, hint: "One thing on each line, in your own words: a question, a date, or something to check. Change the list any time with Edit." }, powers: WEB, suits: ["Operations", "Leadership", "Research"],
+    prompt: `The owner asked you to keep an eye on these things, one on each line:\n\n{topic}\n\nCheck each one now, with what you can reach: the web, the connected services, and the organization's files and tasks. For each line decide one thing: does it need the owner now? It does when what they are waiting for has happened, when something has gone wrong or is about to, or when a date they care about is within two days. It does not when nothing has changed.\n\nWrite to the owner only about the lines that need them now. For each: the line as they wrote it, in bold; what you found, in one or two plain sentences, with a link or the name of the file or service you found it in; and what they could do next, in one line. Put the most urgent first. Leave out every line that does not need them, and do not report that you checked.\n\nIf you cannot check a line with what you can reach, say so once, the first time only, and what would let you check it.\n\nIf no line needs the owner now, answer with exactly these two words and nothing else: ${NOTHING_NEW}. The owner is then not disturbed. Use your memory to remember what you already told them, so the same news is not sent twice. ${NO_INVENTING} You change nothing and send nothing to anyone else: you read, and you write to the owner. ${INTRO}` },
   { id: "monday-plan", name: "Monday plan", group: "Your own work", about: "What is under way, what is waiting on you and what is next, at the start of the week.", kind: "free", schedule: "0 8 * * 1", when: "Mondays at 8:00", powers: [], suits: ["Leadership", "Operations"] },
   { id: "friday-wrap", name: "Friday wrap-up", group: "Your own work", about: "What got done this week and what carries over to the next.", kind: "free", schedule: "0 16 * * 5", when: "Fridays at 4:00 pm", powers: [], suits: ["Leadership", "Operations"] },
   { id: "end-of-day", name: "End-of-day wrap", group: "Your own work", about: "What got done today, what is waiting on you, and the first thing for tomorrow.", kind: "free", schedule: "30 17 * * 1-5", when: "Weekdays at 5:30 pm", powers: [], suits: ["Leadership", "Operations"] },
@@ -222,7 +226,8 @@ export function chosenModel(value: unknown, providers: { id: string }[]): string
 
 /** What the agent is told for one run. The owner's answer is cut to a line, so it cannot carry instructions of its own. */
 export function briefingPrompt(def: BriefingDef, topic: string): string {
-  const said = String(topic ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+  // A list keeps its lines (each cut to a line of its own); any other answer is cut to one line.
+  const said = def.ask?.list ? cleanTopic(def, topic) : String(topic ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
   // The owner's own words decide what the news covers. Only when they said nothing does it follow the mission.
   if (def.id === "morning-news") return (def.prompt ?? "").replace("{topic}", said ? `The owner asked for this, in their own words: “${said}”. Cover exactly that, as widely or as narrowly as they said. Do not narrow it to this organization's field, and do not add this organization's angle, unless their words ask for it.` : "The owner gave no subject, so cover what matters to this organization, given its mission, and say why each story matters to it.");
   return (def.prompt ?? "").replace("{topic}", said || "this organization's own industry and market, as its mission describes") + (said ? OWNER_WORDS : "");

@@ -575,7 +575,7 @@ function renderBody() {
   state.source = null;
   ui.log = null;
   ui.body.className = "body";
-  const views = { usage: usageView, setup: setupView, home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView, security: securityView, start: startView, office: officeView, slides: slidesView, docs: docsView, notes: notesView, sheets: sheetsView };
+  const views = { usage: usageView, setup: setupView, home: homeView, quest: questView, bot: botView, chat: chatView, memory: memoryView, skills: skillsView, jobs: jobsView, settings: settingsView, market: marketView, marketbot: marketBotView, inbox: inboxView, team: teamView, integrations: integrationsView, library: libraryView, audit: auditView, workspace: workspaceView, tasks: tasksView, projects: projectsView, project: projectView, security: securityView, office: officeView, slides: slidesView, docs: docsView, notes: notesView, sheets: sheetsView };
   (views[state.view] || homeView)();
 }
 
@@ -2375,7 +2375,8 @@ function readMail(m) {
   const from = h("div", { class: "readfrom", style: m.bot ? botStyle(m.bot) : "" }, m.bot ? keycap(m.bot, 44, isLive(q ?? {}) ? "working" : "", m.bot.type) : h("span", { class: "sysavatar big", "aria-hidden": "true" }, "T"), h("div", { class: "grow" }, nameBox, h("div", { class: "note small" }, `${m.bot && state.mail?.names?.[m.bot.id] ? `${agentRole(m.bot)} · ` : ""}${m.bot ? `${departmentOf(m.bot.id)} · ` : ""}to me`)), h("span", { class: "mtime" }, new Date(m.at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })));
 
   const body = h("div", { class: "readbody" });
-  const act = (fn, _extra1?) => attempt(async () => (await fn(), await Promise.all([loadQuests(), refreshList(), loadCrew(), loadMail()]), renderInbox(), syncInboxCount()), body);
+  // `done`: a line to say once it worked (it was being passed and never shown).
+  const act = (fn, done?) => attempt(async () => (await fn(), await Promise.all([loadQuests(), refreshList(), loadCrew(), loadMail()]), renderInbox(), syncInboxCount(), done && toast(done)), body);
   if (m.kind === "reminder") {
     const r = m.reminder;
     const clear = (open) =>
@@ -7195,7 +7196,7 @@ async function briefingEdit(b) {
   const body = h(
     "div",
     { class: "composeform briefdialog" },
-    topic ? h("label", {}, b.ask.label, topic, h("span", { class: "note small" }, b.ask.list ? "One on each line: a name, a comma, then the date." : b.ask.required ? "Say it in a few words." : "Leave it empty to follow your mission.")) : null,
+    topic ? h("label", {}, b.ask.label, topic, h("span", { class: "note small" }, b.ask.hint ? b.ask.hint : b.ask.list ? "One on each line: a name, a comma, then the date." : b.ask.required ? "Say it in a few words." : "Leave it empty to follow your mission.")) : null,
     h("label", {}, "When it arrives", time),
     h("label", {}, "Who sends it", choice.sender),
     choice.model ? h("label", {}, "AI model", choice.model, h("span", { class: "note small" }, "Used for this briefing only. A smaller model costs less; a larger one reads and writes better.")) : null,
@@ -7225,7 +7226,7 @@ async function briefingOn(b) {
     "div",
     { class: "composeform briefdialog" },
     h("p", { class: "note" }, b.about),
-    topic ? h("label", {}, b.ask.label, topic, h("span", { class: "note small" }, b.ask.list ? "A name, a comma, then the date. You can change the list later with Edit." : b.ask.required ? "Say it in a few words." : org.mission ? "Leave it empty to follow your mission." : "Say it in a few words.")) : null,
+    topic ? h("label", {}, b.ask.label, topic, h("span", { class: "note small" }, b.ask.hint ? b.ask.hint : b.ask.list ? "A name, a comma, then the date. You can change the list later with Edit." : b.ask.required ? "Say it in a few words." : org.mission ? "Leave it empty to follow your mission." : "Say it in a few words.")) : null,
     h(
       "div",
       { class: "brieffacts" },
@@ -8946,106 +8947,6 @@ function showWelcome() {
   dialog.addEventListener("cancel", close);
   document.body.append(dialog);
   dialog.showModal();
-}
-
-/** Home: what needs you, what is running, where to start, and what you were last working on. */
-async function startView() {
-  ui.body.className = "body";
-  ui.log = null;
-  const col = h("div", { class: "integrations startpage" });
-  fill(ui.body, h("main", { class: "center" }, col));
-  let office = { files: [] };
-  try {
-    [office] = await Promise.all([api("GET", "workspace/office").catch(() => ({ files: [] })), loadMail(), state.crew ? null : loadCrew(), state.orgs ? null : loadOrgs()]);
-  } catch {}
-  if (state.view !== "start") return;
-  const org = activeOrg();
-  const mail = mailMessages();
-  const needs = mail.filter((m) => m.label === "needs" || m.label === "failed");
-  const working = mail.filter((m) => m.label === "working");
-  const today = new Date().toDateString();
-  const done = mail.filter((m) => m.label === "done" && new Date(m.activityAt ?? m.at).toDateString() === today);
-  const openMail = (m) => ((ui.mailOpen = m.id), go("inbox"));
-  const line = (m) => h("button", { class: "plain card startline", onclick: () => openMail(m) }, h("span", { class: `mlabel ${m.label}` }, LABEL_WORDS[m.label]), h("span", { class: "grow" }, h("b", {}, m.subject), m.snippet ? h("span", { class: "note small" }, ` · ${String(m.snippet).slice(0, 110)}`) : null), h("span", { class: "note small" }, m.bot ? agentRole(m.bot) : ""));
-  const first = state.me?.person ? state.me.person.name.split(" ")[0] : "";
-  const start = (kind) =>
-    attempt(async () => {
-      const page = kind === "sheet" ? await api("POST", "workspace/sheets", { title: "Untitled sheet" }) : await api("POST", "workspace/pages", { kind, title: kind === "deck" ? "Untitled slides" : "Untitled", ...(kind === "deck" ? { markdown: "# Title of the presentation\n\nA line about it" } : {}) });
-      ui.ws ??= { collapsed: new Set<any>() };
-      ui.ws.focusTitle = true;
-      openPage(page.id);
-    }, col);
-  const noTeam = !org.members?.length;
-  const noModel = needsKey(state.config);
-  const bots = state.crew?.bots ?? [];
-
-  // The one box. Plain words go to the assistant as a chat; "@name …" gives that agent a task.
-  const box = h("textarea", { class: "askbox", rows: 2, placeholder: bots.length ? "Ask anything, or type @ and a name to give someone on your team a task…" : "Ask anything…", "aria-label": "What do you need done?" });
-  const send = () => {
-    const text = box.value.trim();
-    if (!text) return box.focus();
-    const mention = /^@([\w-]+)\s+([\s\S]+)$/.exec(text);
-    const bot = mention ? bots.find((b) => b.id === mention[1].toLowerCase() || b.name.toLowerCase().replace(/\s+/g, "-").startsWith(mention[1].toLowerCase()) || b.name.toLowerCase().startsWith(mention[1].toLowerCase())) : null;
-    if (mention && !bot) return toast(`Nobody on your team is called “${mention[1]}”. Open Team to see their names, or ask without the @.`);
-    if (bot) return sendQuest(bot, mention[2].trim());
-    go("chat");
-    ui.input.value = text;
-    submit();
-  };
-  box.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) (e.preventDefault(), send());
-  });
-  // Three things to try, from the departments this organization has; general ones before there is a team.
-  const fromTeam: any[] = [];
-  for (const b of bots) {
-    const idea = (TASK_IDEAS[departmentOf(b.id)] ?? TASK_IDEAS[b.group] ?? [])[0];
-    if (idea && !fromTeam.some((x) => x.idea === idea || x.dept === (departmentOf(b.id) ?? b.group))) fromTeam.push({ dept: departmentOf(b.id) ?? b.group ?? "Team", idea, bot: b });
-    if (fromTeam.length === 3) break;
-  }
-  const ideas = fromTeam.length === 3 ? fromTeam : [["Writing", "Help me write an email"], ["Research", "Find and compare options for me"], ["Explain", "Explain something step by step"]].map(([dept, idea]) => ({ dept, idea, bot: null }));
-  const use = (x) => ((box.value = x.bot ? `@${x.bot.id} ${x.idea}` : x.idea), box.focus(), box.setSelectionRange(box.value.length, box.value.length));
-  const steps = [
-    ["1", "Connect an AI model", "Your agents think with it. Pick a service and paste its key, or use a free model on this computer.", !noModel, () => ((ui.integration = "ai-models"), go("integrations"))],
-    ["2", "Set up your team", "Say what your business does; Talqava suggests who you need.", !noTeam, () => ((ui.setup = { step: "mission" }), go("setup"))],
-  ];
-  fill(
-    col,
-    h(
-      "div",
-      { class: "askhome" },
-      h("h1", {}, first ? `What do you need done, ${first}?` : "What do you need done?"),
-      h("p", { class: "lead" }, noModel ? "One thing first: connect an AI model, so your team can think." : noTeam ? "Ask the assistant anything. Set up your team when you want work done for you." : "Ask in your own words. Your team works out who does it."),
-      noModel || noTeam ? h("div", { class: "card form askset" }, steps.filter((x) => !x[3]).map(([n, title, about, isDone, run]) => h("div", { class: `istep ${isDone ? "done" : ""}` }, h("span", { class: "istepmark", "aria-hidden": "true" }, isDone ? "✓" : n), h("div", { class: "grow" }, h("b", {}, title), h("p", { class: "note" }, about)), isDone ? h("span", { class: "muted small" }, "Done") : h("button", { class: n === (noModel ? "1" : "2") ? "primary" : "", onclick: run }, n === "1" ? "Connect" : "Set up")))) : null,
-      h(
-        "div",
-        { class: "askwrap" },
-        box,
-        h(
-          "div",
-          { class: "askbar" },
-          h("span", { class: "askchip", title: "Plain words go to your assistant. Start with @ and a name to give that agent a task." }, "Your assistant answers"),
-          h("span", { class: "askchip", title: "Agents ask you before they send, change or delete anything, unless you told one otherwise." }, "Asks before it changes anything"),
-          state.canSpeak ? micButton(box, "askmic") : null,
-          h("button", { class: "primary asksend", "aria-label": "Send", title: "Send (Enter)", onclick: send }, "↑"),
-        ),
-      ),
-      h("p", { class: "note small askor" }, "Or start with one of these"),
-      h("div", { class: "askideas" }, ideas.map((x) => h("button", { class: "plain card askidea", onclick: () => use(x), title: "Puts this in the box, for you to change or send" }, h("span", { class: "label" }, x.dept), h("span", {}, x.idea)))),
-      h(
-        "p",
-        { class: "note small askmake" },
-        "Or make a ",
-        [["doc", "document"], ["sheet", "sheet"], ["deck", "presentation"], ["note", "note"]].filter(([kind]) => lab("office") || (kind !== "sheet" && kind !== "deck")).map(([kind, word], i) => [i ? ", " : "", h("button", { class: "plain link", onclick: () => start(kind) }, word)]),
-        bots.length ? [", or ", h("button", { class: "plain link", onclick: () => newTaskDialog() }, "give a task with more options")] : null,
-        ".",
-      ),
-    ),
-    needs.length ? h("section", { class: "isec" }, h("div", { class: "row" }, h("h2", { class: "grow" }, `Waiting on you · ${needs.length}`), h("button", { class: "plain link", onclick: () => go("inbox") }, "Open the Inbox")), needs.slice(0, 5).map(line)) : null,
-    working.length ? h("section", { class: "isec" }, h("div", { class: "row" }, h("h2", { class: "grow" }, `Being worked on · ${working.length}`), h("button", { class: "plain link", onclick: () => go("tasks") }, "All tasks")), working.slice(0, 5).map(line)) : null,
-    done.length ? h("section", { class: "isec" }, h("h2", {}, `Done today · ${done.length}`), done.slice(0, 5).map(line)) : null,
-    h("p", { class: "note small askfoot" }, h("button", { class: "plain link", onclick: () => go("chat") }, "Your earlier chats"), " · ", h("button", { class: "plain link", onclick: () => showWelcome() }, "Show the welcome again")),
-  );
-  if (!noModel) box.focus();
 }
 
 /** Whether to open on the set-up chat: something is still missing, and the owner has not finished or skipped it. */

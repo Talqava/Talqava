@@ -36,4 +36,4 @@ Only one copy of Talqava works on a data folder at a time. To try a build withou
 - Signed ad hoc, which runs on the Mac that built it. A download for other people needs a Developer ID signature and Apple's notarization; neither is set up here.
 - Not built for Intel Macs. Windows and Linux stay on the Electron build.
 - Not yet tried by hand in this window: the editor, drag and drop, file previews, saving a file, and the microphone. The web view is Safari's engine, not Chrome's, so each of these is worth a look.
-- Open at Login, which the Electron build offers in its menu, is not in this one yet.
+- Open at Login is in the Talqava menu. It asks macOS to add the app to Login Items; it has been compiled but not switched on and tried, and macOS may refuse it for a build that is only signed ad hoc.
