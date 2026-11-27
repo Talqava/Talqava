@@ -16,14 +16,14 @@ The Agents page is your control room. You hand out work, clear what is waiting o
 **In the middle:**
 
 - **Assign a task to**: a box for giving work to one agent or a whole team, with suggested tasks for that department.
-- Four numbers: **Waiting on you**, **In progress**, **Finished this week** and **Spent this week**.
+- Once work has been given, four numbers: **Waiting on you**, **In progress**, **Finished this week** and **Spent this week**. Before that, the page is only the box above and the ready-made tasks: the numbers, **Under way** and the departments table appear with the first task.
 - **Waiting on you**: approvals, reviews and failures, with **Open inbox →**.
 - **Under way**: every task running now. A task an agent handed on appears indented under the one it came from.
 - **Latest results**: your three most recent finished tasks.
 - **Departments this week**: a table showing, for each department, how many agents are working, waiting on you and finished, how many tasks were "not clean", and what was spent. A sentence above it points out anything worth your attention.
-- **Checked task templates**: ready-made tasks whose result is checked automatically before they count as done.
+- **Ready-made tasks**: tasks whose result is checked automatically before they count as done. The ones that work on code are offered only when Git repositories is switched on under Labs, or a repository is connected.
 
-**On the right: Completed work**, your recent finished tasks, each with how it ended.
+**On the right: Completed work**, your recent finished tasks, each with how it ended. The column appears with the first finished task.
 
 ## Key ideas
 
@@ -86,7 +86,7 @@ The Agents page is your control room. You hand out work, clear what is waiting o
 6. Click **Save**.
 
 **Start a checked template**
-1. Under **Checked task templates**, click one, fill in its fields and click **Start**.
+1. Under **Ready-made tasks**, click one, fill in its fields and click **Start**.
 2. If its check fails, the agent is sent back to fix it. If it still fails, **Hand to Claude** passes it to a stronger model.
 
 ## Tips

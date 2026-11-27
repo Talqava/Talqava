@@ -402,7 +402,7 @@ function renderAreaTabs() {
   // A place with one page has no tabs to choose between, so the bar is left out.
   if (AREAS[area].views.filter(([v]) => !FOLDED[v]).length < 2) return (ui.tabs.hidden = true), fill(ui.tabs);
   ui.tabs.setAttribute("aria-label", `Parts of ${AREAS[area].name}`);
-  fill(ui.tabs, h("span", { class: "areaname" }, AREAS[area].name), AREAS[area].views.filter(([v]) => !FOLDED[v]).map(([v, label]) => h("button", { class: `areatab ${(FOLDED[at] ?? at) === v ? "on" : ""}`, "aria-current": (FOLDED[at] ?? at) === v ? "page" : null, onclick: () => go(v) }, label)));
+  fill(ui.tabs, AREAS[area].views.some(([, label]) => label === AREAS[area].name) ? null : h("span", { class: "areaname" }, AREAS[area].name), AREAS[area].views.filter(([v]) => !FOLDED[v]).map(([v, label]) => h("button", { class: `areatab ${(FOLDED[at] ?? at) === v ? "on" : ""}`, "aria-current": (FOLDED[at] ?? at) === v ? "page" : null, onclick: () => go(v) }, label)));
 }
 
 // Line icons for the rail, drawn on a 20 px grid.
@@ -634,6 +634,8 @@ function renderSpent() {
   if (!ui.spent) return;
   const today = new Date().toDateString();
   const spent = state.quests.filter((q) => new Date(q.createdAt).toDateString() === today).reduce((sum, q) => sum + (q.cost || 0), 0);
+  // Nothing spent, nothing said.
+  if (spent < 0.005) return fill(ui.spent);
   fill(ui.spent, "Spent today on agents", h("b", {}, money(spent)));
 }
 
@@ -1749,10 +1751,12 @@ function renderBoard() {
     ? "No work yet this week. Assign a first task above: pick an agent and use one of the suggestions."
     : [stuck.length ? `${stuck.join(", ")} ${stuck.length === 1 ? "is" : "are"} waiting on you more than working: clear the approvals to unblock ${stuck.length === 1 ? "it" : "them"}.` : "", idle.length && idle.length < rows.length ? `No work this week in ${idle.slice(0, 4).join(", ")}${idle.length > 4 ? ` and ${idle.length - 4} more` : ""}.` : "", week.length - succeeded.length ? `${week.length - succeeded.length} task${week.length - succeeded.length === 1 ? "" : "s"} did not finish cleanly: open ${week.length - succeeded.length === 1 ? "it" : "them"} under Completed work.` : ""].filter(Boolean).join(" ") || "Work is flowing: nothing is blocked on you.";
 
+  // Before any work has been given, the page is who is on the team and the box to give them something: no rows of zeros.
+  const quietBoard = !needs.length && !active.length && !weekAll.length;
   fill(ui.board, 
     h("div", { class: "board-head" }, h("div", {}, h("h1", {}, "Agents"), h("p", { class: "lead" }, "Assign work, clear what is waiting on you, and see how each department is doing."))),
     composer,
-    h(
+    quietBoard ? null : h(
       "section",
       { class: "stats" },
       stat("Waiting on you", String(needs.length), needs.length ? "Approvals, reviews and failures" : "Nothing blocked", needs.length > 0),
@@ -1763,7 +1767,7 @@ function renderBoard() {
     needs.length
       ? h("section", { class: "worksec" }, h("div", { class: "row" }, h("h2", { class: "grow" }, "Waiting on you"), h("button", { class: "plain small", onclick: () => go("inbox") }, "Open inbox →")), h("div", { class: "cards" }, needs.filter((n) => n.kind === "approval").map((n) => questCard(n.q))), h("div", { class: "needlist" }, needs.filter((n) => n.kind !== "approval").map(needRow)))
       : null,
-    h(
+    quietBoard ? null : h(
       "section",
       { class: "worksec" },
       h("div", { class: "row" }, h("h2", { class: "grow" }, "Under way"), active.length ? h("span", { class: "note small" }, "Indented tasks were handed on by the one above") : null),
@@ -1773,7 +1777,7 @@ function renderBoard() {
       results.length
         ? h("section", { class: "worksec" }, h("div", { class: "row" }, h("h2", { class: "grow" }, "Latest results"), h("button", { class: "plain small", onclick: () => go("inbox") }, "All updates →")), h("div", { class: "updates" }, results.map((q) => updateCard(q, { compact: true }))))
         : null)(ownTasks().filter((q) => !isLive(q)).slice(0, 3)),
-    h(
+    quietBoard ? null : h(
       "section",
       { class: "worksec" },
       h("div", { class: "row" }, h("h2", { class: "grow" }, `Departments this week · ${activeOrg().name || "your organization"}`), h("button", { class: "plain small", onclick: () => go("team") }, "Organization →")),
@@ -1803,7 +1807,9 @@ function needRow(n) {
 
 /** The ready-made quests, each with the bot that goes and how its result is checked. */
 function coreQuests() {
-  const templates = state.templates ?? [];
+  // Ready-made tasks that work on code are offered only where code is worked on: with Git switched on, or a repository connected.
+  const code = lab("git") || (state.config?.projects ?? []).length > 0;
+  const templates = (state.templates ?? []).filter((t) => code || (t.repository ?? "none") === "none");
   if (!templates.length) return null;
   const bots = state.crew?.bots ?? [];
   const checkWords = (c) =>
@@ -1811,7 +1817,7 @@ function coreQuests() {
   return h(
     "section",
     { class: "core worksec" },
-    h("div", { class: "row" }, h("h2", { class: "grow" }, "Checked task templates"), h("span", { class: "note small" }, "Ready-made tasks whose result is checked automatically before it counts as done")),
+    h("div", { class: "row" }, h("h2", { class: "grow" }, "Ready-made tasks"), h("span", { class: "note small" }, "Each result is checked before it counts as done")),
     h(
       "div",
       { class: "core-grid" },
@@ -1919,6 +1925,9 @@ function questCard(q) {
 
 function renderLog() {
   const done = state.quests.filter((q) => !isLive(q));
+  // The column of finished work appears with the first finished task.
+  ui.logCol.hidden = !done.length;
+  ui.body.classList.toggle("nolog", !done.length);
   fill(ui.logCol, 
     h("h2", { class: "label" }, "Completed work"),
     done.length
@@ -10984,6 +10993,12 @@ function drawBoard() {
       h("div", { class: "taskmeta" }, bot ? keycap(bot, 18, t.status === "working" ? "working" : "", bot.type) : null, h("span", { class: "grow" }, t.ownerName), t.subtasks.total ? h("span", { title: "Sub-tasks still open" }, `◫ ${t.subtasks.open}/${t.subtasks.total}`) : null, t.comments ? h("span", { title: "Comments" }, `💬 ${t.comments}`) : null, t.cost >= 0.01 ? h("span", {}, money(t.cost)) : null),
     );
   };
+  if (!(ui.tasks ?? []).length)
+    return fill(
+      col,
+      tasksHead(),
+      h("div", { class: "card quiet firsttask" }, h("b", {}, "No tasks yet."), h("p", { class: "note" }, "A task is work you hand to someone on your team: they do it in the background and bring it back for you to accept."), h("div", { class: "row" }, h("button", { class: "primary", onclick: () => newTaskDialog() }, "Give the first task"))),
+    );
   fill(
     col,
     tasksHead(),

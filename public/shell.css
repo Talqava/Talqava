@@ -250,3 +250,8 @@ button.card.officestart:hover { background: var(--raised); border-color: var(--a
 .worklog > details { margin: 6px 10px; }
 .worklog > details:last-child { margin-bottom: 10px; }
 .worklog details.tool > summary .what.plain { font-family: var(--sans); color: var(--text); font-size: 13.5px; }
+/* The first task: one plain card, where there would be empty columns. */
+.firsttask { max-width: 640px; display: grid; gap: 8px; padding: 18px 20px; }
+.firsttask .note { margin: 0; }
+/* The team page without the finished-work column, until something has finished. */
+@media (min-width: 861px) { .body.three.nolog { grid-template-columns: 272px minmax(0, 1fr); } }
