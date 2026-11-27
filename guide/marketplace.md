@@ -32,14 +32,14 @@ Click any agent card to open its own page. There you will see:
 ### Start from a company template
 
 1. Under **Company templates**, find your kind of business: **Professional services firm**, **Restaurant or café**, **Online shop** or **Nonprofit**.
-2. Press **Preview and install**. The preview lists the positions it adds to your chart, the page packs, and the routines.
-3. Press **Install**. Nothing you already have is removed or moved, and nothing is spent. Its routines arrive **paused**: switch on the ones you want under **Routines**.
-4. **Undo**, in the note at the bottom or on the template's card, puts your chart back as it was, moves its pages to Deleted and removes its routines. The agents it added stay on your team, off the chart.
+2. Press **Preview and install**. The preview lists the positions it adds to your chart, the page packs, and the automations.
+3. Press **Install**. Nothing you already have is removed or moved, and nothing is spent. Its automations arrive **paused**: switch on the ones you want under **Automations**.
+4. **Undo**, in the note at the bottom or on the template's card, puts your chart back as it was, moves its pages to Deleted and removes its automations. The agents it added stay on your team, off the chart.
 
 ### Install and run a playbook
 
 A playbook is one known process: **Month-end close**, **Hiring** or **Client onboarding**.
-1. Press **Preview and install**. It adds the procedure as a page in your Workspace, and for the month-end close a paused monthly routine for your Finance lead.
+1. Press **Preview and install**. It adds the procedure as a page in your Workspace, and for the month-end close a paused monthly automation for your Finance lead.
 2. Press **Run it now** on its card whenever you want it done. The work goes to the lead of the group that owns it, who sends you a plan to approve before anything starts.
 3. If your chart has no such group yet, Talqava says which one to add.
 

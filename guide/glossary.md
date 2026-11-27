@@ -7,7 +7,7 @@ One word for each thing, the same in every screen and guide.
 - **Task**: one piece of work you give to an agent or a team. It has an owner, a status, a cost and a result.
 - **Plan**: what an agent says it will do before it starts, for you to approve.
 - **Project**: a folder for one body of work, holding its tasks and chats.
-- **Routine**: work that repeats by itself, such as a report every Monday.
+- **Automation**: work that repeats by itself, such as a report every Monday.
 - **Goal**: an outcome several tasks work towards.
 - **Inbox**: everything that needs you: plans, questions, finished work, changes to accept, reminders.
 
@@ -53,7 +53,7 @@ One word for each thing, the same in every screen and guide.
 
 ## Older words you may still see
 
-- **Bot** meant agent. **Quest** meant task. **Schedule** meant routine. **Work in progress** was the name of the Agents page.
+- **Bot** meant agent. **Quest** meant task. **Schedule** meant automation. **Work in progress** was the name of the Agents page.
 
 ## Related guides
 

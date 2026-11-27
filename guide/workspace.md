@@ -151,6 +151,6 @@ When an agent asks to add or change a row, it appears on the table under **Waiti
 - [Library](library.md)
 - [Memory](memory.md)
 - [Skills](skills.md)
-- [Routines](schedules.md)
+- [Automations](schedules.md)
 - [Settings](settings.md)
 - [Getting started](getting-started.md)

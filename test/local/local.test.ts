@@ -2191,7 +2191,12 @@ test("a schedule with an agent becomes a task in its queue; without one, or if t
     script.push(say("Done in chat."));
     const chat = (await call("POST", `jobs/${job.id}/run`, {})).data;
     assert.ok(chat.conversationId && !chat.taskId);
+    // Every run is kept in the history, newest first, under the name the automation has now; deleting it keeps its runs.
+    const runs = (await call("GET", "jobs/runs")).data.filter((r: { job: string }) => r.job === job.id);
+    assert.deepEqual(runs.map((r: { name: string; taskId?: string; conversationId?: string; gone: boolean }) => [r.name, Boolean(r.taskId), Boolean(r.conversationId), r.gone]), [["Monday pipeline", false, true, false], ["Monday pipeline", false, true, false], ["Monday pipeline", true, false, false]]);
+    assert.equal(runs[0].conversationId, chat.conversationId);
     await call("DELETE", `jobs/${job.id}`);
+    assert.equal((await call("GET", "jobs/runs")).data.find((r: { job: string }) => r.job === job.id).gone, true);
   } finally {
     server.close();
     orgs.remove(org0.id);

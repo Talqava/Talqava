@@ -152,6 +152,8 @@ export interface Config {
   checkFirst?: boolean;
   /** The Client ID of the GitHub app that "Connect GitHub" signs in through. Not a secret. */
   githubClientId?: string;
+  /** The last few hundred runs of automations, newest last: which one, when, what it made, and what went wrong if it did. */
+  jobRuns?: { job: string; name: string; at: string; taskId?: string; conversationId?: string; problem?: string }[];
   sessionSecret: string;
 }
 

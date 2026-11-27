@@ -88,7 +88,7 @@ The box at the top finds anything: files by name or by the words inside, tasks, 
 **Tasks and projects**: The work. Its tabs:
 - **Tasks**: every task in your organization: queued, working, needing you, to review and done.
 - **Projects**: one folder for each body of work, with its tasks and chats.
-- **Routines**: repeating work your agents do on their own, such as a morning news digest every weekday. Routines also has its own icon on the strip.
+- **Automations**: repeating work your agents do on their own, such as a morning news digest every weekday. Automations also has its own icon on the strip.
 
 **Team**: Who does the work. Its tabs:
 - **Agents**: your agents and what each is doing right now. Assign work and open any agent's page.

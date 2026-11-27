@@ -25,7 +25,7 @@ Open **AI models**, press **Connect** on a service, paste its key and press **Co
 
 ### Connect OpenRouter (one account for hundreds of models)
 
-OpenRouter lets you pay one balance and use models from many companies. It is useful if you want to try different models, or give a cheaper one to routine work.
+OpenRouter lets you pay one balance and use models from many companies. It is useful if you want to try different models, or give a cheaper one to automation work.
 
 1. Open the **OpenRouter** card.
 2. Press **Connect OpenRouter**. openrouter.ai opens in your browser. Sign in or make a free account.
@@ -89,8 +89,8 @@ A post can be given **categories**, **tags** and a **featured image**. Agents ch
 ### Have an agent write a blog post every day
 
 1. On the **WordPress** page, find your site and **Have an agent write a blog post on a schedule**.
-2. Say what your blog is about, choose the agent, the days and the time, and press **Set up the routine**.
-3. Each run, the agent reads your recent posts so it does not repeat one, follows your Workspace pages, writes the post and saves it as a draft (or publishes it, if you allow that). Change, pause or remove it under **Routines**.
+2. Say what your blog is about, choose the agent, the days and the time, and press **Set up the automation**.
+3. Each run, the agent reads your recent posts so it does not repeat one, follows your Workspace pages, writes the post and saves it as a draft (or publishes it, if you allow that). Change, pause or remove it under **Automations**.
 
 To ask for one post or one change by hand, give a task in your own words, such as "Write a post about our winter opening hours for the blog" or "Update the About page on our website with our new address".
 

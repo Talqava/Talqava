@@ -27,7 +27,7 @@ Security is where you decide who can open Talqava, how they prove who they are, 
 | --- | --- |
 | **Owner** | Everything, including people and security. There is one owner. |
 | **Administrator** | Everything except changing or removing the owner. |
-| **Manager** | Gives and approves work; changes the chart, budgets, routines and the Marketplace. No settings, connections or people. |
+| **Manager** | Gives and approves work; changes the chart, budgets, automations and the Marketplace. No settings, connections or people. |
 | **Member** | Gives tasks, chats, approves steps, and edits pages, documents, notes and sheets. Cannot change the chart, budgets, settings or connections, or read the activity log. |
 | **Auditor** | Reads everything, including the activity log and who has access. Changes nothing. |
 

@@ -252,7 +252,19 @@ function describeRequest(method: string, parts: string[], body: any, url: URL): 
  * Runs a scheduled job. With an agent chosen, it becomes a task in that agent's queue, worked and
  * reviewed like any other. Without one, or if the agent has left the chart, the assistant does it in a chat.
  */
+/** Runs an automation and keeps a line about the run for its history, whether it worked or not. */
 async function runJob(job: Job): Promise<{ conversationId?: string; taskId?: string }> {
+  const keep = (line: { taskId?: string; conversationId?: string; problem?: string }) => saveConfig({ jobRuns: [...(getConfig().jobRuns ?? []), { job: job.id, name: job.name, at: new Date().toISOString(), ...line }].slice(-300) });
+  try {
+    const made = await startJob(job);
+    keep(made);
+    return made;
+  } catch (err) {
+    keep({ problem: String((err as Error).message || "It could not start.").slice(0, 300) });
+    throw err;
+  }
+}
+async function startJob(job: Job): Promise<{ conversationId?: string; taskId?: string }> {
   const org = job.owner ? orgs.list().orgs.find((o) => o.id === job.org) : undefined;
   const briefing = briefingOf(job.briefing);
   // A briefing built from the organization's own tasks uses no AI model: it is put together and kept for the Inbox.
@@ -2145,6 +2157,11 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
       forgetDigest(parts[2]);
       return { ok: true };
     }));
+  }
+  // The history of runs, newest first, with the name each automation has now.
+  if (route === "GET jobs" && parts[1] === "runs") {
+    const names = new Map((await jobs.list()).map((j) => [j.id, j.name]));
+    return send(res, 200, (getConfig().jobRuns ?? []).slice().reverse().map((r) => ({ ...r, name: names.get(r.job) ?? r.name, gone: !names.has(r.job) })));
   }
   if (route === "GET jobs") {
     const all = await jobs.list();
