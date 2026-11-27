@@ -232,3 +232,8 @@
 .mgrid.wide:has(> .officestart) { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
 button.card.officestart { border: 1px solid var(--line2); background: var(--panel); padding: 12px 14px; border-radius: 12px; text-align: left; }
 button.card.officestart:hover { background: var(--raised); border-color: var(--accent); }
+
+/* A file is the writing; its settings open beside it from Details. */
+.wspage.nodetails { grid-template-columns: minmax(0, 1fr); max-width: 860px; }
+/* The two parts of Knowledge. */
+.knowparts { align-self: flex-start; }

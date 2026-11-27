@@ -351,8 +351,9 @@ function render() {
 const AREAS = {
   // Automations has its own place on the rail, so it is not a tab of Tasks.
   tasks: { name: "Tasks", views: [["tasks", "Tasks"], ["projects", "Projects"]], also: { project: "projects" } },
-  // Team is who does the work and what they know: memory and skills sit here, with the agents they belong to.
-  team: { name: "Team", views: [["home", "Agents"], ["team", "Organization"], ["memory", "Memory"], ["skills", "Skills"], ["market", "Marketplace"]], also: { quest: "home", bot: "home", marketbot: "market" } },
+  // Team is who does the work and what they know. What they know is one tab, Knowledge, with two parts: what is
+  // remembered (Memory) and how things are done (Skills).
+  team: { name: "Team", views: [["home", "Agents"], ["team", "Organization"], ["memory", "Knowledge"], ["market", "Marketplace"]], also: { quest: "home", bot: "home", marketbot: "market", skills: "memory" } },
   files: { name: "Files", views: [["office", "All files"], ["docs", "Documents"], ["sheets", "Sheets"], ["slides", "Slides"], ["notes", "Notes"], ["workspace", "Workspace"], ["library", "Library"]] },
   more: { name: "Account", views: [["integrations", "Connections"], ["security", "Security"], ["audit", "Activity log"], ["usage", "Usage"], ["settings", "Settings"]] },
 };
@@ -6762,6 +6763,10 @@ function page(title, intro, ...children) {
   return col;
 }
 
+/** The two parts of Knowledge, to switch between at the top of each. */
+const knowledgeParts = (on) =>
+  h("div", { class: "segmented knowparts", role: "tablist", "aria-label": "Parts of Knowledge" }, [["memory", "Memory", "What is remembered"], ["skills", "Skills", "How things are done"]].map(([view, label, tip]) => h("button", { role: "tab", class: on === view ? "on" : "", "aria-selected": String(on === view), title: tip, onclick: () => on !== view && go(view) }, label)));
+
 // ---------- memory ----------
 /** Everything remembered, one space at a time: add, edit, move and forget entries, and manage the spaces. */
 async function memoryView() {
@@ -6770,8 +6775,9 @@ async function memoryView() {
   const name = spaceName(at);
   const again = () => memoryView();
   const col = page(
-    "Memory",
+    "Knowledge",
     `What ${state.config.agentName} remembers between chats. It adds to this on its own, and tells you in the chat when it does. General memory goes into every chat; a project's memory goes only into that project's chats.`,
+    knowledgeParts("memory"),
   );
   const entries = await attempt(() => api("GET", "memory"), col);
   if (!entries || state.view !== "memory") return;
@@ -6964,7 +6970,7 @@ function skillDialog(existing = null) {
 }
 
 async function skillsView() {
-  const col = page("Skills", `Procedures ${state.config.agentName} follows: written down by an agent after working out how to do something, or by you.`);
+  const col = page("Knowledge", `Procedures ${state.config.agentName} follows: written down by an agent after working out how to do something, or by you.`, knowledgeParts("skills"));
   const skills = await attempt(() => api("GET", "skills"), col);
   if (!skills) return;
   col.append(h("div", { class: "row" }, h("button", { class: "primary", onclick: () => skillDialog() }, "+ New skill")));
@@ -8310,9 +8316,25 @@ async function renderWsPage(col, id) {
   const tasksBox = h("div", { class: "wstasks" });
   api("GET", `workspace/pages/${id}/tasks`).then((tasks) => tasksBox.isConnected && fill(tasksBox, tasks.length ? tasks.slice(0, 8).map((t) => h("button", { class: "plain wstaskrow", onclick: () => go("quest", t.task) }, h("span", { class: "grow" }, t.title), h("span", { class: "note small" }, `${t.agent ?? ""} ${t.how === "filed" ? "filed it" : t.how === "suggested" ? "suggested" : t.how === "changed" ? "changed it" : "read it"}`))) : h("p", { class: "note small" }, "No task has used this page yet."))).catch(() => {});
 
+  // The settings of a file sit behind one button, so the page is the writing. The choice is remembered.
+  let details = false;
+  try {
+    details = localStorage.getItem("talqava.details") === "1";
+  } catch {}
+  const detailsBtn = h("button", { class: "plain link small wsdetails", "aria-expanded": String(details), title: "Who can see it, how agents may change it, comments, history and delete" }, details ? "Hide details" : "Details");
+  detailsBtn.addEventListener("click", () => {
+    details = !details;
+    try {
+      localStorage.setItem("talqava.details", details ? "1" : "0");
+    } catch {}
+    aside.hidden = !details;
+    aside.parentElement?.classList.toggle("nodetails", !details);
+    detailsBtn.textContent = details ? "Hide details" : "Details";
+    detailsBtn.setAttribute("aria-expanded", String(details));
+  });
   const aside = h(
     "aside",
-    { class: "wspanel" },
+    { class: "wspanel", hidden: !details },
     h("div", { class: "label" }, "Who can see it"),
     who,
     pick,
@@ -8335,14 +8357,14 @@ async function renderWsPage(col, id) {
     col,
     h(
       "div",
-      { class: "wspage" },
+      { class: `wspage ${details ? "" : "nodetails"}` },
       h(
         "article",
         { class: `wsdoc ${page.kind === "doc" ? "paper" : ""}` },
         office ? h("nav", { class: "wstrail note small", "aria-label": "Where this is" }, h("button", { class: "plain link", onclick: () => ((ui.ws.open = null), wsReload()) }, page.kind === "doc" ? "Documents" : "Notes"), page.folder ? ` › ${page.folder}` : "") : null,
         trail.length ? h("nav", { class: "wstrail note small", "aria-label": "Where this page is" }, trail.map((t) => [h("button", { class: "plain link", onclick: () => openPage(t.id) }, t.title), " › "])) : null,
         h("div", { class: "wshead" }, iconBtn, title),
-        h("p", { class: "note small wsmeta" }, `Edited by ${page.updatedBy} · ${when(page.updatedAt)}${page.protected ? " · Protected" : ""}`),
+        h("p", { class: "note small wsmeta" }, `Edited by ${page.updatedBy} · ${when(page.updatedAt)}${page.protected ? " · Protected" : ""}`, " · ", detailsBtn),
         conflict,
         suggestBox,
         toolbar,
@@ -9244,7 +9266,7 @@ async function officeView() {
     waiting.length ? h("section", { class: "isec" }, h("h2", {}, `Waiting for you · ${waiting.length}`), waiting.map((f) => h("button", { class: "plain card officewait", onclick: () => openPage(f.id) }, h("b", {}, f.title), h("span", { class: "note small" }, ` · ${KIND[f.kind]?.[0] ?? ""} · ${f.suggestions} change${f.suggestions === 1 ? "" : "s"} from an agent to review`)))) : null,
     everything.length ? h("section", { class: "isec" }, h("h2", {}, "All files"), results) : null,
     !everything.length ? null : h("section", { class: "isec filesmore" }, h("h2", {}, "Work in one kind"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Each kind has its own page, with folders and its own tools."), h("div", { class: "row wrap" }, [["docs", "Documents"], ["notes", "Notes"], ["workspace", "Workspace pages"], ["library", "Library: add and organize files"], ...(lab("office") ? [["sheets", "Sheets"], ["slides", "Slides"]] : [])].map(([v, label]) => h("button", { onclick: () => go(v) }, label)))),
-    h("section", { class: "isec" }, h("h2", {}, "Start from a template"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Ready-made files with the parts to fill in marked in [SQUARE BRACKETS]."), h("div", { class: "mgrid wide" }, templates.map(officeTemplateCard))),
+    h("section", { class: "isec" }, h("h2", {}, "Start from a template"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Ready-made files with the parts to fill in marked in [SQUARE BRACKETS]."), h("div", { class: "mgrid wide" }, templates.filter((t) => lab("office") || (t.kind !== "sheet" && t.kind !== "deck")).map(officeTemplateCard))),
   );
   q.dispatchEvent(new Event("input"));
 }

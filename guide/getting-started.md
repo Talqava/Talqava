@@ -94,8 +94,7 @@ The box at the top finds anything: files by name or by the words inside, tasks, 
 **Team**: Who does the work, and what they know. Its tabs:
 - **Agents**: your agents and what each is doing right now. Assign work and open any agent's page.
 - **Organization**: your org chart. Add positions, draw who reports to whom, group them into teams with leads, and set budgets.
-- **Memory**: what agents should always remember. See [Memory](memory.md).
-- **Skills**: procedures agents wrote down for themselves. See [Skills](skills.md).
+- **Knowledge**: what your agents know, in two parts you switch between at the top. **Memory** is what they should always remember (see [Memory](memory.md)); **Skills** are procedures they wrote down for themselves (see [Skills](skills.md)).
 - **Marketplace**: ready-made agents, teams, page packs and Office templates, free.
 
 **Files**: What you make and what your agents work from, in one place.

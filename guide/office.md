@@ -9,7 +9,7 @@ Office is where you and your agents write things that are not procedures: letter
 - **Sheets.** A list of your sheet files by folder. On the home screen: **+ New sheet**, **Import a CSV file**, **Or ask an agent to build it**, anything **Waiting for you**, and a table of every sheet file.
 - **An open sheet.** A title, a row of tools, a box showing what is in the selected cell, and the grid of cells. Under the grid are the sheets in the file and any charts. On the right is a panel with who can see it and how agents may change it.
 - **Notes.** On the left: **+ Note**, **Search notes**, your **Notebooks**, your **Tags**, and the notes themselves, newest first.
-- **An open document or note.** The same editor as a Workspace page: a title, a small toolbar, and the text. A document is shown as a sheet of paper. On the right is a panel with who can see it, how agents may change it, its **Folder** or **Notebook**, **Turn it into**, and **Download**.
+- **An open document or note.** The same editor as a Workspace page: a title, a small toolbar, and the text. A document is shown as a sheet of paper. Press **Details**, beside who last edited it, to open a panel on the right with who can see it, how agents may change it, its **Folder** or **Notebook**, **Turn it into**, and **Download**.
 
 - **Office home.** One place to start a document, sheet or note, ask an agent to make one, see what is **Waiting for you**, find recent files, **search** every file including the words inside, and **start from a template**.
 
@@ -35,7 +35,7 @@ Office is where you and your agents write things that are not procedures: letter
 
 1. Open **Documents** and press **+ New document**.
 2. Type a title, then write. Type `/` for headings, lists and tables. It saves as you type.
-3. In the panel on the right, type a **Folder** such as Customers to keep related documents together.
+3. Press **Details**, and in the panel on the right type a **Folder** such as Customers to keep related documents together.
 
 ### Ask an agent to write a document
 
