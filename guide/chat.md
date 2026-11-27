@@ -26,6 +26,8 @@ A new chat opens with a greeting and a few ideas to start from.
 
 **What it did, in plain words.** When the assistant works through several steps (reads a file, searches the web, runs a command), the chat shows one line, such as "4 steps · Read prices.pdf". **Show the steps** lists each one in plain words; click a step to see exactly what was run and what came back.
 
+**When an answer fails.** If the AI service cannot be reached or refuses, the chat says so in plain words and keeps saying so when you open it later; the session has a red dot in the list. **Try again** asks the same thing once more, without adding anything to the chat. In Telegram the assistant tells you it did not work, and you send your message again.
+
 **Approvals in chat.** Before a step that changes something, the chat asks you first. You can change this: for the assistant in Settings, and for an agent on its own page under **Approvals**. After a chat reads anything from outside, such as a web page, every change asks first whatever the setting.
 
 **Chat or task?** A chat waits for you and answers in the conversation. A task runs in the background, waits its turn in the agent's queue, and comes back to you to review.

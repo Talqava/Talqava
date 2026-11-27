@@ -7,11 +7,14 @@ Automations let work happen by itself at set times: a morning news digest every 
 Open **Automations** (the clock on the strip at the left).
 
 - **Tabs across the top:** **All**, **Active**, **Paused**, **Run history** and **Ready-made**, each with a count.
-- **One table** of everything that runs by itself, whether you wrote it or switched on a ready-made one. Each row shows its name and who does it, when it runs in plain words (for example "Every weekday at 8:00 am"), when it runs next (or **paused**) and when it last ran.
+- **One table** of everything that runs by itself, whether you wrote it or switched on a ready-made one. Each row shows its name and who does it, when it runs in plain words (for example "Every weekday at 8:00 am"), when it runs next (or **paused**), when it last ran (with **Did not work**, **Left out** or **Needs you** beside it when the last run was not a plain success), and about what it costs a month.
 - **A switch on each row** turns it on or pauses it.
 - **The ⋯ button on each row** opens **Run now** (or **Send one now**), **Edit**, **Open the last run** and **Delete** (or **Switch off for good**).
 - **+ New automation** opens a form with **Name**, **When**, **Who does it** and **Instructions**.
-- **Run history** lists every run, newest first: which automation, when, and whether it started a task, ran in a chat, made its report, or could not start (with the reason). The last 300 runs are kept.
+- **Run history** lists every run, newest first: which automation, when, how it turned out (**Done**, **Working**, **Needs you**, **Did not work** or **Left out**, with the reason) and what it cost. The last 300 runs are kept.
+- **One run at a time.** If the run before is still being worked on, or is waiting for your answer, the next one on its timer is left out and the history says so. **Run now** always runs.
+- **A run that did not work, or was left out, is said in your Inbox**, so nothing fails without your knowing.
+- **What it costs** is shown before you switch a ready-made one on: about how much each time and a month. It is an estimate from your AI model's list price until the automation has run; after that it is the average of its own runs.
 - **Ready-made** holds the briefings described below.
 
 ## Briefings
@@ -30,7 +33,7 @@ A briefing is an automation that is already written: a report an agent sends to 
 
 **Three kinds.**
 - **Free** briefings are put together by Talqava from what it already holds (your tasks, goals, files, or a list you typed). They use no AI model and cost nothing. Renewals, birthdays, the files tidy-up and the policy reminder write to you only when there is something to say.
-- **Researched** briefings are done by an agent with your AI model, usually for a few cents each time. They report; they change nothing.
+- **Researched** briefings are done by an agent with your AI model, and each says about what it costs before you switch it on. They report; they change nothing.
 - **Drafting** briefings (Overdue invoices, Inbox triage, Review replies, Quiet customers, Newsletter draft, Social posts, Meeting notes to actions, Weekly review and plan, New signup prospecting, After-hours holding replies, Proposal first draft) write drafts for you. They never send, post or change anything by themselves. They arrive under **Waiting on you**, for you to read, accept or send back.
 
 **Answer a drafting briefing by number.** Its items are numbered 1, 2, 3. Write what to do with each in the box on its card, for example `1 send, 2 skip, 3 make it shorter`, and press **Send back with this comment**. The agent does exactly that for those numbers. Anything that sends or changes something still asks for your yes.

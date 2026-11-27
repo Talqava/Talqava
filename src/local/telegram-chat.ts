@@ -167,7 +167,7 @@ export async function handleTelegram(message: any, ask: Ask): Promise<void> {
   if (answer.reply) await say(t.token, chat, answer.reply);
   if (answer.waiting) {
     await say(t.token, chat, "This needs your yes before I go on. Open Talqava and look in the Inbox; I will carry on once you answer there.");
-    void answer.later?.then((more) => (more ? say(t.token, chat, more) : undefined)).catch(() => {});
+    void answer.later?.then((more) => (more ? say(t.token, chat, more) : undefined)).catch(() => say(t.token, chat, "That did not work, and I could not tell why. Open Talqava to see what happened.").catch(() => {}));
   } else if (!answer.reply) await say(t.token, chat, "");
 }
 

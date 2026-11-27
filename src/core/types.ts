@@ -45,6 +45,8 @@ export interface Conversation {
   };
   /** Why its last run stopped before finishing (a budget, its time, being stuck), kept so the chat can say so later. Cleared when it runs again. */
   lastStop?: { reason: RunStop; text: string; at: string } | null;
+  /** Why its last run failed (the AI service could not be reached, refused, or broke off), kept so the chat still says so when opened later. Cleared when it runs again. */
+  lastError?: { text: string; at: string } | null;
 }
 
 /** A space keeps one client's or project's memory and chats apart from the rest. */
