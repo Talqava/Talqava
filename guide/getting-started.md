@@ -79,23 +79,23 @@ In a narrow window or on a phone the strip stays where it is, and pages with two
 
 The box at the top finds anything: files by name or by the words inside, tasks, chats, agents, and any page of the app.
 
-**New session** (the green button): Where Talqava opens, and the one place to ask. Type what you need in your own words and press Enter: plain words go to your assistant, and the answer starts a session. Start with **@** and an agent's name to give that agent a task. Above the box are a few things to try; before your AI model and team are set up, the steps to do that are shown there too. What is waiting on you and what is being worked on are listed at the right, and in the Inbox.
+**New**: Where Talqava opens, and the quickest place to ask. Type what you need in your own words and press Enter: plain words go to your assistant, and the answer starts a session. Start with **@** and an agent's name to give that agent a task. Every place on the strip at the left has its name under its icon.
 
-**Sessions**: One list of everything you have asked for: your chats with the assistant and the tasks you gave your agents, newest first. Point at a row and press **⋯** to pin it to the top, rename it or archive it; **Show archived** at the bottom of the list brings archived ones back into view. Opening a chat shows the conversation; opening a task shows the agent's work. The box you type in lets you choose the AI model and how hard it thinks, and has a microphone if your copy of Talqava can write out speech.
+**Sessions**: One list of everything you have asked for: your chats with the assistant and the tasks you gave your agents, newest first. The box at the top starts something new. Each line says who did it and how it stands in plain words (**Needs your yes**, **Working**, **Done** with what it cost), and one that needs you has a **Review** button. The buttons above the list show only what needs you, what is being worked on, or what is done. Press **⋯** on a line to pin it to the top, rename it or archive it; **Show archived sessions** at the bottom brings archived ones back into view. Opening a session shows the conversation. See [Chat](chat.md).
 
 **Inbox** (near the bottom of the strip, with a number when something waits on you): Everything that needs you, in one place: plans to approve, questions, finished work to review, changes agents want to make, and reminders.
 
-**Tasks and projects**: The work. Its tabs:
-- **Tasks**: every task in your organization: queued, working, needing you, to review and done.
-- **Projects**: one folder for each body of work, with its tasks and chats.
+**Tasks**: The work you handed to your team, as one list in three groups: **Needs you** (each with the button that deals with it), **Being worked on** and **Done this week**. **Board** shows the same tasks in columns, with search; **Goals** shows what the work is for. See [Tasks](tasks.md).
+
+**Projects**: One card for each piece of work, with its goal, how far along it is, what it has cost and whether it needs you. See [Projects](projects.md).
 
 **Automations** (the clock): repeating work your agents do on their own, such as a morning news digest every weekday. See [Automations](schedules.md).
 
 **Team**: Who does the work, and what they know. Its tabs:
-- **Agents**: your agents and what each is doing right now. Assign work and open any agent's page.
-- **Organization**: your org chart. Add positions, draw who reports to whom, group them into teams with leads, and set budgets.
-- **Knowledge**: what your agents know, in two parts you switch between at the top. **Memory** is what they should always remember (see [Memory](memory.md)); **Skills** are procedures they wrote down for themselves (see [Skills](skills.md)).
-- **Marketplace**: ready-made agents, teams, page packs and Office templates, free.
+- **People**: one card for each agent: its job, what it is doing now, what it got done this week, and a **Give a task** button (or **Answer**, when it is waiting for you). **Add someone** opens the marketplace of ready-made agents and teams.
+- **Work in progress**: every task running now, the week's figures by department, and the ready-made tasks. See [Agents](work-in-progress.md).
+- **Who reports to whom**: your org chart. Add positions, draw who reports to whom, group them into teams with leads, and set budgets.
+- **What they know**: what your agents know, in two parts you switch between at the top. **Memory** is what they should always remember (see [Memory](memory.md)); **Skills** are procedures they wrote down for themselves (see [Skills](skills.md)).
 
 **Files**: What you make and what your agents work from, in one place.
 - Before you have made anything, the page shows only the ways to start: a document, a note, files from your computer, or a template.

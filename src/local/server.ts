@@ -1333,7 +1333,7 @@ fetch("/api/oauth/callback",{method:"POST",headers:{"content-type":"application/
         if (c.source === "quest" && (!quest || quest.kind || (quest.parent && questStore.get(quest.parent.id)))) return [];
         const live = engine.isRunning(c.id);
         const waits = engine.awaitingApproval(c.id) || quest?.status === "asking" || quest?.plan?.status === "proposed";
-        return [{ id: c.id, kind: quest ? "task" : "chat", title: quest?.title ?? c.title, updatedAt: quest && quest.updatedAt > c.updatedAt ? quest.updatedAt : c.updatedAt, pinned: c.pinned, archived: c.archived, space: c.space ?? null, scheduled: c.source === "schedule", bot: quest ? { id: quest.bot.id, name: quest.bot.name, type: quest.bot.type, title: quest.bot.title, character: quest.bot.character } : null, chatBot: c.bot ?? null, state: waits ? "waiting" : live || quest?.status === "running" ? "working" : quest ? (quest.status === "failed" || quest.status === "budget" ? "stopped" : "done") : (c as { failed?: boolean }).failed ? "stopped" : "idle" }];
+        return [{ id: c.id, kind: quest ? "task" : "chat", title: quest?.title ?? c.title, updatedAt: quest && quest.updatedAt > c.updatedAt ? quest.updatedAt : c.updatedAt, pinned: c.pinned, archived: c.archived, space: c.space ?? null, scheduled: c.source === "schedule", bot: quest ? { id: quest.bot.id, name: quest.bot.name, type: quest.bot.type, title: quest.bot.title, character: quest.bot.character } : null, chatBot: c.bot ?? null, cost: (c as { cost?: number }).cost ?? 0, state: waits ? "waiting" : live || quest?.status === "running" ? "working" : quest ? (quest.status === "failed" || quest.status === "budget" ? "stopped" : "done") : (c as { failed?: boolean }).failed ? "stopped" : "idle" }];
       }),
     );
   }

@@ -22,6 +22,8 @@ export interface ProjectCard extends Project {
   /** Tasks that wait on the owner: to review, waiting for an answer, or blocked. */
   needsYou: number;
   chats: number;
+  /** What its tasks have cost so far, in US dollars. */
+  cost: number;
   /** The lead and every agent with a task in it, by position title. */
   team: string[];
 }
@@ -83,7 +85,7 @@ function card(org: Org, p: Project, items: WorkItem[], chatCount: Map<string, nu
   const tasks = items.filter((t) => t.projectId === p.id && t.status !== "cancelled");
   const h = health(p, tasks, now);
   const team = [...new Set([p.leadName, ...tasks.map((t) => t.ownerName)].filter((n): n is string => Boolean(n)))];
-  return { ...p, health: h.health, healthWhy: h.why, needsYou: tasks.filter((t) => NEEDS_OWNER.has(t.status)).length, chats: p.space ? (chatCount.get(p.space) ?? 0) : 0, team };
+  return { ...p, health: h.health, healthWhy: h.why, needsYou: tasks.filter((t) => NEEDS_OWNER.has(t.status)).length, chats: p.space ? (chatCount.get(p.space) ?? 0) : 0, cost: tasks.reduce((sum, x) => sum + (x.cost || 0), 0), team };
 }
 
 function chatCounts(): Map<string, number> {

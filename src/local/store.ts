@@ -290,7 +290,7 @@ class FileConversations implements ConversationStore {
       .filter((f) => f.endsWith(".json"))
       .map((f) => readJson<Conversation | null>(path.join(CONV_DIR, f), null))
       .filter((c): c is Conversation => Boolean(c))
-      .map(({ id, title, createdAt, updatedAt, source, space, pinned, bot, archived, lastError }) => ({ id, title, createdAt, updatedAt, source, space, pinned: Boolean(pinned), bot, archived: Boolean(archived), failed: Boolean(lastError) }))
+      .map(({ id, title, createdAt, updatedAt, source, space, pinned, bot, archived, lastError, usage }) => ({ id, title, createdAt, updatedAt, source, space, pinned: Boolean(pinned), bot, archived: Boolean(archived), failed: Boolean(lastError), cost: usage?.cost ?? 0 }))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
