@@ -4581,9 +4581,8 @@ async function integrationsView() {
   const all = list.integrations.filter((i) => i.id !== "git" || lab("git") || i.state === "connected");
   const count = (state) => all.filter((i) => (state === "available" ? i.state === "needs-setup" || i.state === "unavailable" : i.state === state)).length;
   const SHOW = [
-    ["all", `Everything you can connect (${all.length - count("coming")})`],
+    ["all", `All (${all.length - count("coming")})`],
     ["connected", `Connected (${count("connected")})`],
-    ["available", `Available (${count("available")})`],
     ["coming", `Planned, not built yet (${count("coming")})`],
   ];
   const open = async (i) => {
@@ -4605,7 +4604,9 @@ async function integrationsView() {
   const none = h("p", { class: "note", role: "status", hidden: true }, "Nothing matches. Any service that offers a connector (an MCP server) can be added by hand under Connectors and AI apps.");
   const search = h("input", { type: "search", class: "isearch", placeholder: "Search for a service, such as Asana or email", "aria-label": "Search integrations", value: ui.integrationSearch ?? "" });
   const showPills = h("div", { class: "pills", role: "group", "aria-label": "Show" });
-  const catPills = h("div", { class: "pills small", role: "group", "aria-label": "Categories" });
+  // The kinds of service are one menu beside the search box; the list below is already set out under the same headings.
+  const catPick = h("select", { class: "icatpick", "aria-label": "Kind of service" });
+  catPick.addEventListener("change", () => ((ui.integrationCategory = catPick.value), apply()));
   const apply = () => {
     const q = (ui.integrationSearch ?? "").trim().toLowerCase();
     const show = ui.integrationShow ?? "all";
@@ -4624,16 +4625,16 @@ async function integrationsView() {
     }
     none.hidden = any;
     fill(showPills, SHOW.map(([id, words]) => h("button", { class: `mpill ${id === show ? "on" : ""}`, "aria-pressed": String(id === show), onclick: () => ((ui.integrationShow = id), apply()) }, words)));
-    fill(catPills, ["All", ...sections.map((x) => x.c)].map((c) => h("button", { class: `mpill ${c === cat ? "on" : ""}`, "aria-pressed": String(c === cat), onclick: () => ((ui.integrationCategory = c), apply()) }, c)));
+    fill(catPick, ["All", ...sections.map((x) => x.c)].map((c) => h("option", { value: c, selected: c === cat }, c === "All" ? "Every kind" : c)));
   };
   search.addEventListener("input", () => ((ui.integrationSearch = search.value), apply()));
   if (ui.integrationCategory && !sections.some((x) => x.c === ui.integrationCategory)) ui.integrationCategory = "All";
+  if (ui.integrationShow === "available") ui.integrationShow = "all";
   fill(
     col,
     h("div", {}, h("h1", {}, "Connections"), h("p", { class: "lead" }, "Connect the tools your business already uses, so your agents can work where the work is. Each integration says exactly what agents can and cannot do with it.")),
-    search,
+    h("div", { class: "row ifind" }, search, catPick),
     showPills,
-    catPills,
     none,
     ...sections.map((x) => x.node),
     h("p", { class: "note" }, "Planned services that are not built yet are listed under “Planned, not built yet”, and show up when you search for them. Any service that offers a connector (an MCP server) can already be added under ", h("button", { class: "plain link", onclick: () => ((ui.integration = "mcp"), again()) }, "Connectors and AI apps"), "."),
@@ -7903,10 +7904,13 @@ function settingsView() {
     ),
   );
 
-  col.append(
-    h("h3", {}, "Connections"),
-    h("p", { class: "note" }, "AI models, repositories, connectors and keys for other services are under ", h("button", { class: "plain link", onclick: () => ((ui.integration = null), go("integrations")) }, "Connections"), "."),
-  );
+  // Each setting shows its choice; a long explanation folds under "What this does", so the page can be read at a glance.
+  for (const note of [...col.querySelectorAll("p.note")] as any[]) {
+    if (note.textContent.length < 170 || note.closest("details")) continue;
+    const fold = h("details", { class: "why" }, h("summary", {}, "What this does"));
+    note.replaceWith(fold);
+    fold.append(note);
+  }
 
   // About Talqava, its licence, privacy policy, terms and other policies.
   const legal = h("div", { class: "legallinks" });
