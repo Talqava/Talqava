@@ -421,3 +421,18 @@ td.autonum .autoby { display: block; }
 /* What needs the owner, in one line, with the way to the Inbox. */
 .needsline { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line2)); border-radius: 12px; background: color-mix(in srgb, var(--warn) 6%, var(--panel)); color: var(--soft); font-size: 13.5px; }
 .needsline b { color: var(--warn); }
+
+/* Settings: everything beyond the three everyday choices. */
+details.advancedset { border: 1px solid var(--line); border-radius: 12px; padding: 0 14px; }
+details.advancedset > summary { cursor: pointer; padding: 12px 0; font-weight: 600; color: var(--soft); list-style: none; }
+details.advancedset > summary::-webkit-details-marker { display: none; }
+details.advancedset > summary::after { content: " ›"; }
+details.advancedset[open] > summary::after { content: " ⌄"; }
+details.advancedset[open] { padding-bottom: 14px; display: grid; gap: 10px; }
+/* Ready-made automations: the short shelf, then all of them. */
+.briefshelf { margin-bottom: 8px; }
+details.briefall { margin-top: 8px; }
+details.briefall > summary { cursor: pointer; padding: 10px 0; list-style: none; color: var(--soft); }
+details.briefall > summary::-webkit-details-marker { display: none; }
+details.briefall > summary::after { content: " ›"; }
+details.briefall[open] > summary::after { content: " ⌄"; }

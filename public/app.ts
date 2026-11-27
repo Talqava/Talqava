@@ -354,7 +354,7 @@ const AREAS = {
   tasks: { name: "Tasks", views: [["tasks", "Tasks"], ["jobs", "Repeating"], ["projects", "By project"]], also: { project: "projects" } },
   // Team is who does the work and what they know. What they know is one tab, Knowledge, with two parts: what is
   // remembered (Memory) and how things are done (Skills).
-  team: { name: "Team", views: [["people", "People"], ["home", "Work in progress"], ["memory", "What they know"], ["team", "Who reports to whom"]], also: { market: "people", quest: "home", bot: "people", marketbot: "market", skills: "memory" } },
+  team: { name: "Team", views: [["people", "People"], ["home", "Work in progress"], ["memory", "What they know"]], also: { market: "people", team: "people", quest: "home", bot: "people", marketbot: "market", skills: "memory" } },
   files: { name: "Files", views: [["office", "All files"], ["docs", "Documents"], ["sheets", "Sheets"], ["slides", "Slides"], ["notes", "Notes"], ["workspace", "Workspace"], ["library", "Library"]] },
   more: { name: "Account", views: [["integrations", "Connections"], ["security", "Security"], ["audit", "Activity log"], ["usage", "Usage"], ["settings", "Settings"]] },
 };
@@ -374,7 +374,7 @@ const LABS = [
 ];
 const lab = (id) => (state.config?.labs ?? []).includes(id);
 /** Pages that belong to a set-aside part. */
-const LAB_VIEWS = { sheets: "office", slides: "office" };
+const LAB_VIEWS = { sheets: "office", slides: "office", home: "desk" };
 const viewShown = (view) => !LAB_VIEWS[view] || lab(LAB_VIEWS[view]);
 /**
  * Pages that are part of one place and have no tab of their own: documents, notes, workspace pages and the library
@@ -404,9 +404,9 @@ function renderAreaTabs() {
     localStorage.setItem(`talqava.area.${area}`, at);
   } catch {}
   // A place with one page has no tabs to choose between, so the bar is left out.
-  if (AREAS[area].views.filter(([v]) => !FOLDED[v]).length < 2) return (ui.tabs.hidden = true), fill(ui.tabs);
+  if (AREAS[area].views.filter(([v]) => !FOLDED[v] && viewShown(v)).length < 2) return (ui.tabs.hidden = true), fill(ui.tabs);
   ui.tabs.setAttribute("aria-label", `Parts of ${AREAS[area].name}`);
-  fill(ui.tabs, AREAS[area].views.some(([, label]) => label === AREAS[area].name) ? null : h("span", { class: "areaname" }, AREAS[area].name), AREAS[area].views.filter(([v]) => !FOLDED[v]).map(([v, label]) => h("button", { class: `areatab ${(FOLDED[at] ?? at) === v ? "on" : ""}`, "aria-current": (FOLDED[at] ?? at) === v ? "page" : null, onclick: () => go(v) }, label)));
+  fill(ui.tabs, AREAS[area].views.some(([, label]) => label === AREAS[area].name) ? null : h("span", { class: "areaname" }, AREAS[area].name), AREAS[area].views.filter(([v]) => !FOLDED[v] && viewShown(v)).map(([v, label]) => h("button", { class: `areatab ${(FOLDED[at] ?? at) === v ? "on" : ""}`, "aria-current": (FOLDED[at] ?? at) === v ? "page" : null, onclick: () => go(v) }, label)));
 }
 
 // Line icons for the rail, drawn on a 20 px grid.
@@ -659,7 +659,7 @@ const COMMANDS: [string, () => void][] = [
   ["Projects", () => go("projects")],
   ["Automations", () => go("jobs")],
   ["Usage", () => go("usage")],
-  ["Agents", () => go("home")],
+  ["Team", () => go("people")],
   ["Create an agent", () => go("bot", "new")],
   ["Organization", () => go("team")],
   ["Marketplace", () => go("market")],
@@ -1609,7 +1609,7 @@ async function peopleView() {
       bots.length
         ? h("div", { class: "persongrid" }, bots.map(card))
         : h("div", { class: "card quiet firsttask" }, h("b", {}, "Nobody on your team yet."), h("p", { class: "note" }, "Say what your business does and Talqava suggests who you need, or add people one at a time."), h("div", { class: "row wrap" }, h("button", { class: "primary", onclick: () => ((ui.setup = { step: "mission" }), go("setup")) }, "Set up your team"))),
-      bots.length ? h("p", { class: "note small" }, all.length ? `This week your team finished ${all.filter((x) => !isLive(x)).length} task${all.filter((x) => !isLive(x)).length === 1 ? "" : "s"} for ${money(all.reduce((sum, x) => sum + (x.cost || 0), 0))}. ` : "", h("button", { class: "plain link", onclick: () => go("home") }, "See the work in progress")) : null,
+      bots.length ? h("p", { class: "note small" }, all.length ? `This week your team finished ${all.filter((x) => !isLive(x)).length} task${all.filter((x) => !isLive(x)).length === 1 ? "" : "s"} for ${money(all.reduce((sum, x) => sum + (x.cost || 0), 0))}. ` : "", h("button", { class: "plain link", onclick: () => go("team") }, "See who reports to whom"), lab("desk") ? [" · ", h("button", { class: "plain link", onclick: () => go("home") }, "See the work in progress")] : null) : null,
     );
   };
   draw();
@@ -3360,7 +3360,9 @@ function renderOrg() {
       : null;
 
   const side = panel();
-  const views = [["groups", "Groups"], ["chart", "Chart"], ["list", "List"], ["access", "Access"], ["memory", "Memory"]];
+  // One view to begin with: the groups. The chart, the list, access and the organization's memory are set aside.
+  const views = lab("chart") ? [["groups", "Groups"], ["chart", "Chart"], ["list", "List"], ["access", "Access"], ["memory", "Memory"]] : [["groups", "Groups"]];
+  if (!views.some(([id]) => id === o.view)) o.view = "groups";
   fill(
     col,
     h(
@@ -3376,7 +3378,7 @@ function renderOrg() {
       h("span", {}, h("b", {}, String(groups.length)), ` group${groups.length === 1 ? "" : "s"}`),
       h("span", { title: "The monthly budgets set for each agent, added up" }, limits.length ? [h("b", {}, money(limits.reduce((a, b) => a + b, 0))), " a month at most"] : "No monthly limits set", unlimited && limits.length ? h("span", { class: "note small" }, ` (+${unlimited} without a limit)`) : null),
       h("span", { class: "grow" }),
-      h("div", { class: "viewswitch", role: "group", "aria-label": "View" }, views.map(([id, label]) => h("button", { class: o.view === id ? "on" : "", "aria-pressed": String(o.view === id), onclick: () => ((o.view = id), renderOrg()) }, label))),
+      views.length < 2 ? null : h("div", { class: "viewswitch", role: "group", "aria-label": "View" }, views.map(([id, label]) => h("button", { class: o.view === id ? "on" : "", "aria-pressed": String(o.view === id), onclick: () => ((o.view = id), renderOrg()) }, label))),
       members.length ? h("button", { class: "small", title: "Positions that would help your mission, to accept or skip", onclick: () => (org.mission ? suggestNow() : orgSettings()) }, "Suggest positions") : null,
       h("button", { class: "small", disabled: !o.undo.length, title: o.undo.length ? `Undo: ${o.undo.at(-1).label} (Cmd-Z)` : "Nothing to undo", onclick: () => orgUndo() }, "Undo"),
       h("button", { class: "plain small", title: "Every change is recorded in the activity log", onclick: () => ((ui.audit = { kind: "organization", actor: "", since: "30", q: "" }), go("audit")) }, "History"),
@@ -4665,7 +4667,6 @@ async function integrationsView() {
   const SHOW = [
     ["all", `All (${all.length - count("coming")})`],
     ["connected", `Connected (${count("connected")})`],
-    ["coming", `Planned, not built yet (${count("coming")})`],
   ];
   const open = async (i) => {
     if (i.state === "coming") return;
@@ -4711,7 +4712,7 @@ async function integrationsView() {
   };
   search.addEventListener("input", () => ((ui.integrationSearch = search.value), apply()));
   if (ui.integrationCategory && !sections.some((x) => x.c === ui.integrationCategory)) ui.integrationCategory = "All";
-  if (ui.integrationShow === "available") ui.integrationShow = "all";
+  if (ui.integrationShow === "available" || ui.integrationShow === "coming") ui.integrationShow = "all";
   fill(
     col,
     h("div", {}, h("h1", {}, "Connections"), h("p", { class: "lead" }, "Connect the tools your business already uses, so your agents can work where the work is. Each integration says exactly what agents can and cannot do with it.")),
@@ -4723,7 +4724,7 @@ async function integrationsView() {
     showPills,
     none,
     ...sections.map((x) => x.node),
-    h("p", { class: "note" }, "Planned services that are not built yet are listed under “Planned, not built yet”, and show up when you search for them. Any service that offers a connector (an MCP server) can already be added under ", h("button", { class: "plain link", onclick: () => ((ui.integration = "mcp"), again()) }, "Connectors and AI apps"), "."),
+    h("p", { class: "note" }, "A service that is planned but not built yet shows up when you search for it. Any service that offers a connector (an MCP server) can already be added under ", h("button", { class: "plain link", onclick: () => ((ui.integration = "mcp"), again()) }, "Connectors and AI apps"), "."),
   );
   apply();
 }
@@ -5828,7 +5829,7 @@ async function refreshQuest(first = false) {
   try {
     q = await api("GET", `quests/${id}`);
   } catch {
-    go("home");
+    go("people");
     return;
   }
   if (state.view !== "quest" || state.convId !== id) return;
@@ -5841,7 +5842,7 @@ async function refreshQuest(first = false) {
   const [label, tone] = standing(q);
   const where = q.branch ? ["on branch ", h("code", {}, q.branch), " · your own branch is untouched"] : q.project ? [`in ${basename(q.project)}`] : ["in the workspace folder"];
   fill(ui.qhead, 
-    h("button", { onclick: () => go("home") }, "Back to agents"),
+    h("button", { onclick: () => go("people") }, "Back to your team"),
     keycap(q.bot, 40, mood(q), q.bot.type),
     h(
       "div",
@@ -5861,7 +5862,7 @@ async function refreshQuest(first = false) {
           attempt(async () => {
             await api("DELETE", `quests/${q.id}`);
             await loadQuests();
-            go("home");
+            go("people");
           }),
       },
       "Delete",
@@ -6259,7 +6260,7 @@ function botView() {
   ui.body.className = "body questview";
   const isNew = state.botId === "new";
   const existing = state.crew?.bots.find((b) => b.id === state.botId);
-  if (!isNew && !existing) return go("home");
+  if (!isNew && !existing) return go("people");
   const draft = structuredClone(
     existing ?? {
       id: "",
@@ -6284,7 +6285,7 @@ function botView() {
   const head = h(
     "div",
     { class: "subhead" },
-    h("button", { onclick: () => go("home") }, "Back to agents"),
+    h("button", { onclick: () => go("people") }, "Back to your team"),
     h("div", { class: "titles" }, h("h1", {}, isNew ? "Create an agent" : `Edit ${existing.name}`), h("div", { class: "sub mono" }, fileNote)),
     !isNew && existing.source === "personal"
       ? h(
@@ -6296,7 +6297,7 @@ function botView() {
               attempt(async () => {
                 await api("DELETE", `crew/${existing.id}`);
                 await loadCrew();
-                go("home");
+                go("people");
               }, head),
           },
           "Remove my version",
@@ -6467,7 +6468,7 @@ function botView() {
       await loadCrew();
       state.selectedBot = saved.id;
       remember("talqava.bot", saved.id);
-      go("home");
+      go("people");
     }, head),
   );
 
@@ -7537,14 +7538,25 @@ function briefingGallery(host, data, col) {
   const order = ["Your own work", "The outside world", "Money", "Customers", "Marketing", "Running the business", "People and renewals"];
   const groups = [...new Set<any>(data.briefings.map((b) => b.group))].sort((x, y) => order.indexOf(x) - order.indexOf(y));
   const onCount = data.briefings.filter((b) => b.on?.enabled).length;
-  fill(
-    host,
-    h("p", { class: "note" }, `Ready-made automations. Each sends a report to your Inbox. Switch one on with one press; pause it any time.${onCount ? ` ${onCount} ${onCount === 1 ? "is" : "are"} on.` : ""}`),
+  // A short shelf first: the ones most owners want on day one, and whatever is already on.
+  const STARTERS = ["monday-plan", "friday-wrap", "end-of-day", "morning-news", "watch-list", "competitor-watch", "overdue-invoices", "newsletter-draft"];
+  const shelf = [...data.briefings.filter((b) => b.on), ...STARTERS.map((id) => data.briefings.find((b) => b.id === id && !b.on)).filter(Boolean)];
+  const everything = h("details", { class: "briefall", open: Boolean(ui.briefAll) }, h("summary", {}, h("b", {}, `All ${data.briefings.length}, by kind`)));
+  everything.addEventListener("toggle", () => (ui.briefAll = everything.open));
+  everything.append(
+    ...[
     groups.map((g, i) => {
       const mine = data.briefings.filter((b) => b.group === g);
       const live = mine.filter((b) => b.on).length;
-      return h("details", { class: "briefgroup", open: i < 2 || live > 0 }, h("summary", {}, h("b", {}, g), h("span", { class: "note small" }, ` · ${mine.length}${live ? ` · ${live} on` : ""}`)), h("div", { class: "briefgrid" }, mine.map(card)));
+      return h("details", { class: "briefgroup", open: live > 0 }, h("summary", {}, h("b", {}, g), h("span", { class: "note small" }, ` · ${mine.length}${live ? ` · ${live} on` : ""}`)), h("div", { class: "briefgrid" }, mine.map(card)));
     }),
+    ].flat(),
+  );
+  fill(
+    host,
+    h("p", { class: "note" }, `Ready-made automations. Each sends a report to your Inbox. Switch one on with one press; pause it any time.${onCount ? ` ${onCount} ${onCount === 1 ? "is" : "are"} on.` : ""}`),
+    h("div", { class: "briefgrid briefshelf" }, shelf.map(card)),
+    everything,
     data.planned?.length ? h("p", { class: "note small" }, `Planned, once their service is connected: ${data.planned.join("; ")}.`) : null,
   );
 }
@@ -7700,13 +7712,14 @@ async function usageView() {
 
 /** Automations: every automation and briefing in one table, with a history of runs and the ready-made ones a press away. */
 async function jobsView() {
-  const TABS = [["all", "All"], ["active", "Active"], ["paused", "Paused"], ["runs", "Run history"], ["ready", "Ready-made"]];
+  // Three tabs: the ones you have (on or paused, each with its switch), what they did, and ready-made ones to add.
+  const TABS = [["all", "Yours"], ["runs", "What ran"], ["ready", "Ready-made"]];
   const tab = TABS.some(([id]) => id === ui.autoTab) ? ui.autoTab : "all";
   const tabs = h("div", { class: "autotabs", role: "tablist", "aria-label": "Automations" });
   const body = h("div", { class: "autobody" });
   const add = h("button", { class: "primary", onclick: () => ((ui.autoTab = "new"), jobsView()) }, "+ New automation");
   const col = page(
-    "Automations",
+    "Repeating work",
     "Work that runs by itself: a morning news digest, a weekly report, a check that your website is up. Each one belongs to a position on your team, or to the assistant.",
     h("div", { class: "autobar" }, tabs, add),
     body,
@@ -8233,6 +8246,28 @@ function settingsView() {
     const fold = h("details", { class: "why" }, h("summary", {}, "What this does"));
     note.replaceWith(fold);
     fold.append(note);
+  }
+
+  // Simple to begin with: the AI model, whether agents ask first, and the monthly budget. Every other setting is
+  // one press away under Advanced, in the same form, so Save still saves them all.
+  const form: any = col.querySelector("form.form");
+  if (form) {
+    const advanced = h("details", { class: "advancedset" }, h("summary", {}, ""));
+    let keep = false;
+    let moved = 0;
+    const last = form.lastElementChild;
+    for (const el of [...form.children] as any[]) {
+      if (el === last) break;
+      const text = el.textContent ?? "";
+      if (el.tagName === "LABEL") keep = /^(Approvals|Monthly budget)/.test(text);
+      else if (el.tagName === "H4") keep = false;
+      else if (el.classList.contains("row") && text.startsWith("Your team's model")) keep = true;
+      if (keep) continue;
+      if (el.tagName === "LABEL") moved += 1;
+      advanced.append(el);
+    }
+    advanced.firstChild.textContent = `Advanced: ${moved} more settings`;
+    last.before(advanced);
   }
 
   // About Talqava, its licence, privacy policy, terms and other policies.
@@ -9431,7 +9466,7 @@ async function setupView() {
         await api("PATCH", `orgs/${org.id}`, { mission: su.mission.trim() });
         await loadOrgs();
       }
-      su.found = await api("POST", `orgs/${org.id}/suggest`, { mission: su.mission.trim() });
+      su.found = await api("POST", `orgs/${org.id}/suggest`, { mission: su.mission.trim(), limit: 5 });
       su.picked = new Set<any>((su.found.positions ?? []).map((p) => p.bot));
       su.busy = false;
       to("pick", su.mission.trim());
@@ -9491,11 +9526,11 @@ async function setupView() {
       su.mission = mission.value;
       const quick = [["A shop or café", "We run a shop and serve customers in person."], ["Professional services", "We sell our time and advice to clients and bill them for it."], ["An online shop", "We sell products online and ship them to customers."], ["A nonprofit", "We raise funds and run programmes for our community."]];
       steps.push(
-        say("What does your business do? One sentence is enough. Every agent is told it, and it shapes who I suggest."),
+        say("What kind of business do you run? Pick one and I'll suggest a team of five straight away, or say it in a sentence of your own."),
         card(
           "What your business does",
           "",
-          h("div", { class: "setupbody" }, mission, h("div", { class: "ideachips" }, quick.map(([label, sentence]) => h("button", { type: "button", class: "ideachip", onclick: () => ((mission.value = sentence), (su.mission = sentence), mission.focus()) }, label))), su.error ? h("div", { class: "banner error" }, su.error) : null),
+          h("div", { class: "setupbody" }, mission, h("div", { class: "ideachips" }, quick.map(([label, sentence]) => h("button", { type: "button", class: "ideachip", onclick: () => ((mission.value = sentence), (su.mission = sentence), suggest()) }, label))), su.error ? h("div", { class: "banner error" }, su.error) : null),
           [h("span", { class: "note small grow" }, su.busy ? "Finding the right positions…" : "Nothing is added until you say so."), h("button", { class: "plain", onclick: () => back("start") }, "Back"), h("button", { class: "primary", disabled: su.busy, onclick: () => (mission.value.trim() ? suggest() : mission.focus()) }, "Continue")],
         ),
       );
@@ -10232,7 +10267,7 @@ async function securityView() {
       guardrailsSection(true),
       securityOpsSection(true),
       backupSection(true),
-    ), securityTabs(col);
+    ), securityTabs(col, !lab("company"));
   }
 
   const me = data.me;
@@ -10356,14 +10391,20 @@ async function securityView() {
 
 /** Splits the Security page into tabs: each section belongs to one, and only the chosen tab's sections show. */
 const SECURITY_TABS = [["overview", "Overview"], ["people", "People and sign-in"], ["info", "Information"], ["agents", "Agents"], ["watching", "Watching"], ["backups", "Backups"]];
-function securityTabs(col) {
+function securityTabs(col, onePage = false) {
   const tabOf = (el) => {
     if (el.classList.contains("seccenter")) return "overview";
     const title = el.querySelector("h2")?.textContent ?? "";
-    return /^(Sensitive information|What was sent)/.test(title) ? "info" : /^Agent guardrails/.test(title) ? "agents" : /^Alerts and reviews/.test(title) ? "watching" : /^Backups/.test(title) ? "backups" : "people";
+    return /^What agents cannot/.test(title) ? "overview" : /^(Sensitive information|What was sent)/.test(title) ? "info" : /^Agent guardrails/.test(title) ? "agents" : /^Alerts and reviews/.test(title) ? "watching" : /^Backups/.test(title) ? "backups" : "people";
   };
   const sections = [...col.children].slice(1);
   for (const el of sections) el.dataset.tab = tabOf(el);
+  // One owner on their own computer gets one page: where things stand, what agents cannot get around, the agents'
+  // rules, backups and the way to add people. Rules for sensitive information and alerts belong to a company.
+  if (onePage) {
+    for (const el of sections) el.hidden = el.dataset.tab === "info" || el.dataset.tab === "watching";
+    return;
+  }
   const have = new Set<any>(sections.map((el) => el.dataset.tab));
   if (state.me?.mustSetUpSecondStep) ui.securityTab = "people";
   if (!have.has(ui.securityTab)) ui.securityTab = "overview";
