@@ -456,3 +456,7 @@ details.lookfold[open] > summary::after, details.agentmore[open] > summary::afte
 details.agentmore { display: block; }
 details.agentmore[open] > summary { margin-bottom: 12px; }
 details.agentmore > * + * { margin-top: 10px; }
+
+/* Add someone: the short list of jobs. */
+.addmore { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.simplepage > input[type="search"] { height: 44px; }

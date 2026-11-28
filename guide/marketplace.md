@@ -1,14 +1,17 @@
-# Marketplace
+# Add someone
 
-The Marketplace is where you find ready-made agents and teams for every part of your business: sales, marketing, finance, operations and more. Every agent is free, and you can read exactly what it is told to do before you add it. Once added, the agent is your own copy, and it only changes when you change it.
+**Add someone** is where you add an agent to your team. It opens from **Team › People**, with the **Add someone** button. Every agent is free, and you can read exactly what it is allowed to do before you add it.
 
 ## What you'll see
 
-- **Marketplace** at the top, with a row of category buttons: **All**, one button per department (such as Sales, Finance or Engineering), and **On my team**.
-- A search box: **Search by agent name or what you need done**.
-- **Featured**: a few agents picked out for a quick start (shown when no category or search is chosen).
-- **Teams**: ready-made groups, each a lead and the agents that report to it. A team card shows how many agents it has, who the lead is, and a button such as **Add all 4**.
-- One section per department, with a card for each agent. A card shows the agent's name, its job title, a one-line summary, and either **Free · asks before changes** or **Free · runs everything**. Agents you already have show **✓ On your team** and an **Edit** button instead of **Add**.
+- **A short list of twelve jobs** nearly every small business has: an assistant to you, a bookkeeper, marketing, sales, customer support, operations, research, a writer, a scheduler, purchasing, people and hiring, and technology.
+- A card for each: the job, the group it belongs to, one sentence on what it does, and **Add**. An agent already on your team says **On your team**.
+- **A search box** to find any other job, such as lawyer, fundraising or developer.
+- **Show all**, at the bottom, lists every agent. **Make an agent of your own** opens a blank one.
+
+**Add** puts the agent on your team straight away: it appears under **Team › People** and can be given a task. You are shown what it may do first, and asked to confirm.
+
+**Ready-made teams, company templates, playbooks and the list by category** are set aside to keep this simple. Switch on **The full marketplace** under Settings › Labs and this page becomes the full marketplace described in the rest of this guide. **Ready-made sets of pages** (handbooks, a price list) are on the **Files** page, under the templates.
 
 Click any agent card to open its own page. There you will see:
 
