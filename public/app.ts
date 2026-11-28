@@ -366,7 +366,7 @@ const LABS = [
   ["office", "Sheets and Slides", "Spreadsheets that calculate and presentation decks, under Files."],
   ["org", "Organization designer", "Example structures to copy, how you run the organization, and each position's goals and decisions."],
   ["company", "Company features", "People with their own sign-in and roles, single sign-on, and rules for sensitive information, under Security."],
-  ["templates", "Company templates and playbooks", "Whole-company starting points and ready-made processes, in the Marketplace."],
+  ["templates", "The full marketplace", "Ready-made teams, company templates, playbooks and every agent by category, where Add someone shows a short list."],
   ["git", "Git repositories", "Let agents work on code in repositories on this computer, under Connections."],
   ["goals", "Goals", "Measurable goals for the organization and each group, and which projects serve them, under Tasks."],
   ["desk", "Work in progress page", "The older control-room page under Team: every running task, the week's figures by department, and ready-made tasks."],
@@ -662,7 +662,7 @@ const COMMANDS: [string, () => void][] = [
   ["Team", () => go("people")],
   ["Create an agent", () => go("bot", "new")],
   ["Organization", () => go("team")],
-  ["Marketplace", () => go("market")],
+  ["Add someone to the team", () => go("market")],
   ["Office", () => go("office")],
   ["Documents", () => go("docs")],
   ["Sheets", () => go("sheets")],
@@ -1672,7 +1672,7 @@ function renderCrewColumn() {
     ...byDepartment(bots).flatMap(([group, members]) => [h("div", { class: "grouplabel" }, `${group} · ${members.length}`), ...members.map(member)]),
     all.length > bots.length ? h("p", { class: "note small", style: "padding: 6px 8px 0" }, `${all.length - bots.length} more agent${all.length - bots.length === 1 ? " is" : "s are"} on your team but not in this organization. `, h("button", { class: "plain link", onclick: () => go("team") }, "Add them on the chart")) : null,
     state.crew?.problems?.length ? h("div", { class: "banner error small" }, state.crew.problems.map((p) => h("div", {}, p.problem))) : null,
-    h("button", { class: "hatch", onclick: () => go("market") }, "+ Add from the marketplace"),
+    h("button", { class: "hatch", onclick: () => go("market") }, "+ Add someone"),
     h("button", { class: "hatch", onclick: () => go("bot", "new") }, "+ Create an agent"),
     navFooter(),
   );
@@ -5509,7 +5509,79 @@ function packPreview(k) {
   dialog.showModal();
 }
 
+/** The jobs nearly every small business has: the short list Add someone opens on. Everything else is found by searching. */
+const STARTER_JOBS = ["executive-assistant", "bookkeeper", "head-of-marketing", "head-of-sales", "support-replier", "head-of-operations", "head-of-research", "content-writer", "scheduling-coordinator", "procurement-manager", "head-of-people", "it-administrator"];
+
+/**
+ * Add someone: one kind of thing (an agent), a short list of jobs, and a search for the rest. Adding puts the agent
+ * on the team, so it shows under Team straight away. The full marketplace is set aside under Settings › Labs.
+ */
 async function marketView() {
+  if (lab("templates")) return marketFullView();
+  ui.body.className = "body";
+  ui.log = null;
+  const col = h("div", { class: "col page simplepage wide" });
+  fill(ui.body, h("main", { class: "center" }, col));
+  const [market] = await Promise.all([attempt(loadMarket, col), state.orgs ? null : loadOrgs().catch(() => {})]);
+  if (!market || state.view !== "market") return;
+  const bots = market.bots;
+  const byId = new Map<any, any>(bots.map((b) => [b.id, b]));
+  const onTeam = (b) => activeOrg().members.some((m) => m.bot === b.id);
+  const search = h("input", { type: "search", placeholder: "Find another job, such as lawyer, fundraising or developer", "aria-label": "Find a job", value: ui.marketSearch || "" });
+  const grid = h("div", { class: "persongrid" });
+  const more = h("div", { class: "addmore" });
+  const add = (b, button) =>
+    attempt(async () => {
+      if (!(await installPreview("agent", b.id))) return;
+      button.disabled = true;
+      // Onto the team, in the group for its kind of work: it then shows under Team and can be given a task.
+      await api("POST", `orgs/${activeOrg().id}/accept`, { bot: b.id, group: b.listing.category });
+      await Promise.all([loadMarket(), loadCrew(), loadOrgs()]);
+      toast(`${b.listing.title || b.name} is on your team.`);
+      if (state.view === "market") marketView();
+    }, col);
+  const card = (b) => {
+    const mine = onTeam(b);
+    const button = mine ? h("button", { class: "small", disabled: true }, "✓ On your team") : h("button", { class: "small" }, "Add");
+    if (!mine) button.addEventListener("click", () => add(b, button));
+    return h(
+      "article",
+      { class: "card personcard" },
+      h("button", { class: "plain personhead", onclick: () => go("marketbot", b.id), title: "Read what this agent does, what it may do and its instructions" }, keycap(b, 44, "", b.type), h("span", { class: "personname" }, h("b", {}, b.listing.title || b.name), h("span", { class: "persondept" }, b.listing.category))),
+      h("p", { class: "note small personnow" }, b.listing.summary),
+      h("div", { class: "row personend" }, h("span", { class: "grow note small" }, b.install?.state === "update" ? "A newer version is ready" : mine ? "" : "Free · asks before it changes anything"), button),
+    );
+  };
+  const draw = () => {
+    const needle = search.value.trim().toLowerCase();
+    const all = Boolean(ui.marketAll);
+    const list = needle
+      ? bots.filter((b) => needle.split(/\s+/).every((w) => `${b.name} ${b.listing.title} ${b.listing.summary} ${b.listing.category} ${(b.listing.will ?? []).join(" ")}`.toLowerCase().includes(w)))
+      : all
+        ? bots.slice().sort((x, y) => x.listing.category.localeCompare(y.listing.category) || x.name.localeCompare(y.name))
+        : STARTER_JOBS.map((id) => byId.get(id)).filter(Boolean);
+    fill(grid, list.length ? list.map(card) : h("p", { class: "note" }, "No job matches that. Try other words, or make an agent of your own below."));
+    fill(
+      more,
+      needle ? null : h("button", { class: "plain link small", onclick: () => ((ui.marketAll = !all), draw()) }, all ? "Show the short list" : `Show all ${bots.length}`),
+      h("span", { class: "note small" }, needle || all ? "" : " · "),
+      h("button", { class: "plain link small", onclick: () => go("bot", "new") }, "Make an agent of your own"),
+    );
+  };
+  search.addEventListener("input", () => ((ui.marketSearch = search.value), draw()));
+  fill(
+    col,
+    h("div", { class: "row wrap simplehead" }, h("div", { class: "grow" }, h("h1", {}, "Add someone"), h("p", { class: "lead" }, "Pick a job. Each agent says what it does before you add it, and asks before it changes anything.")), h("button", { onclick: () => go("people") }, "Back to your team")),
+    market.updates ? h("div", { class: "banner" }, `${market.updates} agent${market.updates === 1 ? "" : "s"} on your team ${market.updates === 1 ? "has" : "have"} a newer version. Open ${market.updates === 1 ? "it" : "one"} to see what changed and update.`) : null,
+    market.problems?.length ? h("div", { class: "banner error small" }, market.problems.map((x) => h("div", {}, x))) : null,
+    search,
+    grid,
+    more,
+  );
+  draw();
+}
+
+async function marketFullView() {
   ui.body.className = "body";
   ui.log = null;
   const col = h("div", { class: "market" });
@@ -5662,7 +5734,7 @@ async function marketBotView() {
   const fact = (label, value) => h("div", { class: "fact" }, h("b", {}, label), h("span", {}, value));
   const list = (title, items, cls) => (items.length ? h("div", { class: `willbox ${cls}` }, h("div", { class: "label" }, title), h("ul", {}, items.map((item) => h("li", {}, item)))) : null);
   col.append(
-    h("button", { class: "plain back", onclick: () => go("market") }, "← Back to marketplace"),
+    h("button", { class: "plain back", onclick: () => go("market") }, "← Back to Add someone"),
     h(
       "section",
       { class: "mtop", style: botStyle(bot) },
@@ -9632,9 +9704,9 @@ async function officeView() {
   ui.wsFlush?.();
   const col = h("div", { class: "integrations officehomepage" });
   fill(ui.body, h("main", { class: "center" }, col));
-  let data, templates, library;
+  let data, templates, library, market;
   try {
-    [data, templates, library] = await Promise.all([api("GET", "workspace/office"), api("GET", "workspace/office-templates"), api("GET", "library").catch(() => ({ documents: [] })), state.crew ? null : loadCrew(), state.orgs ? null : loadOrgs()]);
+    [data, templates, library, , , market] = await Promise.all([api("GET", "workspace/office"), api("GET", "workspace/office-templates"), api("GET", "library").catch(() => ({ documents: [] })), state.crew ? null : loadCrew(), state.orgs ? null : loadOrgs(), api("GET", "marketplace").catch(() => ({ packs: [] }))]);
   } catch (err) {
     return fill(col, h("div", { class: "banner error" }, err.message));
   }
@@ -9719,6 +9791,10 @@ async function officeView() {
     everything.length ? h("section", { class: "isec" }, h("h2", {}, "All files"), results) : null,
     !everything.length ? null : h("details", { class: "isec filesmore filesfold" }, h("summary", {}, "Folders, notebooks and the older pages for one kind of file"), h("p", { class: "note small" }, "Documents, notes and workspace pages each still have a page of their own, with folders and their own tools; the library is where files from your computer are added and organized."), h("div", { class: "row wrap" }, [["docs", "Documents"], ["notes", "Notes"], ["workspace", "Workspace pages"], ["library", "Library: add and organize files"], ...(lab("office") ? [["sheets", "Sheets"], ["slides", "Slides"]] : [])].map(([v, label]) => h("button", { onclick: () => go(v) }, label)))),
     h("section", { class: "isec" }, h("h2", {}, "Start from a template"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "Ready-made files with the parts to fill in marked in [SQUARE BRACKETS]."), h("div", { class: "mgrid wide" }, templates.filter((t) => lab("office") || (t.kind !== "sheet" && t.kind !== "deck")).map(officeTemplateCard))),
+    // Ready-made sets of pages (a handbook, a price list) are started from here too: previewed first, and undone in one step.
+    (market?.packs ?? []).length
+      ? h("section", { class: "isec" }, h("h2", {}, "Ready-made sets of pages"), h("p", { class: "note", style: "margin: -6px 0 12px" }, "A handbook, a price list, a library of procedures: pages your agents follow and you edit to match how you work."), h("div", { class: "mgrid wide" }, market.packs.map((k) => h("article", { class: "mcard tcard" }, h("div", { class: "mhead" }, h("span", { class: "packicon", "aria-hidden": "true" }, k.icon), h("div", {}, h("b", {}, k.name), h("div", { class: "by" }, `${k.pages.length} pages`))), h("p", { class: "mdesc" }, k.summary), h("div", { class: "mfoot" }, h("span", { class: "mono small muted" }, k.added ? "✓ In your files" : "Free · can be undone"), h("button", { class: k.added ? "madd" : "madd primary", onclick: () => (k.added ? openPage(k.added) : packPreview(k)) }, k.added ? "Open" : "Preview and add"))))))
+      : null,
   );
   q.dispatchEvent(new Event("input"));
 }
@@ -11345,7 +11421,7 @@ function usesCard() {
   try {
     uses = JSON.parse(localStorage.getItem("talqava.uses") ?? "{}");
   } catch {}
-  const NAMES_OF = { sessions: "Home", chat: "A session", tasks: "Tasks", jobs: "Repeating work", projects: "Projects", project: "A project", people: "Team", home: "Work in progress", team: "Who reports to whom", memory: "Memory", skills: "Skills", market: "Marketplace", office: "Files", docs: "Documents", notes: "Notes", workspace: "Workspace pages", library: "Library", sheets: "Sheets", slides: "Slides", inbox: "Inbox", integrations: "Connections", security: "Security", audit: "Activity log", usage: "Usage", settings: "Settings", quest: "A task's page", bot: "An agent's page", setup: "Team set-up" };
+  const NAMES_OF = { sessions: "Home", chat: "A session", tasks: "Tasks", jobs: "Repeating work", projects: "Projects", project: "A project", people: "Team", home: "Work in progress", team: "Who reports to whom", memory: "Memory", skills: "Skills", market: "Add someone", office: "Files", docs: "Documents", notes: "Notes", workspace: "Workspace pages", library: "Library", sheets: "Sheets", slides: "Slides", inbox: "Inbox", integrations: "Connections", security: "Security", audit: "Activity log", usage: "Usage", settings: "Settings", quest: "A task's page", bot: "An agent's page", setup: "Team set-up" };
   const rows = Object.entries(uses.pages ?? {}).filter(([v]) => NAMES_OF[v]).sort((a: any, b: any) => b[1] - a[1]);
   const most = Math.max(1, ...rows.map(([, n]: any) => n));
   const never = Object.keys(NAMES_OF).filter((v) => !(uses.pages ?? {})[v] && !["chat", "quest", "bot", "project", "setup"].includes(v)).map((v) => NAMES_OF[v]);

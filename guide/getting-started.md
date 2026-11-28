@@ -91,7 +91,7 @@ The strip at the left has five places, each with its name under its icon: **Home
 - **By project**: one card for each piece of work, with its goal, how far along it is, what it has cost and whether it needs you. See [Projects](projects.md).
 
 **Team**: Who does the work, and what they know. Its tabs:
-- **People**: one card for each agent: its job, what it is doing now, what it got done this week, and a **Give a task** button (or **Answer**, when it is waiting for you). **Add someone** opens the marketplace of ready-made agents and teams.
+- **People**: one card for each agent: its job, what it is doing now, what it got done this week, and a **Give a task** button (or **Answer**, when it is waiting for you). **Add someone** opens a short list of twelve jobs to add, with a search for the rest. See [Add someone](marketplace.md).
 - **Who reports to whom** is one press away from People: your team's groups, where you add positions, set who reports to whom and set budgets. The chart, list, access and memory views of it are set aside under Settings › Labs (**Organization chart views**). The older **Work in progress** page (every running task, the week's figures by department, ready-made tasks) is set aside the same way; Tasks shows the work.
 - **What they know**: what your agents know, in two parts you switch between at the top. **Memory** is what they should always remember (see [Memory](memory.md)); **Skills** are procedures they wrote down for themselves (see [Skills](skills.md)).
 
